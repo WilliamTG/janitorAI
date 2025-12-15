@@ -4,8 +4,6 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
-const fetch = require("node-fetch"); 
-const FormData = require("form-data");
 const fs = require("fs");
 
 const app = express();
@@ -104,13 +102,13 @@ ${observationsText}
       }),
     });
 
+    const raw = await response.text();
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("OpenAI /report error:", errorText);
-      return res.status(500).json({ error: "OpenAI error", details: errorText });
+      console.error("OpenAI /report error:", raw);
+      return res.status(500).json({ error: "OpenAI error", details: raw });
     }
 
-    const data = await response.json();
+    const data = JSON.parse(raw);
     const reportText = data.choices?.[0]?.message?.content?.trim();
 
     if (!reportText) {
@@ -133,24 +131,46 @@ app.post("/transcribe", upload.single("file"), async (req, res) => {
   const filePath = req.file.path;
 
   try {
+    // Read uploaded file into memory (small recordings are fine)
+    const buffer = await fs.promises.readFile(filePath);
+
+    // Use Node 18+ built-in FormData + Blob (NOT the form-data package)
     const fd = new FormData();
-    fd.append("file", fs.createReadStream(filePath), req.file.originalname || "audio.m4a");
+    fd.append(
+      "file",
+      new Blob([buffer], { type: req.file.mimetype || "audio/mp4" }),
+      req.file.originalname || "audio.m4a"
+    );
     fd.append("model", OPENAI_TRANSCRIBE_MODEL);
 
-    const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${OPENAI_API_KEY}`,
-        ...fd.getHeaders(),
+        // IMPORTANT: do NOT set Content-Type manually here
       },
       body: fd,
     });
 
-    const raw = await r.text();
-    if (!r.ok) return res.status(500).json({ error: "OpenAI error", details: raw });
+    const raw = await response.text();
+    if (!response.ok) {
+      console.error("OpenAI /transcribe error:", raw);
+      return res.status(500).json({ error: "OpenAI error", details: raw });
+    }
 
     const data = JSON.parse(raw);
-    res.json({ text: data.text });
+    const text = data.text;
+
+    if (!text) {
+      return res
+        .status(500)
+        .json({ error: "No text returned from transcription API", details: data });
+    }
+
+    res.json({ text });
+  } catch (err) {
+    console.error("Backend /transcribe error:", err);
+    res.status(500).json({ error: "Server error" });
   } finally {
     fs.unlink(filePath, () => {});
   }
