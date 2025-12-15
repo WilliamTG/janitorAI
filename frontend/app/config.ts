@@ -1,7 +1,7 @@
 // ⚠️ For personal/local testing only.
 // Do NOT commit this file to a public repo.
 // config.ts in the frontend project (NOT the backend)
-export const BACKEND_BASE_URL = `https://inspection-backend.onrender.com`;
+export const BACKEND_BASE_URL = `https://janitorai-backend.onrender.com`;
 
 // System prompt for creating inspection reports
 export const REPORT_SYSTEM_PROMPT = `

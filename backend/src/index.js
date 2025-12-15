@@ -127,54 +127,38 @@ ${observationsText}
 
 // ---------- TRANSCRIPTION ----------
 app.post("/transcribe", upload.single("file"), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
-  }
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
   const filePath = req.file.path;
-  const fileName = req.file.originalname || "audio.m4a";
 
   try {
+    const buffer = await fs.promises.readFile(filePath);
+
     const formData = new FormData();
-    formData.append("file", fs.createReadStream(filePath), fileName);
-    formData.append("model", OPENAI_TRANSCRIBE_MODEL);
-    formData.append("response_format", "json");
-
-    const response = await fetch(
-      "https://api.openai.com/v1/audio/transcriptions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-          ...formData.getHeaders(),
-        },
-        body: formData,
-      }
+    formData.append(
+      "file",
+      new Blob([buffer], { type: req.file.mimetype || "audio/mp4" }),
+      req.file.originalname || "audio.m4a"
     );
+    formData.append("model", OPENAI_TRANSCRIBE_MODEL);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("OpenAI /transcribe error:", errorText);
-      return res
-        .status(500)
-        .json({ error: "OpenAI error", details: errorText });
-    }
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: formData,
+    });
 
-    const data = await response.json();
-    const text = data.text;
+    const text = await response.text();
+    if (!response.ok) return res.status(500).json({ error: "OpenAI error", details: text });
 
-    if (!text) {
-      return res
-        .status(500)
-        .json({ error: "No text returned from transcription API" });
-    }
+    const data = JSON.parse(text);
+    if (!data.text) return res.status(500).json({ error: "No text returned" });
 
-    res.json({ text });
+    res.json({ text: data.text });
   } catch (err) {
-    console.error("Backend /transcribe error:", err);
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   } finally {
-    // Clean up the temporary uploaded file
     fs.unlink(filePath, () => {});
   }
 });
