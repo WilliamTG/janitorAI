@@ -50,6 +50,7 @@ Do not invent facts, measurements or regulations that are not in the input.
 `;
 
 app.post("/report", async (req, res) => {
+  console.log("Received POST /report request");
   try {
     const { project, notes } = req.body;
 

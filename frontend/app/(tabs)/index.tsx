@@ -507,10 +507,15 @@ const createReportForSelectedProject = async () => {
     videosCount: n.videos ? n.videos.length : 0,
   }));
 
+
+
   try {
     setIsGeneratingReport(true);
 
-    const response = await fetch("http://192.168.10.241:3000/report", {
+    console.log("BACKEND_BASE_URL is:", BACKEND_BASE_URL);
+    console.log("Calling report endpoint:", `${BACKEND_BASE_URL}/report`);
+
+    const response = await fetch(`${BACKEND_BASE_URL}/report`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

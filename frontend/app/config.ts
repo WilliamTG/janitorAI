@@ -1,7 +1,7 @@
 // ⚠️ For personal/local testing only.
 // Do NOT commit this file to a public repo.
 // config.ts in the frontend project (NOT the backend)
-export const BACKEND_BASE_URL = "http://192.168.10.241:3000";
+export const BACKEND_BASE_URL = `https://inspection-backend.onrender.com`;
 
 // System prompt for creating inspection reports
 export const REPORT_SYSTEM_PROMPT = `
