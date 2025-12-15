@@ -4,6 +4,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
+const fetch = require("node-fetch"); 
 const FormData = require("form-data");
 const fs = require("fs");
 
@@ -132,32 +133,24 @@ app.post("/transcribe", upload.single("file"), async (req, res) => {
   const filePath = req.file.path;
 
   try {
-    const buffer = await fs.promises.readFile(filePath);
+    const fd = new FormData();
+    fd.append("file", fs.createReadStream(filePath), req.file.originalname || "audio.m4a");
+    fd.append("model", OPENAI_TRANSCRIBE_MODEL);
 
-    const formData = new FormData();
-    formData.append(
-      "file",
-      new Blob([buffer], { type: req.file.mimetype || "audio/mp4" }),
-      req.file.originalname || "audio.m4a"
-    );
-    formData.append("model", OPENAI_TRANSCRIBE_MODEL);
-
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
-      body: formData,
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        ...fd.getHeaders(),
+      },
+      body: fd,
     });
 
-    const text = await response.text();
-    if (!response.ok) return res.status(500).json({ error: "OpenAI error", details: text });
+    const raw = await r.text();
+    if (!r.ok) return res.status(500).json({ error: "OpenAI error", details: raw });
 
-    const data = JSON.parse(text);
-    if (!data.text) return res.status(500).json({ error: "No text returned" });
-
+    const data = JSON.parse(raw);
     res.json({ text: data.text });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
   } finally {
     fs.unlink(filePath, () => {});
   }
