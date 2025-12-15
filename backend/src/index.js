@@ -180,5 +180,5 @@ app.post("/transcribe", upload.single("file"), async (req, res) => {
 
 // ---------- START SERVER ----------
 app.listen(PORT, () => {
-  console.log(`Backend listening on http://localhost:${PORT}`);
+  console.log(`Backend listening on port ${PORT}`);
 });
