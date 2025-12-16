@@ -5,6 +5,7 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const fs = require("fs");
+const requireTesterToken = require("./middleware/requireTesterToken");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,9 +25,18 @@ if (!OPENAI_API_KEY) {
 // Multer config for uploads (audio)
 const upload = multer({ dest: "uploads/" });
 
-// ---------- HEALTH CHECK ----------
-app.get("/", (req, res) => {
-  res.send("Inspection backend is running ✅");
+// ---------- HEALTH CHECK (PUBLIC) ----------
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+// ---------- APPLY TESTER TOKEN GUARD ----------
+// All routes after this point require x-tester-token header
+app.use(requireTesterToken);
+
+// ---------- WHOAMI (PROTECTED) ----------
+app.get("/whoami", (req, res) => {
+  res.json({ authorized: true });
 });
 
 // ---------- REPORT GENERATION ----------
