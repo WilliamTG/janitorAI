@@ -7,12 +7,17 @@ const multer = require("multer");
 const fs = require("fs");
 const requireTesterToken = require("./middleware/requireTesterToken");
 const { generalLimiter, heavyLimiter } = require("./middleware/rateLimiters");
+const requestLogger = require("./middleware/requestLogger");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// ---------- REQUEST LOGGER ----------
+// Minimal request logging (method, path, status, latency only)
+app.use(requestLogger);
 
 // ---------- RATE LIMITING ----------
 // Apply general rate limiter globally
@@ -64,7 +69,6 @@ Do not invent facts, measurements or regulations that are not in the input.
 `;
 
 app.post("/report", heavyLimiter, async (req, res) => {
-  console.log("Received POST /report request");
   try {
     const { project, notes } = req.body;
 
@@ -119,8 +123,8 @@ ${observationsText}
 
     const raw = await response.text();
     if (!response.ok) {
-      console.error("OpenAI /report error:", raw);
-      return res.status(500).json({ error: "OpenAI error", details: raw });
+      console.error("OpenAI /report error: non-OK response", { status: response.status, length: raw ? raw.length : 0 });
+      return res.status(500).json({ error: "OpenAI error" });
     }
 
     const data = JSON.parse(raw);
@@ -134,7 +138,7 @@ ${observationsText}
 
     res.json({ report: reportText });
   } catch (err) {
-    console.error("Backend /report error:", err);
+    console.error("Backend /report error:", err && err.message ? err.message : String(err));
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -169,8 +173,8 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
 
     const raw = await response.text();
     if (!response.ok) {
-      console.error("OpenAI /transcribe error:", raw);
-      return res.status(500).json({ error: "OpenAI error", details: raw });
+      console.error("OpenAI /transcribe error: non-OK response", { status: response.status, length: raw ? raw.length : 0 });
+      return res.status(500).json({ error: "OpenAI error" });
     }
 
     const data = JSON.parse(raw);
@@ -179,12 +183,12 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
     if (!text) {
       return res
         .status(500)
-        .json({ error: "No text returned from transcription API", details: data });
+        .json({ error: "No text returned from transcription API" });
     }
 
     res.json({ text });
   } catch (err) {
-    console.error("Backend /transcribe error:", err);
+    console.error("Backend /transcribe error:", err && err.message ? err.message : String(err));
     res.status(500).json({ error: "Server error" });
   } finally {
     fs.unlink(filePath, () => {});
