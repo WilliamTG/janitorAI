@@ -120,7 +120,8 @@ export default function Index() {
           setProjects(parsed);
         }
       } catch (error) {
-        console.warn("Failed to load projects", error);
+        // Avoid logging full error objects (may contain sensitive data)
+        console.warn("Failed to load projects");
       } finally {
         setIsLoading(false);
       }
@@ -132,7 +133,8 @@ export default function Index() {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newProjects));
     } catch (error) {
-      console.warn("Failed to save projects", error);
+      // Avoid logging full error objects (may contain sensitive data)
+      console.warn("Failed to save projects");
       Alert.alert("Warning", "Could not save projects to your device.");
     }
   };
@@ -241,7 +243,8 @@ export default function Index() {
 
       setRecording(recording);
     } catch (error) {
-      console.error("Failed to start recording", error);
+      // Avoid logging full error objects (may contain sensitive data)
+      console.error("Failed to start recording");
       Alert.alert("Error", "Could not start recording.");
     }
   };
@@ -274,7 +277,8 @@ export default function Index() {
       await updateProjectNotes(selectedProject.id, newNotes);
       setNoteText("");
     } catch (error) {
-      console.error("Failed to stop recording", error);
+      // Avoid logging full error objects (may contain sensitive data)
+      console.error("Failed to stop recording");
       Alert.alert("Error", "Could not stop recording.");
       setRecording(null);
     }
@@ -300,7 +304,8 @@ export default function Index() {
         await currentSound.unloadAsync();
       }
     } catch (error) {
-      console.error("Failed to stop playback", error);
+      // Avoid logging full error objects (may contain sensitive data)
+      console.error("Failed to stop playback");
     } finally {
       setCurrentSound(null);
     }
@@ -330,7 +335,8 @@ export default function Index() {
         }
       });
     } catch (error) {
-      console.error("Failed to play audio", error);
+      // Avoid logging full error objects (may contain sensitive data)
+      console.error("Failed to play audio");
       Alert.alert("Error", "Could not play this recording.");
     }
   };
@@ -371,8 +377,8 @@ const transcribeNote = async (noteId: string) => {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Backend /transcribe error:", errorText);
+      // Avoid logging raw error responses (may contain sensitive data)
+      console.error("Backend /transcribe error: non-OK response");
       Alert.alert(
         "Transcription failed",
         "The backend returned an error. Check the logs."
@@ -399,7 +405,8 @@ const transcribeNote = async (noteId: string) => {
     await updateProjectNotes(selectedProject.id, newNotes);
     Alert.alert("Transcribed", "The transcription has been saved to this note.");
   } catch (error) {
-    console.error("Transcription error:", error);
+    // Avoid logging full error objects (may contain sensitive data)
+    console.error("Transcription error");
     Alert.alert(
       "Transcription error",
       "Something went wrong while contacting the backend."
@@ -512,9 +519,6 @@ const createReportForSelectedProject = async () => {
   try {
     setIsGeneratingReport(true);
 
-    console.log("BACKEND_BASE_URL is:", BACKEND_BASE_URL);
-    console.log("Calling report endpoint:", `${BACKEND_BASE_URL}/report`);
-
     const response = await fetch(`${BACKEND_BASE_URL}/report`, {
       method: "POST",
       headers: {
@@ -531,8 +535,8 @@ const createReportForSelectedProject = async () => {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Backend error:", errorText);
+      // Avoid logging raw error responses (may contain sensitive data)
+      console.error("Backend error: report generation failed");
       Alert.alert("Report generation failed", "Backend error.");
       return;
     }
@@ -548,7 +552,8 @@ const createReportForSelectedProject = async () => {
     await updateProjectReport(selectedProject.id, reportText);
     Alert.alert("Report created", "Saved to this project.");
   } catch (error) {
-    console.error("Error calling backend:", error);
+    // Avoid logging full error objects (may contain sensitive data)
+    console.error("Error calling backend");
     Alert.alert("Error", "Could not reach backend.");
   } finally {
     setIsGeneratingReport(false);
