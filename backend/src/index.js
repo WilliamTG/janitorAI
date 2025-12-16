@@ -6,12 +6,17 @@ const cors = require("cors");
 const multer = require("multer");
 const fs = require("fs");
 const requireTesterToken = require("./middleware/requireTesterToken");
+const { generalLimiter, heavyLimiter } = require("./middleware/rateLimiters");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// ---------- RATE LIMITING ----------
+// Apply general rate limiter globally
+app.use(generalLimiter);
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || "gpt-4.1-mini";
@@ -58,7 +63,7 @@ Write a concise, structured inspection report with these sections:
 Do not invent facts, measurements or regulations that are not in the input.
 `;
 
-app.post("/report", async (req, res) => {
+app.post("/report", heavyLimiter, async (req, res) => {
   console.log("Received POST /report request");
   try {
     const { project, notes } = req.body;
@@ -135,7 +140,7 @@ ${observationsText}
 });
 
 // ---------- TRANSCRIPTION ----------
-app.post("/transcribe", upload.single("file"), async (req, res) => {
+app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
   const filePath = req.file.path;
