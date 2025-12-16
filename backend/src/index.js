@@ -32,6 +32,11 @@ if (!OPENAI_API_KEY) {
   console.warn("⚠️ OPENAI_API_KEY is not set in .env");
 }
 
+// Helper function to sanitize errors for logging (avoid logging full error objects)
+function sanitizeError(err) {
+  return err && err.message ? err.message : String(err);
+}
+
 // Multer config for uploads (audio)
 const upload = multer({ dest: "uploads/" });
 
@@ -138,7 +143,7 @@ ${observationsText}
 
     res.json({ report: reportText });
   } catch (err) {
-    console.error("Backend /report error:", err && err.message ? err.message : String(err));
+    console.error("Backend /report error:", sanitizeError(err));
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -188,7 +193,7 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
 
     res.json({ text });
   } catch (err) {
-    console.error("Backend /transcribe error:", err && err.message ? err.message : String(err));
+    console.error("Backend /transcribe error:", sanitizeError(err));
     res.status(500).json({ error: "Server error" });
   } finally {
     fs.unlink(filePath, () => {});

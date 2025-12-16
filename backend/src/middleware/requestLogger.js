@@ -12,7 +12,7 @@ module.exports = function requestLogger(req, res, next) {
     const path = req.originalUrl || req.url;
     const status = res.statusCode;
 
-    console.info(`${method} ${path} ${status} ${latencyMs.toFixed(2)}ms`);
+    console.log(`${method} ${path} ${status} ${latencyMs.toFixed(2)}ms`);
   });
 
   next();
