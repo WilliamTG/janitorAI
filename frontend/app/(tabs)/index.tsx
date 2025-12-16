@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-// ⚠️ For personal/local testing only.
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import { BlurView } from "expo-blur";
@@ -21,7 +20,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native"; // already have other RN imports
-import { BACKEND_BASE_URL } from "../config";
+import { getApiBaseUrl } from '../../src/config/api';
 import apiFetch, { loadTesterToken, setTesterToken } from '../../src/lib/apiFetch';
 
 
@@ -396,7 +395,7 @@ const transcribeNote = async (noteId: string) => {
       type: "audio/m4a",
     } as any);
 
-    const response = await apiFetch(`${BACKEND_BASE_URL}/transcribe`, {
+    const response = await apiFetch(`${getApiBaseUrl()}/transcribe`, {
       method: "POST",
       // ⚠️ Do NOT set Content-Type manually here; RN will set the correct multipart boundary
       body: formData,
@@ -545,7 +544,7 @@ const createReportForSelectedProject = async () => {
   try {
     setIsGeneratingReport(true);
 
-    const response = await apiFetch(`${BACKEND_BASE_URL}/report`, {
+    const response = await apiFetch(`${getApiBaseUrl()}/report`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
