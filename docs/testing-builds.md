@@ -6,6 +6,11 @@ This document describes how to create and distribute installable test builds usi
 
 The project uses **Managed Expo Workflow** (Expo SDK 54.0.25) with EAS Build for creating installable builds for testers.
 
+**📚 For environment configuration details**, see [`environments.md`](./environments.md) which explains:
+- How API base URLs are configured per build profile
+- How to verify configuration using the debug screen
+- How to change backend URLs for different environments
+
 ## Build Profiles
 
 We have configured the following EAS build profiles in `frontend/eas.json`:

@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Platform, StyleSheet, TouchableOpacity } from 'react-native';
+import { router } from 'expo-router';
 
 import { Collapsible } from '@/components/ui/collapsible';
 import { ExternalLink } from '@/components/external-link';
@@ -8,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Fonts } from '@/constants/theme';
+import { isDevelopmentBuild } from '@/src/config/api';
 
 export default function TabTwoScreen() {
   return (
@@ -94,6 +96,20 @@ export default function TabTwoScreen() {
           ),
         })}
       </Collapsible>
+      {isDevelopmentBuild() && (
+        <Collapsible title="🔧 Debug Information (Dev Only)">
+          <ThemedText>
+            View API configuration, build profile, and test backend connectivity.
+          </ThemedText>
+          <TouchableOpacity
+            onPress={() => router.push('/debug')}
+            style={styles.debugButton}>
+            <ThemedText type="defaultSemiBold" style={styles.debugButtonText}>
+              Open Debug Screen →
+            </ThemedText>
+          </TouchableOpacity>
+        </Collapsible>
+      )}
     </ParallaxScrollView>
   );
 }
@@ -108,5 +124,15 @@ const styles = StyleSheet.create({
   titleContainer: {
     flexDirection: 'row',
     gap: 8,
+  },
+  debugButton: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  debugButtonText: {
+    color: 'white',
   },
 });

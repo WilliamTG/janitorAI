@@ -6,6 +6,10 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "API_BASE_URL": "https://janitorai-backend.onrender.com",
+        "BUILD_PROFILE": "development"
+      },
       "ios": {
         "resourceClass": "default"
       },
@@ -16,6 +20,10 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "API_BASE_URL": "https://janitorai-backend.onrender.com",
+        "BUILD_PROFILE": "preview"
+      },
       "ios": {
         "resourceClass": "default"
       },
@@ -24,6 +32,10 @@
       }
     },
     "production": {
+      "env": {
+        "API_BASE_URL": "https://janitorai-backend.onrender.com",
+        "BUILD_PROFILE": "production"
+      },
       "ios": {
         "resourceClass": "default"
       },
