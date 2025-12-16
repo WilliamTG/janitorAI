@@ -6,7 +6,6 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { getApiBaseUrl, getApiHealthUrl, getBuildProfile, isDevelopmentBuild } from '../src/config/api';
 import { router } from 'expo-router';
