@@ -763,7 +763,7 @@ if (!selectedProject) {
           visible={showTokenModal}
           transparent={true}
           animationType="fade"
-          onRequestClose={() => {}}
+          onRequestClose={() => setShowTokenModal(false)}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>

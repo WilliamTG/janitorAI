@@ -1,5 +1,6 @@
 const rateLimit = require('express-rate-limit');
 
+// Custom handler for rate limit responses
 const limitHandler = (_req, res) => {
   return res.status(429).json({ error: 'Too many requests, please try again later.' });
 };
