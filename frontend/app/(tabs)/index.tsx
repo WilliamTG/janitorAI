@@ -11,6 +11,7 @@ import {
   Animated,
   Button,
   FlatList, Image,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -21,6 +22,7 @@ import {
   View
 } from "react-native"; // already have other RN imports
 import { BACKEND_BASE_URL } from "../config";
+import apiFetch, { loadTesterToken, setTesterToken } from '../../src/lib/apiFetch';
 
 
 type Note = {
@@ -68,6 +70,11 @@ export default function Index() {
   const [isFabOpen, setIsFabOpen] = useState(false);
   const fabMenuAnim = useRef(new Animated.Value(0)).current;
 
+  // Tester token state and modal logic
+  const [testerToken, setTesterTokenState] = useState<string | null>(null);
+  const [showTokenModal, setShowTokenModal] = useState(false);
+  const [tokenInput, setTokenInput] = useState('');
+
 
   const [activeProjectTab, setActiveProjectTab] =
   useState<"notes" | "report">("notes");
@@ -108,6 +115,25 @@ export default function Index() {
 
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
+
+  // ------- TOKEN INITIALIZATION --------
+  useEffect(() => {
+    (async () => {
+      const t = await loadTesterToken();
+      if (!t) setShowTokenModal(true);
+      else setTesterTokenState(t);
+    })();
+  }, []);
+
+  const saveToken = async () => {
+    if (!tokenInput) { 
+      Alert.alert('Token required', 'Please enter the tester token to continue.'); 
+      return; 
+    }
+    await setTesterToken(tokenInput);
+    setTesterTokenState(tokenInput);
+    setShowTokenModal(false);
+  };
 
   // ------- STORAGE --------
 
@@ -370,7 +396,7 @@ const transcribeNote = async (noteId: string) => {
       type: "audio/m4a",
     } as any);
 
-    const response = await fetch(`${BACKEND_BASE_URL}/transcribe`, {
+    const response = await apiFetch(`${BACKEND_BASE_URL}/transcribe`, {
       method: "POST",
       // ⚠️ Do NOT set Content-Type manually here; RN will set the correct multipart boundary
       body: formData,
@@ -519,7 +545,7 @@ const createReportForSelectedProject = async () => {
   try {
     setIsGeneratingReport(true);
 
-    const response = await fetch(`${BACKEND_BASE_URL}/report`, {
+    const response = await apiFetch(`${BACKEND_BASE_URL}/report`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -732,6 +758,33 @@ if (!selectedProject) {
       style={styles.gradientBackground}
     >
       <SafeAreaView style={styles.safeArea}>
+        {/* Tester Token Modal */}
+        <Modal
+          visible={showTokenModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => {}}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Enter Tester Token</Text>
+              <Text style={styles.modalSubtitle}>
+                You need a tester token to use this app. Please enter it below:
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Tester token"
+                value={tokenInput}
+                onChangeText={setTokenInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Pressable style={styles.modalButton} onPress={saveToken}>
+                <Text style={styles.modalButtonText}>Save Token</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.projectsHeaderRow}>
@@ -1429,6 +1482,59 @@ const styles = StyleSheet.create({
     color: "#E5E7EB",
     fontSize: 14,
     fontWeight: "500",
+  },
+  
+  // Token Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 15,
+    marginBottom: 16,
+    backgroundColor: '#F9FAFB',
+  },
+  modalButton: {
+    backgroundColor: 'rgba(59, 130, 246, 0.95)',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 
 });

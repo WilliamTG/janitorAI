@@ -1,5 +1,9 @@
 const rateLimit = require('express-rate-limit');
 
+const limitHandler = (_req, res) => {
+  return res.status(429).json({ error: 'Too many requests, please try again later.' });
+};
+
 /**
  * General rate limiter for all endpoints
  * 15-minute window, max 300 requests per IP
@@ -9,6 +13,7 @@ const generalLimiter = rateLimit({
   max: 300, // Limit each IP to 300 requests per windowMs
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  handler: limitHandler,
 });
 
 /**
@@ -21,6 +26,7 @@ const heavyLimiter = rateLimit({
   max: 30, // Limit each IP to 30 requests per windowMs
   standardHeaders: true,
   legacyHeaders: false,
+  handler: limitHandler,
 });
 
 module.exports = {
