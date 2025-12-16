@@ -64,6 +64,16 @@ backend/.env
 .env        # root-level .env if any
 .env.*
 
+# iOS certificates and provisioning profiles
+*.p12
+*.cer
+*.mobileprovision
+*.certSigningRequest
+
+# Android keystore files
+*.keystore
+*.jks
+
 # Uploads (temporary, not committed)
 backend/uploads/
 
