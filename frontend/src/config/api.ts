@@ -15,7 +15,7 @@ export function getApiBaseUrl(): string {
   const baseUrl = Constants.expoConfig?.extra?.API_BASE_URL;
   
   if (!baseUrl) {
-    console.warn('API_BASE_URL not configured in app.config.js, using default');
+    console.warn('API_BASE_URL not configured in app.config.js, falling back to production URL');
     return 'https://janitorai-backend.onrender.com';
   }
   

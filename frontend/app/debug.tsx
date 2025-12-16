@@ -10,10 +10,15 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, SafeA
 import { useRouter } from 'expo-router';
 import { getApiBaseUrl, getApiHealthUrl, getBuildProfile, isDevelopment } from '../src/config/api';
 
+interface HealthCheckResponse {
+  status: string;
+  [key: string]: unknown;
+}
+
 export default function DebugScreen() {
   const router = useRouter();
   const [healthStatus, setHealthStatus] = useState<'loading' | 'ok' | 'error'>('loading');
-  const [healthData, setHealthData] = useState<any>(null);
+  const [healthData, setHealthData] = useState<HealthCheckResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
 
   useEffect(() => {
