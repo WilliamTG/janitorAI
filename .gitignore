@@ -19,71 +19,60 @@ pnpm-debug.log*
 *.iml
 
 ########################################
-# FRONTEND (Expo React Native)
+# APPS (Expo React Native + Node API)
 ########################################
 
 # Node dependencies
-frontend/node_modules/
+apps/mobile/node_modules/
+apps/api/node_modules/
+packages/**/node_modules/
 
 # Expo build artifacts
-frontend/.expo/
-frontend/.expo-shared/
-frontend/.expo-dev/
-frontend/.expo/web/cache/
-frontend/.expo/web/cache/development/
+apps/mobile/.expo/
+apps/mobile/.expo-shared/
+apps/mobile/.expo-dev/
+apps/mobile/.expo/web/cache/
+apps/mobile/.expo/web/cache/development/
 
 # Metro bundler cache
-frontend/.metro/
-frontend/.cache/
+apps/mobile/.metro/
+apps/mobile/.cache/
 
 # Build outputs
-frontend/dist/
-frontend/build/
-frontend/web-build/
-frontend/.expo-build/
+apps/mobile/dist/
+apps/mobile/build/
+apps/mobile/web-build/
+apps/mobile/.expo-build/
 
 # iOS native folders (if generated)
-frontend/ios/
+apps/mobile/ios/
 # but keep Podfile etc. only if this is a bare RN project (yours isn’t)
 
 # Android native folders (if generated)
-frontend/android/
+apps/mobile/android/
 
 # Typescript build info
-frontend/*.tsbuildinfo
+apps/mobile/*.tsbuildinfo
 
 ########################################
 # BACKEND (Node + Express)
 ########################################
 
-# Node dependencies
-backend/node_modules/
-
 # Environment vars
-backend/.env
+apps/api/.env
 .env        # root-level .env if any
 .env.*
 
-# iOS certificates and provisioning profiles
-*.p12
-*.cer
-*.mobileprovision
-*.certSigningRequest
-
-# Android keystore files
-*.keystore
-*.jks
-
 # Uploads (temporary, not committed)
-backend/uploads/
+apps/api/uploads/
 
 # Build outputs
-backend/dist/
-backend/logs/
+apps/api/dist/
+apps/api/logs/
 
 # Package manager garbage
-backend/npm-debug.log
-backend/yarn.lock
+apps/api/npm-debug.log
+apps/api/yarn.lock
 
 ########################################
 # MISC

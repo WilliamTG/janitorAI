@@ -17,7 +17,7 @@ The app uses **environment-based configuration** to connect to the correct backe
 
 ### Build Profiles
 
-The app is configured with three build profiles in `frontend/eas.json`:
+The app is configured with three build profiles in `apps/mobile/eas.json`:
 
 #### Development Profile
 - **Purpose**: Internal development with dev-client for debugging
@@ -43,7 +43,7 @@ The app is configured with three build profiles in `frontend/eas.json`:
 
 ### Option 1: Modify app.config.js (Recommended)
 
-Edit `frontend/app.config.js` to change backend URLs per profile:
+Edit `apps/mobile/app.config.js` to change backend URLs per profile:
 
 ```javascript
 switch (buildProfile) {
@@ -105,7 +105,7 @@ if (!apiBaseUrl) {
 
 3. Configure project (first time only):
    ```bash
-   cd frontend
+   cd apps/mobile
    eas build:configure
    ```
 
@@ -115,13 +115,13 @@ if (!apiBaseUrl) {
 
 **Android:**
 ```bash
-cd frontend
+cd apps/mobile
 eas build --profile preview --platform android
 ```
 
 **iOS:**
 ```bash
-cd frontend
+cd apps/mobile
 eas build --profile preview --platform ios
 ```
 
@@ -135,13 +135,13 @@ npm run build:preview:ios
 
 **Android:**
 ```bash
-cd frontend
+cd apps/mobile
 eas build --profile production --platform android
 ```
 
 **iOS:**
 ```bash
-cd frontend
+cd apps/mobile
 eas build --profile production --platform ios
 ```
 

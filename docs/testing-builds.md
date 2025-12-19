@@ -8,7 +8,7 @@ The project uses **Managed Expo Workflow** (Expo SDK 54.0.25) with EAS Build for
 
 ## Build Profiles
 
-We have configured the following EAS build profiles in `frontend/eas.json`:
+We have configured the following EAS build profiles in `apps/mobile/eas.json`:
 
 ### Development Profile
 - **Purpose**: Internal development builds with dev-client for debugging
@@ -43,7 +43,7 @@ We have configured the following EAS build profiles in `frontend/eas.json`:
 
 3. Configure your project (first time only):
    ```bash
-   cd frontend
+   cd apps/mobile
    eas build:configure
    ```
 
@@ -169,7 +169,7 @@ The current configuration uses **placeholder** identifiers:
 - iOS: `com.yourcompany.inspectionmvp`
 - Android: `com.yourcompany.inspectionmvp`
 
-**You MUST update these** in `frontend/app.json` to match your actual app identifiers before building:
+**You MUST update these** in `apps/mobile/app.json` to match your actual app identifiers before building:
 
 ```json
 {
