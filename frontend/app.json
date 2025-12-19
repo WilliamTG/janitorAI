@@ -47,6 +47,14 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "API_BASE_URL": "https://janitorai-backend.onrender.com",
+      "BUILD_PROFILE": "development",
+      "router": {},
+      "eas": {
+        "projectId": "943e8965-076c-4370-96cc-62ecd3bf39e3"
+      }
     }
   }
 }

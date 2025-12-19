@@ -37,7 +37,7 @@
         "resourceClass": "default"
       },
       "android": {
-        "buildType": "aab"
+        "buildType": "apk"
       }
     }
   },
