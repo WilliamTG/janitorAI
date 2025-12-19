@@ -1,0 +1,19 @@
+{
+  "name": "janitorai-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace apps/api run start",
+    "dev:mobile": "npm --workspace apps/mobile run start",
+    "dev": "concurrently -n api,mobile -c blue,magenta \"npm:dev:api\" \"npm:dev:mobile\"",
+    "lint": "npm --workspace apps/mobile run lint",
+    "test": "npm --workspaces run test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
