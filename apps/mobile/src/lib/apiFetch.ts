@@ -19,7 +19,7 @@ export async function loadTesterToken(): Promise<string | null> {
   try {
     cachedToken = await AsyncStorage.getItem(STORAGE_KEY);
     return cachedToken;
-  } catch (err) {
+  } catch {
     console.warn('Failed to load tester token from storage');
     return null;
   }
@@ -33,7 +33,7 @@ export async function setTesterToken(token: string | null): Promise<void> {
     } else {
       await AsyncStorage.setItem(STORAGE_KEY, token);
     }
-  } catch (err) {
+  } catch {
     console.warn('Failed to persist tester token');
   }
 }
