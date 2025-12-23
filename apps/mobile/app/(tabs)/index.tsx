@@ -7,6 +7,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  ActivityIndicator,
   Animated,
   Button,
   FlatList, Image,
@@ -21,7 +22,7 @@ import {
   View
 } from "react-native"; // already have other RN imports
 import { getApiBaseUrl } from '../../src/config/api';
-import apiFetch, { loadTesterToken, setTesterToken } from '../../src/lib/apiFetch';
+import apiFetch, { clearTesterToken, loadTesterToken, setTesterToken, UnauthorizedError, validateTesterToken } from '../../src/lib/apiFetch';
 
 
 type Note = {
@@ -73,6 +74,9 @@ export default function Index() {
   const [testerToken, setTesterTokenState] = useState<string | null>(null);
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
+  const [tokenStatus, setTokenStatus] = useState<'checking' | 'valid' | 'invalid'>('checking');
+  const [tokenError, setTokenError] = useState<string | null>(null);
+  const [isValidatingToken, setIsValidatingToken] = useState(false);
 
 
   const [activeProjectTab, setActiveProjectTab] =
@@ -115,24 +119,129 @@ export default function Index() {
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
 
+  const handleUnauthorized = async () => {
+    await clearTesterToken();
+    setTesterTokenState(null);
+    setTokenStatus('invalid');
+    setTokenError('Invalid access token. Please enter a valid token to continue.');
+    setShowTokenModal(true);
+  };
+
   // ------- TOKEN INITIALIZATION --------
   useEffect(() => {
     (async () => {
-      const t = await loadTesterToken();
-      if (!t) setShowTokenModal(true);
-      else setTesterTokenState(t);
+      const storedToken = await loadTesterToken();
+
+      if (!storedToken) {
+        setTokenStatus('invalid');
+        setShowTokenModal(true);
+        return;
+      }
+
+      const isValid = await validateTesterToken(storedToken);
+      if (isValid) {
+        setTesterTokenState(storedToken);
+        setTokenInput(storedToken);
+        setTokenStatus('valid');
+        setTokenError(null);
+      } else {
+        await handleUnauthorized();
+      }
     })();
   }, []);
 
   const saveToken = async () => {
-    if (!tokenInput) { 
-      Alert.alert('Token required', 'Please enter the tester token to continue.'); 
-      return; 
+    setTokenError(null);
+    const trimmedToken = tokenInput.trim();
+
+    if (!trimmedToken) {
+      setTokenError('Token required. Please enter the tester token to continue.');
+      return;
     }
-    await setTesterToken(tokenInput);
-    setTesterTokenState(tokenInput);
-    setShowTokenModal(false);
+
+    setIsValidatingToken(true);
+    const isValid = await validateTesterToken(trimmedToken);
+    setIsValidatingToken(false);
+
+    if (isValid) {
+      await setTesterToken(trimmedToken);
+      setTesterTokenState(trimmedToken);
+      setTokenStatus('valid');
+      setShowTokenModal(false);
+      return;
+    }
+
+    await handleUnauthorized();
   };
+
+  const handleRemoveToken = async () => {
+    await clearTesterToken();
+    setTesterTokenState(null);
+    setTokenStatus('invalid');
+    setTokenInput('');
+    setTokenError(null);
+    setShowTokenModal(true);
+  };
+
+  const handleApiError = async (error: unknown) => {
+    if (error instanceof UnauthorizedError || (error as any)?.status === 401) {
+      await handleUnauthorized();
+      return true;
+    }
+
+    return false;
+  };
+
+  const renderTokenModal = () => (
+    <Modal
+      visible={showTokenModal}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={() => setShowTokenModal(true)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Enter Tester Token</Text>
+          <Text style={styles.modalSubtitle}>
+            You need a tester token to use this app. Please enter it below:
+          </Text>
+          {tokenError && <Text style={styles.modalError}>{tokenError}</Text>}
+          <TextInput
+            style={styles.modalInput}
+            placeholder="Tester token"
+            value={tokenInput}
+            onChangeText={(value) => {
+              setTokenInput(value);
+              setTokenError(null);
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Pressable
+            style={[
+              styles.modalButton,
+              isValidatingToken && styles.modalButtonDisabled,
+            ]}
+            onPress={saveToken}
+            disabled={isValidatingToken}
+          >
+            {isValidatingToken ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.modalButtonText}>Validate & Save</Text>
+            )}
+          </Pressable>
+          <Pressable
+            style={[styles.secondaryModalButton, isValidatingToken && styles.modalButtonDisabled]}
+            onPress={handleRemoveToken}
+            disabled={isValidatingToken}
+          >
+            <Text style={styles.secondaryModalButtonText}>Remove token</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
 
   // ------- STORAGE --------
 
@@ -423,13 +532,14 @@ const transcribeNote = async (noteId: string) => {
     }
 
     // Update the note with the transcription text
-    const newNotes = (selectedProject.notes || []).map((n) =>
+  const newNotes = (selectedProject.notes || []).map((n) =>
       n.id === noteId ? { ...n, transcription: textFromApi } : n
     );
 
     await updateProjectNotes(selectedProject.id, newNotes);
     Alert.alert("Transcribed", "The transcription has been saved to this note.");
   } catch (error) {
+    if (await handleApiError(error)) return;
     // Avoid logging full error objects (may contain sensitive data)
     console.error("Transcription error");
     Alert.alert(
@@ -577,6 +687,7 @@ const createReportForSelectedProject = async () => {
     await updateProjectReport(selectedProject.id, reportText);
     Alert.alert("Report created", "Saved to this project.");
   } catch (error) {
+    if (await handleApiError(error)) return;
     // Avoid logging full error objects (may contain sensitive data)
     console.error("Error calling backend");
     Alert.alert("Error", "Could not reach backend.");
@@ -749,6 +860,35 @@ const renderProjectItem = ({ item }: { item: Project }) => {
 
   // ------- SCREENS --------
 
+  const tokenModal = renderTokenModal();
+
+  if (tokenStatus !== 'valid') {
+    return (
+      <LinearGradient
+        colors={["#F7FAFF", "#F0F5FF", "#EBF0FA"]}
+        style={styles.gradientBackground}
+      >
+        <SafeAreaView style={styles.safeArea}>
+          {tokenModal}
+          <View style={[styles.container, styles.tokenGateContainer]}>
+            <Text style={styles.projectsTitle}>Access token required</Text>
+            <Text style={styles.modalSubtitle}>
+              You need a valid tester token to use this app. Please enter it to continue.
+            </Text>
+            {tokenError && <Text style={styles.modalError}>{tokenError}</Text>}
+            {tokenStatus === 'checking' ? (
+              <ActivityIndicator color="#1D4ED8" />
+            ) : (
+              <Pressable style={styles.modalButton} onPress={() => setShowTokenModal(true)}>
+                <Text style={styles.modalButtonText}>Enter token</Text>
+              </Pressable>
+            )}
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
   // 1) PROJECT LIST SCREEN
 if (!selectedProject) {
   return (
@@ -757,50 +897,35 @@ if (!selectedProject) {
       style={styles.gradientBackground}
     >
       <SafeAreaView style={styles.safeArea}>
-        {/* Tester Token Modal */}
-        <Modal
-          visible={showTokenModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowTokenModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Enter Tester Token</Text>
-              <Text style={styles.modalSubtitle}>
-                You need a tester token to use this app. Please enter it below:
-              </Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Tester token"
-                value={tokenInput}
-                onChangeText={setTokenInput}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <Pressable style={styles.modalButton} onPress={saveToken}>
-                <Text style={styles.modalButtonText}>Save Token</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Modal>
+        {tokenModal}
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.projectsHeaderRow}>
             <Text style={styles.projectsTitle}>Projects</Text>
-            <Pressable
-              style={styles.headerPlusButton}
-              onPress={() => {
-                setIsCreatingProject((prev) => !prev);
-                resetProjectForm();
-              }}
-            >
-              <Ionicons
-                name={isCreatingProject ? "close" : "add"}
-                size={24}
-                color="#1D4ED8"
-              />
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable
+                style={styles.headerTokenButton}
+                onPress={() => {
+                  setTokenError(null);
+                  setShowTokenModal(true);
+                }}
+              >
+                <Ionicons name="key-outline" size={20} color="#1D4ED8" />
+              </Pressable>
+              <Pressable
+                style={styles.headerPlusButton}
+                onPress={() => {
+                  setIsCreatingProject((prev) => !prev);
+                  resetProjectForm();
+                }}
+              >
+                <Ionicons
+                  name={isCreatingProject ? "close" : "add"}
+                  size={24}
+                  color="#1D4ED8"
+                />
+              </Pressable>
+            </View>
           </View>
 
           {/* New project panel */}
@@ -882,6 +1007,7 @@ if (!selectedProject) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {tokenModal}
       <View style={styles.container}>
         <View style={styles.headerRow}>
           <Pressable
@@ -900,6 +1026,18 @@ if (!selectedProject) {
           <Text style={styles.title} numberOfLines={1}>
             {selectedProject.name}
           </Text>
+
+          <View style={styles.headerActions}>
+            <Pressable
+              style={styles.headerTokenButton}
+              onPress={() => {
+                setTokenError(null);
+                setShowTokenModal(true);
+              }}
+            >
+              <Ionicons name="key-outline" size={20} color="#1D4ED8" />
+            </Pressable>
+          </View>
         </View>
 
         <Text style={styles.projectInfo}>
@@ -1131,6 +1269,10 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
 
+  tokenGateContainer: {
+    gap: 12,
+  },
+
   gradientBackground: {
     flex: 1,
   },
@@ -1260,6 +1402,19 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.2,
     color: "#0F172A",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  headerTokenButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(191, 219, 254, 0.65)",
   },
   headerPlusButton: {
     width: 32,
@@ -1530,9 +1685,31 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
   },
+  modalButtonDisabled: {
+    opacity: 0.7,
+  },
   modalButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  modalError: {
+    color: '#DC2626',
+    fontSize: 14,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  secondaryModalButton: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    alignItems: 'center',
+  },
+  secondaryModalButtonText: {
+    color: '#0F172A',
+    fontSize: 15,
     fontWeight: '600',
   },
 
