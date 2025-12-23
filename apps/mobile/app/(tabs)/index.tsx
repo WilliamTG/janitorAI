@@ -2,6 +2,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import { BlurView } from "expo-blur";
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef, useState } from "react";
@@ -12,6 +15,7 @@ import {
   Button,
   FlatList, Image,
   Modal,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -58,6 +62,7 @@ export default function Index() {
   const [projectName, setProjectName] = useState("");
   const [projectDate, setProjectDate] = useState("");
   const [projectInspector, setProjectInspector] = useState("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // --- notes inside selected project ---
   const [noteText, setNoteText] = useState("");
@@ -279,6 +284,36 @@ export default function Index() {
     setProjectName("");
     setProjectDate("");
     setProjectInspector("");
+    setShowDatePicker(false);
+  };
+
+  const toggleProjectForm = () => {
+    setIsCreatingProject((prev) => {
+      const next = !prev;
+      if (!next) {
+        resetProjectForm();
+      }
+      return next;
+    });
+  };
+
+  const closeProjectForm = () => {
+    resetProjectForm();
+    setIsCreatingProject(false);
+  };
+
+  const handleProjectDateChange = (
+    _event: DateTimePickerEvent,
+    selectedDate?: Date
+  ) => {
+    if (Platform.OS !== "ios") {
+      setShowDatePicker(false);
+    }
+
+    if (selectedDate) {
+      const formatted = selectedDate.toISOString().split("T")[0];
+      setProjectDate(formatted);
+    }
   };
 
   const createProject = async () => {
@@ -914,10 +949,7 @@ if (!selectedProject) {
               </Pressable>
               <Pressable
                 style={styles.headerPlusButton}
-                onPress={() => {
-                  setIsCreatingProject((prev) => !prev);
-                  resetProjectForm();
-                }}
+                onPress={toggleProjectForm}
               >
                 <Ionicons
                   name={isCreatingProject ? "close" : "add"}
@@ -938,19 +970,46 @@ if (!selectedProject) {
                 value={projectName}
                 onChangeText={setProjectName}
               />
-              <TextInput
-                style={styles.input}
-                placeholder="Inspection date (e.g. 2025-01-04)"
-                value={projectDate}
-                onChangeText={setProjectDate}
-              />
+              <Pressable
+                style={styles.dateInput}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text
+                  style={
+                    projectDate ? styles.dateInputText : styles.datePlaceholderText
+                  }
+                >
+                  {projectDate || "Select inspection date"}
+                </Text>
+              </Pressable>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={projectDate ? new Date(projectDate) : new Date()}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  onChange={handleProjectDateChange}
+                />
+              )}
               <TextInput
                 style={styles.input}
                 placeholder="Inspector name"
                 value={projectInspector}
                 onChangeText={setProjectInspector}
               />
-              <Button title="Create project" onPress={createProject} />
+              <View style={styles.formActionsRow}>
+                <Pressable
+                  style={styles.secondaryButton}
+                  onPress={closeProjectForm}
+                >
+                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.primaryButton, styles.formPrimaryButton]}
+                  onPress={createProject}
+                >
+                  <Text style={styles.primaryButtonText}>Create project</Text>
+                </Pressable>
+              </View>
             </BlurView>
           )}
 
@@ -983,9 +1042,7 @@ if (!selectedProject) {
           {/* Floating add button (same as + in header, just nicer UX) */}
           <Pressable
             style={styles.fab}
-            onPress={() => {
-              setIsCreatingProject(true);
-            }}
+            onPress={toggleProjectForm}
           >
             <BlurView
               intensity={60}
@@ -1299,10 +1356,52 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlignVertical: "top",
   },
+  dateInput: {
+    borderWidth: 1,
+    borderColor: "#cccccc",
+    borderRadius: 8,
+    padding: 10,
+    minHeight: 40,
+    marginBottom: 12,
+    justifyContent: "center",
+  },
+  dateInputText: {
+    color: "#0F172A",
+    fontSize: 14,
+  },
+  datePlaceholderText: {
+    color: "#9CA3AF",
+    fontSize: 14,
+  },
   buttonsRow: {
     flexDirection: "row",
     gap: 8,
     marginBottom: 16,
+  },
+  formActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+  secondaryButton: {
+    flex: 1,
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(148, 163, 184, 0.25)",
+  },
+  secondaryButtonText: {
+    color: "#0F172A",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  formPrimaryButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "stretch",
   },
   buttonWrapper: {
     flex: 1,
