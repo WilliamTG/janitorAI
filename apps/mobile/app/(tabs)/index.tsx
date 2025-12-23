@@ -18,6 +18,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   TouchableOpacity,
   View
 } from "react-native"; // already have other RN imports
@@ -77,6 +78,18 @@ export default function Index() {
   const [tokenStatus, setTokenStatus] = useState<'checking' | 'valid' | 'invalid'>('checking');
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [isValidatingToken, setIsValidatingToken] = useState(false);
+
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === "dark";
+  const themeColors = {
+    textPrimary: isDarkMode ? "#F9FAFB" : "#111827",
+    textSecondary: isDarkMode ? "#D1D5DB" : "#4B5563",
+    inputBackground: isDarkMode ? "#111827" : "#FFFFFF",
+    inputBorder: isDarkMode ? "#374151" : "#cccccc",
+    cardBackground: isDarkMode ? "#1F2937" : "#FFFFFF",
+    cardBorder: isDarkMode ? "#4B5563" : "#eeeeee",
+    placeholder: isDarkMode ? "#9CA3AF" : "#6B7280",
+  };
 
 
   const [activeProjectTab, setActiveProjectTab] =
@@ -795,14 +808,24 @@ const renderProjectItem = ({ item }: { item: Project }) => {
 
 
   const renderNoteItem = ({ item }: { item: Note }) => (
-    <View style={styles.note}>
-      <Text style={styles.noteText}>{item.text}</Text>
-      <Text style={styles.noteMeta}>
+    <View
+      style={[
+        styles.note,
+        {
+          borderColor: themeColors.cardBorder,
+          backgroundColor: themeColors.cardBackground,
+        },
+      ]}
+    >
+      <Text style={[styles.noteText, { color: themeColors.textPrimary }]}>{item.text}</Text>
+      <Text style={[styles.noteMeta, { color: themeColors.textSecondary }]}>
         {new Date(item.createdAt).toLocaleString()}
       </Text>
       {item.images && item.images.length > 0 && (
       <View style={{ marginTop: 4 }}>
-        <Text style={{ fontSize: 12, marginBottom: 4 }}>
+        <Text
+          style={{ fontSize: 12, marginBottom: 4, color: themeColors.textSecondary }}
+        >
             📷 Photo attachments: {item.images.length}
             </Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
@@ -819,7 +842,7 @@ const renderProjectItem = ({ item }: { item: Project }) => {
 
 {item.videos && item.videos.length > 0 && (
   <View style={{ marginTop: 4 }}>
-    <Text style={{ fontSize: 12 }}>
+    <Text style={{ fontSize: 12, color: themeColors.textSecondary }}>
       🎥 Video attachments: {item.videos.length} (playback UI can be added later)
     </Text>
   </View>
@@ -851,8 +874,14 @@ const renderProjectItem = ({ item }: { item: Project }) => {
 
       {item.transcription && (
         <View style={styles.transcriptionBox}>
-          <Text style={styles.transcriptionLabel}>Transcription (demo)</Text>
-          <Text style={styles.transcriptionText}>{item.transcription}</Text>
+          <Text
+            style={[styles.transcriptionLabel, { color: themeColors.textSecondary }]}
+          >
+            Transcription (demo)
+          </Text>
+          <Text style={[styles.transcriptionText, { color: themeColors.textPrimary }]}>
+            {item.transcription}
+          </Text>
         </View>
       )}
     </View>
@@ -1085,19 +1114,27 @@ if (!selectedProject) {
         {/* NOTES TAB */}
 {activeProjectTab === "notes" && (
   <>
-    <Text style={[styles.label, { marginTop: 16 }]}>
+    <Text style={[styles.label, { marginTop: 16, color: themeColors.textPrimary }]}>
       What would you say during the inspection?
     </Text>
 
     <TextInput
-      style={styles.input}
+      style={[
+        styles.input,
+        {
+          color: themeColors.textPrimary,
+          backgroundColor: themeColors.inputBackground,
+          borderColor: themeColors.inputBorder,
+        },
+      ]}
       placeholder="Type your observation here..."
+      placeholderTextColor={themeColors.placeholder}
       multiline
       value={noteText}
       onChangeText={setNoteText}
     />
 
-    <Text style={styles.subTitle}>Notes for this project</Text>
+    <Text style={[styles.subTitle, { color: themeColors.textPrimary }]}>Notes for this project</Text>
     {isLoading ? (
       <Text style={styles.empty}>Loading notes…</Text>
     ) : (
@@ -1366,7 +1403,6 @@ const styles = StyleSheet.create({
   },
   transcriptionText: {
     fontSize: 12,
-    color: "#444444",
   },
   reportBox: {
     borderWidth: 1,
