@@ -27,6 +27,8 @@ export default function RootLayout() {
           screenOptions={{
             animation: Platform.OS === 'ios' ? 'slide_from_right' : 'fade_from_bottom',
             contentStyle: { backgroundColor: stackBackground },
+            headerBackTitleVisible: false,
+            headerBackTitle: 'Projects',
           }}
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
