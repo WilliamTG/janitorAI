@@ -721,7 +721,7 @@ export default function ProjectDetailScreen() {
     const noteData = project?.notes || [];
 
     return (
-      <Animated.View entering={FadeInRight.duration(320)}>
+      <Animated.View entering={FadeInRight.duration(320)} style={{ flex: 1 }}>
         <Screen scrollable={false} style={{ flex: 1 }}>
           {renderTokenModal()}
           <FlatList
@@ -745,7 +745,7 @@ export default function ProjectDetailScreen() {
   };
 
   const renderReportTab = () => (
-    <Animated.View entering={FadeInRight.duration(320)}>
+    <Animated.View entering={FadeInRight.duration(320)} style={{ flex: 1 }}>
       <Screen>
         {renderTokenModal()}
         <View style={{ gap: theme.spacing.md }}>
