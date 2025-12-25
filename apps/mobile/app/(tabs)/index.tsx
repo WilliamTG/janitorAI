@@ -617,7 +617,15 @@ export default function Index() {
             </IconButton>
           </View>
 
-          <View style={{ flexDirection: 'row', marginTop: theme.spacing.md, gap: theme.spacing.md }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+              marginTop: theme.spacing.md,
+              gap: theme.spacing.sm,
+            }}
+          >
             <StatPill icon="document-text-outline" label={`${noteCount} notes`} />
             <StatPill icon="mic-outline" label={`${audioCount} audio`} />
             <StatPill icon="camera-outline" label={`${photoCount} photos`} />
@@ -626,7 +634,7 @@ export default function Index() {
 
           <View style={{ flexDirection: 'row', marginTop: theme.spacing.md, gap: theme.spacing.sm }}>
             <PrimaryButton
-              style={{ flex: 1 }}
+              width="100%"
               onPress={() => {
                 setSelectedProjectId(item.id);
                 setActiveProjectTab('notes');
@@ -641,7 +649,7 @@ export default function Index() {
   };
 
   const renderProjectListHeader = () => (
-    <View style={{ gap: theme.spacing.md }}>
+    <View style={{ gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View>
           <Caption muted>Inspections</Caption>
@@ -905,6 +913,8 @@ const StatPill = ({ icon, label }: StatPillProps) => {
       style={{
         flexDirection: 'row',
         alignItems: 'center',
+        flexBasis: '48%',
+        flexGrow: 1,
         paddingHorizontal: theme.spacing.sm,
         paddingVertical: theme.spacing.xs,
         backgroundColor: theme.colors.surfaceSecondary,
