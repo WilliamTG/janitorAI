@@ -90,15 +90,15 @@ app.post("/report", heavyLimiter, async (req, res) => {
         const transcriptionPart = note.transcription
           ? `Transcription: ${note.transcription}\n`
           : "";
-        const imagePart =
-          note.imagesCount && note.imagesCount > 0
-            ? `Photos attached: ${note.imagesCount}\n`
-            : "";
-        const videoPart =
-          note.videosCount && note.videosCount > 0
-            ? `Videos attached: ${note.videosCount}\n`
-            : "";
-        return base + transcriptionPart + imagePart + videoPart;
+        let photoPart = "";
+        if (note.photos && note.photos.length > 0) {
+          photoPart = "Photos:\n" + note.photos.map((p, i) => 
+            `  Photo ${i + 1}: ${p.caption || "(no description)"}`
+          ).join("\n") + "\n";
+        } else if (note.legacyImagesCount && note.legacyImagesCount > 0) {
+          photoPart = `Photos attached: ${note.legacyImagesCount} (no descriptions)\n`;
+        }
+        return base + transcriptionPart + photoPart;
       })
       .join("\n--------------------\n");
 
@@ -195,6 +195,77 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
     res.json({ text });
   } catch (err) {
     console.error("Backend /transcribe error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  } finally {
+    fs.unlink(filePath, () => {});
+  }
+});
+
+// ---------- IMAGE DESCRIPTION ----------
+const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-4o-mini";
+
+const VISION_SYSTEM_PROMPT = `You are an inspection assistant analyzing photos from building/facility inspections.
+Describe what is visible in the image in 1-3 sentences. Focus on:
+1. What is shown (object, area, condition)
+2. Any visible issues or observations
+3. Suggested severity (Low/Medium/High) and recommended action if applicable
+Be concise and professional.`;
+
+app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+  const filePath = req.file.path;
+
+  try {
+    const buffer = await fs.promises.readFile(filePath);
+    const base64 = buffer.toString('base64');
+    const mimeType = req.file.mimetype || 'image/jpeg';
+    const dataUrl = `data:${mimeType};base64,${base64}`;
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: OPENAI_VISION_MODEL,
+        messages: [
+          { role: "system", content: VISION_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: { url: dataUrl }
+              },
+              {
+                type: "text",
+                text: "Describe this inspection photo."
+              }
+            ]
+          }
+        ],
+        max_tokens: 300
+      }),
+    });
+
+    const raw = await response.text();
+    if (!response.ok) {
+      console.error("OpenAI /describe-image error: non-OK response", { status: response.status });
+      return res.status(500).json({ error: "OpenAI error" });
+    }
+
+    const data = JSON.parse(raw);
+    const description = data.choices?.[0]?.message?.content?.trim();
+
+    if (!description) {
+      return res.status(500).json({ error: "No description returned from OpenAI" });
+    }
+
+    res.json({ description });
+  } catch (err) {
+    console.error("Backend /describe-image error:", sanitizeError(err));
     res.status(500).json({ error: "Server error" });
   } finally {
     fs.unlink(filePath, () => {});

@@ -57,6 +57,7 @@ export default function Index() {
   const [isLoading, setIsLoading] = useState(true);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [activeProjectTab, setActiveProjectTab] = useState<ProjectTab>('notes');
+  const [describingPhotos, setDescribingPhotos] = useState<Set<string>>(new Set());
 
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
@@ -392,6 +393,100 @@ export default function Index() {
     }
   };
 
+  const autoDescribePhoto = async (noteId: string, photoId: string) => {
+    if (!selectedProject) return;
+
+    const note = selectedProject.notes.find((n) => n.id === noteId);
+    if (!note || !note.photos) {
+      Alert.alert('Error', 'Photo not found.');
+      return;
+    }
+
+    const photo = note.photos.find((p) => p.id === photoId);
+    if (!photo) {
+      Alert.alert('Error', 'Photo not found.');
+      return;
+    }
+
+    const photoKey = `${noteId}-${photoId}`;
+    setDescribingPhotos((prev) => new Set(prev).add(photoKey));
+
+    try {
+      const formData = new FormData();
+      const uriParts = photo.uri.split('.');
+      const fileType = uriParts[uriParts.length - 1];
+      
+      formData.append('file', {
+        uri: photo.uri,
+        name: `photo.${fileType}`,
+        type: `image/${fileType}`,
+      } as any);
+
+      const response = await apiFetch(`${getApiBaseUrl()}/describe-image`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        console.error('Backend /describe-image error: non-OK response');
+        Alert.alert('Description failed', 'The backend returned an error.');
+        return;
+      }
+
+      const data: any = await response.json();
+      const description: string | undefined = data.description;
+
+      if (!description) {
+        Alert.alert('No description', 'The description request succeeded but returned no text.');
+        return;
+      }
+
+      const newNotes = selectedProject.notes.map((n) => {
+        if (n.id === noteId && n.photos) {
+          return {
+            ...n,
+            photos: n.photos.map((p) =>
+              p.id === photoId
+                ? { ...p, caption: description, aiGenerated: true }
+                : p
+            ),
+          };
+        }
+        return n;
+      });
+
+      await updateProjectNotes(selectedProject.id, newNotes);
+    } catch (error) {
+      if (await handleApiError(error)) return;
+      console.error('Auto-describe error');
+      Alert.alert('Description error', 'Something went wrong while contacting the backend.');
+    } finally {
+      setDescribingPhotos((prev) => {
+        const next = new Set(prev);
+        next.delete(photoKey);
+        return next;
+      });
+    }
+  };
+
+  const updatePhotoCaption = async (noteId: string, photoId: string, newCaption: string) => {
+    if (!selectedProject) return;
+
+    const newNotes = selectedProject.notes.map((n) => {
+      if (n.id === noteId && n.photos) {
+        return {
+          ...n,
+          photos: n.photos.map((p) =>
+            p.id === photoId ? { ...p, caption: newCaption } : p
+          ),
+        };
+      }
+      return n;
+    });
+
+    await updateProjectNotes(selectedProject.id, newNotes);
+  };
+
   const addPhotoNote = async () => {
     if (!selectedProject) {
       Alert.alert('Select project', 'Please select a project first.');
@@ -422,7 +517,12 @@ export default function Index() {
       id: Date.now().toString(),
       text: textForNote,
       createdAt: new Date().toISOString(),
-      images: [uri],
+      photos: [{
+        id: Date.now().toString(),
+        uri,
+        caption: '',
+        aiGenerated: false,
+      }],
     };
 
     const newNotes = [newNote, ...(selectedProject.notes || [])];
@@ -430,44 +530,7 @@ export default function Index() {
     setNoteText('');
   };
 
-  const addVideoNote = async () => {
-    if (!selectedProject) {
-      Alert.alert('Select project', 'Please select a project first.');
-      return;
-    }
 
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Camera permission is required.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-      quality: 0.7,
-      videoMaxDuration: 60,
-    });
-
-    if (result.canceled || !result.assets || result.assets.length === 0) {
-      return;
-    }
-
-    const uri = result.assets[0].uri;
-
-    const trimmed = noteText.trim();
-    const textForNote = trimmed || 'Video note (no manual text added yet).';
-
-    const newNote: Note = {
-      id: Date.now().toString(),
-      text: textForNote,
-      createdAt: new Date().toISOString(),
-      videos: [uri],
-    };
-
-    const newNotes = [newNote, ...(selectedProject.notes || [])];
-    await updateProjectNotes(selectedProject.id, newNotes);
-    setNoteText('');
-  };
 
   const createReportForSelectedProject = async () => {
     if (!selectedProject) return;
@@ -482,8 +545,8 @@ export default function Index() {
       text: n.text,
       createdAt: new Date(n.createdAt).toLocaleString(),
       transcription: n.transcription,
-      imagesCount: n.images ? n.images.length : 0,
-      videosCount: n.videos ? n.videos.length : 0,
+      photos: n.photos?.map(p => ({ caption: p.caption })) || [],
+      legacyImagesCount: n.images ? n.images.length : 0,
     }));
 
     try {
@@ -579,7 +642,6 @@ export default function Index() {
     const noteCount = notes.length;
     const audioCount = notes.filter((n) => n.audioUri).length;
     const photoCount = notes.filter((n) => n.images && n.images.length > 0).length;
-    const videoCount = notes.filter((n) => n.videos && n.videos.length > 0).length;
 
     return (
       <Animated.View entering={FadeInDown.springify().delay(index * 50)}>
@@ -611,7 +673,6 @@ export default function Index() {
             <StatPill icon="document-text-outline" label={`${noteCount} notes`} />
             <StatPill icon="mic-outline" label={`${audioCount} audio`} />
             <StatPill icon="camera-outline" label={`${photoCount} photos`} />
-            <StatPill icon="videocam-outline" label={`${videoCount} videos`} />
           </View>
 
           <View style={{ flexDirection: 'row', marginTop: theme.spacing.md, gap: theme.spacing.sm }}>
@@ -701,6 +762,37 @@ export default function Index() {
         <Body>{item.text}</Body>
         <Caption muted>{new Date(item.createdAt).toLocaleString()}</Caption>
 
+        {(item.photos?.length || 0) > 0 && (
+          <View style={{ marginTop: theme.spacing.xs, gap: theme.spacing.sm }}>
+            {item.photos?.map((photo) => {
+              const photoKey = `${item.id}-${photo.id}`;
+              const isDescribing = describingPhotos.has(photoKey);
+              return (
+                <View key={photo.id} style={{ gap: theme.spacing.xs }}>
+                  <Image
+                    source={{ uri: photo.uri }}
+                    style={{ width: 82, height: 82, borderRadius: theme.radii.sm }}
+                  />
+                  <TextField
+                    value={photo.caption}
+                    onChangeText={(text) => updatePhotoCaption(item.id, photo.id, text)}
+                    placeholder="Describe this photo…"
+                    multiline
+                    style={{ minHeight: 60 }}
+                  />
+                  <SecondaryButton
+                    onPress={() => autoDescribePhoto(item.id, photo.id)}
+                    loading={isDescribing}
+                    width={160}
+                  >
+                    {isDescribing ? 'Describing...' : 'Auto-describe'}
+                  </SecondaryButton>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         {(item.images?.length || 0) > 0 && (
           <View style={{ marginTop: theme.spacing.xs, gap: theme.spacing.xs }}>
             <Caption muted>Photos: {item.images?.length}</Caption>
@@ -715,8 +807,6 @@ export default function Index() {
             </View>
           </View>
         )}
-
-        {(item.videos?.length || 0) > 0 && <Caption muted>Videos attached: {item.videos?.length}</Caption>}
 
         {item.audioUri && (
           <View style={{ flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
@@ -837,9 +927,6 @@ export default function Index() {
         <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
           <SecondaryButton style={{ flex: 1 }} onPress={addPhotoNote}>
             Add photo
-          </SecondaryButton>
-          <SecondaryButton style={{ flex: 1 }} onPress={addVideoNote}>
-            Add video
           </SecondaryButton>
         </View>
       </GlassCard>

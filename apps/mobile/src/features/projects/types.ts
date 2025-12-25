@@ -1,3 +1,10 @@
+export type Photo = {
+  id: string;
+  uri: string;
+  caption: string;
+  aiGenerated?: boolean;
+};
+
 export type Note = {
   id: string;
   text: string;
@@ -5,7 +12,7 @@ export type Note = {
   audioUri?: string;
   transcription?: string;
   images?: string[];
-  videos?: string[];
+  photos?: Photo[];
 };
 
 export type Project = {
