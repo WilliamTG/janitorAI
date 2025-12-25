@@ -689,7 +689,7 @@ export default function ProjectDetailScreen() {
   );
 
   const noteComposer = (
-    <GlassCard style={{ gap: theme.spacing.sm }}>
+    <GlassCard style={{ gap: theme.spacing.sm, marginBottom: theme.spacing.lg }}>
       <Caption muted>What would you say during the inspection?</Caption>
       <TextField
         multiline
@@ -698,19 +698,17 @@ export default function ProjectDetailScreen() {
         placeholder="Type your observation here..."
         style={{ minHeight: 100, textAlignVertical: 'top' }}
       />
-      <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-        <PrimaryButton style={{ flex: 1 }} onPress={addTextNote}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: theme.spacing.sm }}>
+        <PrimaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addTextNote}>
           Save text note
         </PrimaryButton>
-        <SecondaryButton style={{ flex: 1 }} onPress={handleRecordPress}>
+        <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={handleRecordPress}>
           {recording ? 'Stop & save voice' : 'Voice note'}
         </SecondaryButton>
-      </View>
-      <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-        <SecondaryButton style={{ flex: 1 }} onPress={addPhotoNote}>
+        <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addPhotoNote}>
           Add photo
         </SecondaryButton>
-        <SecondaryButton style={{ flex: 1 }} onPress={addVideoNote}>
+        <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addVideoNote}>
           Add video
         </SecondaryButton>
       </View>
@@ -784,23 +782,6 @@ export default function ProjectDetailScreen() {
     return renderReportTab();
   };
 
-  const debugOverlay = __DEV__ ? (
-    <View
-      pointerEvents="none"
-      style={{
-        position: 'absolute',
-        top: theme.spacing.sm,
-        left: theme.spacing.sm,
-        padding: theme.spacing.xs,
-        borderRadius: theme.radii.sm,
-        backgroundColor: 'rgba(220, 38, 38, 0.9)',
-      }}
-    >
-      <Caption style={{ color: 'white' }}>app/projects/[id].tsx</Caption>
-      <Caption style={{ color: 'white' }}>id: {projectId ?? 'unknown'}</Caption>
-    </View>
-  ) : null;
-
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.surface }}>
       <Stack.Screen
@@ -813,8 +794,6 @@ export default function ProjectDetailScreen() {
       />
 
       {renderContent()}
-
-      {debugOverlay}
     </View>
   );
 }
