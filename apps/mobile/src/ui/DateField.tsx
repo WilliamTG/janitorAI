@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Platform, View } from 'react-native';
-// eslint-disable-next-line import/no-unresolved
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 

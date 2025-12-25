@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
@@ -21,6 +22,7 @@ import apiFetch, {
   UnauthorizedError,
   validateTesterToken,
 } from '@/src/lib/apiFetch';
+import { Note, Project, PROJECT_STORAGE_KEY } from '@/src/features/projects/types';
 import {
   Body,
   Caption,
@@ -35,31 +37,11 @@ import {
   useAppTheme,
 } from '@/src/ui';
 
-type Note = {
-  id: string;
-  text: string;
-  createdAt: string;
-  audioUri?: string;
-  transcription?: string;
-  images?: string[];
-  videos?: string[];
-};
-
-type Project = {
-  id: string;
-  name: string;
-  inspectionDate: string;
-  inspector: string;
-  notes: Note[];
-  report?: string;
-};
-
-const STORAGE_KEY = '@inspection_projects';
-
 type ProjectTab = 'notes' | 'report';
 
 export default function Index() {
   const theme = useAppTheme();
+  const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
@@ -146,7 +128,7 @@ export default function Index() {
   useEffect(() => {
     (async () => {
       try {
-        const saved = await AsyncStorage.getItem(STORAGE_KEY);
+        const saved = await AsyncStorage.getItem(PROJECT_STORAGE_KEY);
         if (saved) {
           const parsed: Project[] = JSON.parse(saved);
           setProjects(parsed);
@@ -162,7 +144,7 @@ export default function Index() {
   const saveProjectsToStorage = async (newProjects: Project[]) => {
     setProjects(newProjects);
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newProjects));
+      await AsyncStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(newProjects));
     } catch {
       console.warn('Failed to save projects');
       Alert.alert('Warning', 'Could not save projects to your device.');
@@ -636,8 +618,15 @@ export default function Index() {
             <PrimaryButton
               width="100%"
               onPress={() => {
-                setSelectedProjectId(item.id);
-                setActiveProjectTab('notes');
+                const route = `/projects/${item.id}`;
+
+                console.log('[Projects] Navigating to project detail', {
+                  projectId: item.id,
+                  route,
+                  expectedRouteFile: 'app/projects/[id].tsx',
+                });
+
+                router.push(route);
               }}
             >
               Open

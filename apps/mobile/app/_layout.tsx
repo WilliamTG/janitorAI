@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Platform } from 'react-native';
+import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -13,6 +14,11 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const stackBackground = colorScheme === 'dark' ? '#0b1020' : '#e8eef8';
+
+  useEffect(() => {
+    console.log('[Navigation] Root layout mounted with stack background', stackBackground);
+  }, [stackBackground]);
 
   return (
     <AppThemeProvider>
@@ -20,7 +26,7 @@ export default function RootLayout() {
         <Stack
           screenOptions={{
             animation: Platform.OS === 'ios' ? 'slide_from_right' : 'fade_from_bottom',
-            contentStyle: { backgroundColor: 'transparent' },
+            contentStyle: { backgroundColor: stackBackground },
           }}
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
