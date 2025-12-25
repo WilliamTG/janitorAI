@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { Platform } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -16,7 +17,12 @@ export default function RootLayout() {
   return (
     <AppThemeProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ animation: 'slide_from_right' }}>
+        <Stack
+          screenOptions={{
+            animation: Platform.OS === 'ios' ? 'slide_from_right' : 'fade_from_bottom',
+            contentStyle: { backgroundColor: 'transparent' },
+          }}
+        >
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
