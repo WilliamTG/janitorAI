@@ -11,7 +11,7 @@ import {
   ScrollView,
   View,
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 
 import { getApiBaseUrl } from '@/src/config/api';
 import apiFetch, {
@@ -640,71 +640,61 @@ export default function Index() {
     );
   };
 
-  const renderProjectList = () => (
-    <Screen>
-      {renderTokenModal()}
-      <View style={{ gap: theme.spacing.md }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View>
-            <Caption muted>Inspections</Caption>
-            <Title>Projects</Title>
-          </View>
-          <IconButton onPress={() => setShowTokenModal(true)}>
-            <Ionicons name="key-outline" size={18} color={theme.colors.foreground} />
-          </IconButton>
+  const renderProjectListHeader = () => (
+    <View style={{ gap: theme.spacing.md }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View>
+          <Caption muted>Inspections</Caption>
+          <Title>Projects</Title>
         </View>
-
-        {tokenStatus !== 'valid' && (
-          <GlassCard style={{ gap: theme.spacing.xs }}>
-            <Title muted>Access needed</Title>
-            <Body muted>Enter your tester token to unlock report generation.</Body>
-            <PrimaryButton onPress={() => setShowTokenModal(true)}>Enter token</PrimaryButton>
-          </GlassCard>
-        )}
-
-        {isCreatingProject && (
-          <GlassCard style={{ gap: theme.spacing.sm }}>
-            <Title>Create project</Title>
-            <TextField label="Project name" value={projectName} onChangeText={setProjectName} placeholder="Main lobby walkthrough" />
-            <DateField label="Inspection date" value={projectDate} onChange={setProjectDate} />
-            <TextField label="Inspector" value={projectInspector} onChangeText={setProjectInspector} placeholder="Your name" />
-            <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-              <PrimaryButton style={{ flex: 1 }} onPress={createProject}>Create</PrimaryButton>
-              <SecondaryButton style={{ flex: 1 }} onPress={toggleProjectForm}>Cancel</SecondaryButton>
-            </View>
-          </GlassCard>
-        )}
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Caption muted>Saved locally</Caption>
-          <SecondaryButton onPress={toggleProjectForm} width={140}>
-            {isCreatingProject ? 'Close form' : 'New project'}
-          </SecondaryButton>
-        </View>
-
-        <FlatList
-          data={projects}
-          keyExtractor={(item) => item.id}
-          renderItem={renderProjectCard}
-          ListEmptyComponent={<Caption muted>No projects yet. Tap “New project” to start.</Caption>}
-          contentContainerStyle={{ paddingBottom: theme.spacing.xl }}
-        />
-      </View>
-
-      <View
-        style={{
-          position: 'absolute',
-          bottom: theme.spacing.xl,
-          right: theme.spacing.xl,
-        }}
-      >
-        <IconButton
-          onPress={() => setIsCreatingProject(true)}
-          style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: theme.colors.accent }}
-        >
-          <Ionicons name="add" size={28} color="#fff" />
+        <IconButton onPress={() => setShowTokenModal(true)}>
+          <Ionicons name="key-outline" size={18} color={theme.colors.foreground} />
         </IconButton>
       </View>
+
+      {tokenStatus !== 'valid' && (
+        <GlassCard style={{ gap: theme.spacing.xs }}>
+          <Title muted>Access needed</Title>
+          <Body muted>Enter your tester token to unlock report generation.</Body>
+          <PrimaryButton onPress={() => setShowTokenModal(true)}>Enter token</PrimaryButton>
+        </GlassCard>
+      )}
+
+      {isCreatingProject && (
+        <GlassCard style={{ gap: theme.spacing.sm }}>
+          <Title>Create project</Title>
+          <TextField label="Project name" value={projectName} onChangeText={setProjectName} placeholder="Main lobby walkthrough" />
+          <DateField label="Inspection date" value={projectDate} onChange={setProjectDate} />
+          <TextField label="Inspector" value={projectInspector} onChangeText={setProjectInspector} placeholder="Your name" />
+          <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+            <PrimaryButton style={{ flex: 1 }} onPress={createProject}>Create</PrimaryButton>
+            <SecondaryButton style={{ flex: 1 }} onPress={toggleProjectForm}>Cancel</SecondaryButton>
+          </View>
+        </GlassCard>
+      )}
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Caption muted>Saved locally</Caption>
+        <SecondaryButton onPress={toggleProjectForm} width={140}>
+          {isCreatingProject ? 'Close form' : 'New project'}
+        </SecondaryButton>
+      </View>
+    </View>
+  );
+
+  const renderProjectList = () => (
+    <Screen scrollable={false} style={{ flex: 1 }}>
+      {renderTokenModal()}
+      <FlatList
+        data={projects}
+        keyExtractor={(item) => item.id}
+        renderItem={renderProjectCard}
+        ListHeaderComponent={renderProjectListHeader()}
+        ListEmptyComponent={<Caption muted>No projects yet. Tap “New project” to start.</Caption>}
+        ItemSeparatorComponent={() => <View style={{ height: theme.spacing.sm }} />}
+        contentContainerStyle={{ paddingBottom: theme.spacing.xl * 1.5 }}
+        showsVerticalScrollIndicator={false}
+      />
     </Screen>
   );
 
@@ -786,96 +776,113 @@ export default function Index() {
   const renderProjectDetail = () => {
     if (!selectedProject) return null;
     const projectNotes = selectedProject.notes || [];
+    const projectHeader = (
+      <View style={{ gap: theme.spacing.md }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+            <IconButton
+              onPress={async () => {
+                await stopPlayback();
+                setSelectedProjectId(null);
+              }}
+            >
+              <Ionicons name="chevron-back" size={18} color={theme.colors.foreground} />
+            </IconButton>
+            <View>
+              <Caption muted>Project</Caption>
+              <Title numberOfLines={1}>{selectedProject.name}</Title>
+            </View>
+          </View>
+          <IconButton onPress={() => setShowTokenModal(true)}>
+            <Ionicons name="key-outline" size={18} color={theme.colors.foreground} />
+          </IconButton>
+        </View>
+
+        <GlassCard style={{ gap: theme.spacing.xs }}>
+          <Body muted>Inspection date: {selectedProject.inspectionDate}</Body>
+          <Body muted>Inspector: {selectedProject.inspector}</Body>
+          <View style={{ flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
+            <SecondaryButton
+              style={{ flex: 1, borderColor: activeProjectTab === 'notes' ? theme.colors.accent : theme.colors.border }}
+              onPress={() => setActiveProjectTab('notes')}
+            >
+              Notes
+            </SecondaryButton>
+            <SecondaryButton
+              style={{ flex: 1, borderColor: activeProjectTab === 'report' ? theme.colors.accent : theme.colors.border }}
+              onPress={() => setActiveProjectTab('report')}
+            >
+              Report
+            </SecondaryButton>
+          </View>
+        </GlassCard>
+      </View>
+    );
+
+    const noteComposer = (
+      <GlassCard style={{ gap: theme.spacing.sm }}>
+        <Caption muted>What would you say during the inspection?</Caption>
+        <TextField
+          multiline
+          value={noteText}
+          onChangeText={setNoteText}
+          placeholder="Type your observation here..."
+          style={{ minHeight: 100, textAlignVertical: 'top' }}
+        />
+        <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+          <PrimaryButton style={{ flex: 1 }} onPress={addTextNote}>
+            Save text note
+          </PrimaryButton>
+          <SecondaryButton style={{ flex: 1 }} onPress={handleRecordPress}>
+            {recording ? 'Stop & save voice' : 'Voice note'}
+          </SecondaryButton>
+        </View>
+        <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+          <SecondaryButton style={{ flex: 1 }} onPress={addPhotoNote}>
+            Add photo
+          </SecondaryButton>
+          <SecondaryButton style={{ flex: 1 }} onPress={addVideoNote}>
+            Add video
+          </SecondaryButton>
+        </View>
+      </GlassCard>
+    );
+
+    if (activeProjectTab === 'notes') {
+      return (
+        <Animated.View entering={FadeInRight.duration(320)}>
+          <Screen scrollable={false} style={{ flex: 1 }}>
+            {renderTokenModal()}
+            <FlatList
+              data={isLoading ? [] : projectNotes}
+              keyExtractor={(item) => item.id}
+              renderItem={renderNoteItem}
+              ListHeaderComponent={
+                <View style={{ gap: theme.spacing.md }}>
+                  {projectHeader}
+                  {noteComposer}
+                  {isLoading && <Caption muted>Loading notes…</Caption>}
+                </View>
+              }
+              ListEmptyComponent={!isLoading ? <Caption muted>No notes yet. Add your first observation.</Caption> : null}
+              contentContainerStyle={{ paddingBottom: theme.spacing.xl * 1.5 }}
+              showsVerticalScrollIndicator={false}
+            />
+          </Screen>
+        </Animated.View>
+      );
+    }
 
     return (
-      <Screen>
-        {renderTokenModal()}
-        <View style={{ gap: theme.spacing.md }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
-              <IconButton
-                onPress={async () => {
-                  await stopPlayback();
-                  setSelectedProjectId(null);
-                }}
-              >
-                <Ionicons name="chevron-back" size={18} color={theme.colors.foreground} />
-              </IconButton>
-              <View>
-                <Caption muted>Project</Caption>
-                <Title numberOfLines={1}>{selectedProject.name}</Title>
-              </View>
-            </View>
-            <IconButton onPress={() => setShowTokenModal(true)}>
-              <Ionicons name="key-outline" size={18} color={theme.colors.foreground} />
-            </IconButton>
+      <Animated.View entering={FadeInRight.duration(320)}>
+        <Screen>
+          {renderTokenModal()}
+          <View style={{ gap: theme.spacing.md }}>
+            {projectHeader}
+            {activeProjectTab === 'report' && renderReport()}
           </View>
-
-          <GlassCard style={{ gap: theme.spacing.xs }}>
-            <Body muted>Inspection date: {selectedProject.inspectionDate}</Body>
-            <Body muted>Inspector: {selectedProject.inspector}</Body>
-            <View style={{ flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
-              <SecondaryButton
-                style={{ flex: 1, borderColor: activeProjectTab === 'notes' ? theme.colors.accent : theme.colors.border }}
-                onPress={() => setActiveProjectTab('notes')}
-              >
-                Notes
-              </SecondaryButton>
-              <SecondaryButton
-                style={{ flex: 1, borderColor: activeProjectTab === 'report' ? theme.colors.accent : theme.colors.border }}
-                onPress={() => setActiveProjectTab('report')}
-              >
-                Report
-              </SecondaryButton>
-            </View>
-          </GlassCard>
-
-          {activeProjectTab === 'notes' && (
-            <View style={{ gap: theme.spacing.md }}>
-              <GlassCard style={{ gap: theme.spacing.sm }}>
-                <Caption muted>What would you say during the inspection?</Caption>
-                <TextField
-                  multiline
-                  value={noteText}
-                  onChangeText={setNoteText}
-                  placeholder="Type your observation here..."
-                  style={{ minHeight: 100, textAlignVertical: 'top' }}
-                />
-                <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-                  <PrimaryButton style={{ flex: 1 }} onPress={addTextNote}>
-                    Save text note
-                  </PrimaryButton>
-                  <SecondaryButton style={{ flex: 1 }} onPress={handleRecordPress}>
-                    {recording ? 'Stop & save voice' : 'Voice note'}
-                  </SecondaryButton>
-                </View>
-                <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-                  <SecondaryButton style={{ flex: 1 }} onPress={addPhotoNote}>
-                    Add photo
-                  </SecondaryButton>
-                  <SecondaryButton style={{ flex: 1 }} onPress={addVideoNote}>
-                    Add video
-                  </SecondaryButton>
-                </View>
-              </GlassCard>
-
-              {isLoading ? (
-                <Caption muted>Loading notes…</Caption>
-              ) : (
-                <FlatList
-                  data={projectNotes}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderNoteItem}
-                  ListEmptyComponent={<Caption muted>No notes yet. Add your first observation.</Caption>}
-                  scrollEnabled={false}
-                />
-              )}
-            </View>
-          )}
-
-          {activeProjectTab === 'report' && renderReport()}
-        </View>
-      </Screen>
+        </Screen>
+      </Animated.View>
     );
   };
 
