@@ -65,6 +65,7 @@ export default function ProjectDetailScreen() {
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [activeTab, setActiveTab] = useState<ProjectTab>('notes');
   const [describingPhotos, setDescribingPhotos] = useState<Set<string>>(new Set());
+  const [editingPhotos, setEditingPhotos] = useState<Record<string, { editing: boolean; caption: string }>>({});
 
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
@@ -636,19 +637,80 @@ export default function ProjectDetailScreen() {
             {item.photos?.map((photo) => {
               const photoKey = `${item.id}-${photo.id}`;
               const isDescribing = describingPhotos.has(photoKey);
+              const editState = editingPhotos[photoKey];
+              const isEditingCaption = editState?.editing ?? false;
+              const editedCaption = editState?.caption ?? photo.caption;
+              
               return (
                 <View key={photo.id} style={{ gap: theme.spacing.xs }}>
                   <Image
                     source={{ uri: photo.uri }}
                     style={{ width: 82, height: 82, borderRadius: theme.radii.sm }}
                   />
-                  <TextField
-                    value={photo.caption}
-                    onChangeText={(text) => updatePhotoCaption(item.id, photo.id, text)}
-                    placeholder="Describe this photo…"
-                    multiline
-                    style={{ minHeight: 60 }}
-                  />
+                  
+                  {isEditingCaption ? (
+                    <>
+                      <TextField
+                        value={editedCaption}
+                        onChangeText={(text) => 
+                          setEditingPhotos(prev => ({
+                            ...prev,
+                            [photoKey]: { editing: true, caption: text }
+                          }))
+                        }
+                        placeholder="Describe this photo…"
+                        multiline
+                        style={{ minHeight: 60 }}
+                      />
+                      <View style={{ flexDirection: 'row', gap: theme.spacing.xs }}>
+                        <SecondaryButton
+                          onPress={async () => {
+                            await updatePhotoCaption(item.id, photo.id, editedCaption);
+                            setEditingPhotos(prev => {
+                              const next = { ...prev };
+                              delete next[photoKey];
+                              return next;
+                            });
+                          }}
+                          width={100}
+                        >
+                          Save
+                        </SecondaryButton>
+                        <SecondaryButton
+                          onPress={() => {
+                            setEditingPhotos(prev => {
+                              const next = { ...prev };
+                              delete next[photoKey];
+                              return next;
+                            });
+                          }}
+                          width={100}
+                        >
+                          Cancel
+                        </SecondaryButton>
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: theme.spacing.xs }}>
+                        <Body style={{ flex: 1 }}>
+                          {photo.caption || 'No description yet'}
+                        </Body>
+                        <SecondaryButton
+                          onPress={() => {
+                            setEditingPhotos(prev => ({
+                              ...prev,
+                              [photoKey]: { editing: true, caption: photo.caption }
+                            }));
+                          }}
+                          width={80}
+                        >
+                          Edit
+                        </SecondaryButton>
+                      </View>
+                    </>
+                  )}
+                  
                   <SecondaryButton
                     onPress={() => autoDescribePhoto(item.id, photo.id)}
                     loading={isDescribing}
