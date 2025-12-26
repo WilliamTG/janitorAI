@@ -40,6 +40,7 @@ const PressableScale = ({ children, style, ...props }: ButtonProps & { backgroun
         props.onPressOut?.(event);
         handlePressOut();
       }}
+      style={{ overflow: 'hidden', borderRadius: (style as ViewStyle)?.borderRadius }}
     >
       <Animated.View style={[animatedStyle, style]}>{children}</Animated.View>
     </Pressable>
