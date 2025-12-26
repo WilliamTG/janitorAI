@@ -1,5 +1,5 @@
-import React, { PropsWithChildren, useCallback } from 'react';
-import { ActivityIndicator, Pressable, PressableProps, ViewStyle } from 'react-native';
+import React, { PropsWithChildren, useCallback, useMemo } from 'react';
+import { ActivityIndicator, Pressable, PressableProps, StyleSheet, ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
@@ -29,6 +29,14 @@ const PressableScale = ({ children, style, ...props }: ButtonProps & { backgroun
     scale.value = withSpring(1, { damping: 12, stiffness: 220 });
   }, [scale]);
 
+  const pressableStyle = useMemo(() => {
+    const flattenedStyle = StyleSheet.flatten(style);
+    return {
+      overflow: 'hidden' as const,
+      borderRadius: flattenedStyle?.borderRadius,
+    };
+  }, [style]);
+
   return (
     <Pressable
       {...props}
@@ -40,6 +48,7 @@ const PressableScale = ({ children, style, ...props }: ButtonProps & { backgroun
         props.onPressOut?.(event);
         handlePressOut();
       }}
+      style={pressableStyle}
     >
       <Animated.View style={[animatedStyle, style]}>{children}</Animated.View>
     </Pressable>

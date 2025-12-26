@@ -15,8 +15,8 @@ export const Screen = ({ children, style, scrollable = true }: PropsWithChildren
     <LinearGradient
       colors={
         theme.mode === 'dark'
-          ? ['#0b1020', '#0f172a']
-          : ['#e8eef8', '#f4f6fb']
+          ? ['#070815', '#0b1220']
+          : ['#dfe6f0', '#e8eef8']
       }
       style={styles.flex}
     >
