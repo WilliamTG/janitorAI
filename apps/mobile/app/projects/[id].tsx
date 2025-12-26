@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
@@ -22,7 +21,12 @@ import apiFetch, {
   UnauthorizedError,
   validateTesterToken,
 } from '@/src/lib/apiFetch';
-import { Note, Project, PROJECT_STORAGE_KEY } from '@/src/features/projects/types';
+import { Note, Project } from '@/src/features/projects/types';
+import {
+  loadProjects,
+  getProject,
+  updateProject as updateProjectInStorage,
+} from '@/src/storage/projectsStorage';
 import {
   Body,
   Caption,
@@ -145,16 +149,15 @@ export default function ProjectDetailScreen() {
     }
 
     try {
-      const saved = await AsyncStorage.getItem(PROJECT_STORAGE_KEY);
-      const parsed: Project[] = saved ? JSON.parse(saved) : [];
-      const found = parsed.find((item) => item.id === projectId) ?? null;
+      const projects = await loadProjects();
+      const found = await getProject(projectId);
 
       console.log('[Projects] Loaded project detail result', {
         projectId,
         found: Boolean(found),
       });
 
-      setState({ projects: parsed, project: found });
+      setState({ projects, project: found });
     } catch (error) {
       console.warn('[Projects] Failed to load project detail', error);
       setState({ projects: [], project: null });
@@ -173,29 +176,12 @@ export default function ProjectDetailScreen() {
     };
   }, [stopPlayback]);
 
-  const persistProjects = async (nextProjects: Project[]) => {
-    setState((prev) => ({ ...prev, projects: nextProjects }));
-    try {
-      await AsyncStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(nextProjects));
-    } catch (error) {
-      console.warn('[Projects] Failed to save changes', error);
-      Alert.alert('Warning', 'Could not save changes to your device.');
-    }
-  };
-
   const updateProjectLocally = async (updated: Project) => {
-    let nextProjects: Project[] = [];
-
-    setState((prev) => {
-      const baseProjects = prev.projects.length ? prev.projects : prev.project ? [prev.project] : [];
-      nextProjects = baseProjects.some((p) => p.id === updated.id)
-        ? baseProjects.map((p) => (p.id === updated.id ? updated : p))
-        : [...baseProjects, updated];
-
-      return { projects: nextProjects, project: updated };
-    });
-
-    await persistProjects(nextProjects);
+    // Update project in storage and get back all projects
+    const nextProjects = await updateProjectInStorage(updated);
+    const normalizedId = String(updated.id);
+    const normalizedProject = { ...updated, id: normalizedId };
+    setState({ projects: nextProjects, project: normalizedProject });
   };
 
   const updateProjectNotes = async (notes: Note[]) => {

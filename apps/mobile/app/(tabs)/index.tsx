@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
@@ -22,7 +21,12 @@ import apiFetch, {
   UnauthorizedError,
   validateTesterToken,
 } from '@/src/lib/apiFetch';
-import { Note, Project, PROJECT_STORAGE_KEY } from '@/src/features/projects/types';
+import { Note, Project } from '@/src/features/projects/types';
+import {
+  loadProjects,
+  saveProjects,
+  deleteProject as deleteProjectFromStorage,
+} from '@/src/storage/projectsStorage';
 import {
   Body,
   Caption,
@@ -129,11 +133,8 @@ export default function Index() {
   useEffect(() => {
     (async () => {
       try {
-        const saved = await AsyncStorage.getItem(PROJECT_STORAGE_KEY);
-        if (saved) {
-          const parsed: Project[] = JSON.parse(saved);
-          setProjects(parsed);
-        }
+        const loaded = await loadProjects();
+        setProjects(loaded);
       } catch {
         console.warn('Failed to load projects');
       } finally {
@@ -145,7 +146,7 @@ export default function Index() {
   const saveProjectsToStorage = async (newProjects: Project[]) => {
     setProjects(newProjects);
     try {
-      await AsyncStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(newProjects));
+      await saveProjects(newProjects);
     } catch {
       console.warn('Failed to save projects');
       Alert.alert('Warning', 'Could not save projects to your device.');
@@ -197,8 +198,8 @@ export default function Index() {
       setSelectedProjectId(null);
       await stopPlayback();
     }
-    const newProjects = projects.filter((p) => p.id !== id);
-    await saveProjectsToStorage(newProjects);
+    const newProjects = await deleteProjectFromStorage(id);
+    setProjects(newProjects);
   };
 
   const updateProjectNotes = async (projectId: string, notes: Note[]) => {
