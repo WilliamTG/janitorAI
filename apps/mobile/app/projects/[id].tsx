@@ -177,16 +177,10 @@ export default function ProjectDetailScreen() {
   }, [stopPlayback]);
 
   const updateProjectLocally = async (updated: Project) => {
-    // First, read current projects from storage to ensure we have latest
-    const currentProjects = await loadProjects();
+    // Update project in storage and get back all projects
+    const nextProjects = await updateProjectInStorage(updated);
     const normalizedId = String(updated.id);
     const normalizedProject = { ...updated, id: normalizedId };
-    
-    const nextProjects = currentProjects.some((p) => String(p.id) === normalizedId)
-      ? currentProjects.map((p) => String(p.id) === normalizedId ? normalizedProject : p)
-      : [...currentProjects, normalizedProject];
-    
-    await updateProjectInStorage(normalizedProject);
     setState({ projects: nextProjects, project: normalizedProject });
   };
 
