@@ -26,6 +26,8 @@ pnpm-debug.log*
 apps/mobile/node_modules/
 apps/api/node_modules/
 packages/**/node_modules/
+node_modules/
+apps/mobile/expo-env.d
 
 # Expo build artifacts
 apps/mobile/.expo/
