@@ -102,11 +102,27 @@ app.post("/report", heavyLimiter, async (req, res) => {
       })
       .join("\n--------------------\n");
 
+    const hasDescriptionContext =
+      Boolean(project.descriptionText) || Boolean(project.descriptionTranscription);
+
+    const descriptionBlock = hasDescriptionContext
+      ? `\nProject description/context:\n${
+          project.descriptionText ? `- Text: ${project.descriptionText}\n` : ""
+        }${
+          project.descriptionTranscription
+            ? `- Transcription: ${project.descriptionTranscription}\n`
+            : ""
+        }`
+      : "";
+
     const userContent = `
 Project metadata:
 - Project name: ${project.name}
 - Inspection date: ${project.inspectionDate}
 - Inspector: ${project.inspector}
+
+${descriptionBlock}
+Project focus reminder: Use the project description/context (if provided) to orient the report before reviewing raw observations.
 
 Raw observations:
 ${observationsText}

@@ -22,6 +22,10 @@ export type Project = {
   inspector: string;
   notes: Note[];
   report?: string;
+  projectDescriptionText?: string;
+  projectDescriptionAudioUri?: string;
+  projectDescriptionTranscription?: string;
+  projectDescriptionUpdatedAt?: string;
 };
 
 export const PROJECT_STORAGE_KEY = '@inspection_projects';
