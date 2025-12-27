@@ -5,6 +5,7 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const fs = require("fs");
+const { createDocxBuffer } = require("@janitorai/docx-builder");
 const requireTesterToken = require("./middleware/requireTesterToken");
 const { generalLimiter, heavyLimiter } = require("./middleware/rateLimiters");
 const requestLogger = require("./middleware/requestLogger");
@@ -161,6 +162,46 @@ ${observationsText}
     res.json({ report: reportText });
   } catch (err) {
     console.error("Backend /report error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ---------- REPORT DOCX EXPORT ----------
+app.post("/report/docx", heavyLimiter, async (req, res) => {
+  try {
+    const { reportText, project } = req.body || {};
+
+    if (!reportText || !project || !project.name) {
+      return res.status(400).json({ error: "Missing report text or project" });
+    }
+
+    const subtitleParts = [];
+    if (project.inspectionDate) subtitleParts.push(project.inspectionDate);
+    if (project.inspector) subtitleParts.push(project.inspector);
+    const subtitle = subtitleParts.filter(Boolean).join(" — ");
+
+    const paragraphs = String(reportText)
+      .split(/\n\s*\n/)
+      .map((block) => block.trim())
+      .filter(Boolean);
+
+    const buffer = await createDocxBuffer({
+      title: project.name,
+      subtitle,
+      paragraphs,
+    });
+
+    const safeName = project.name.replace(/[\\/:*?"<>|]+/g, "_") || "Project";
+
+    res.set({
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "Content-Disposition": `attachment; filename="Inspection Report - ${safeName}.docx"`,
+    });
+
+    res.send(buffer);
+  } catch (err) {
+    console.error("Backend /report/docx error:", sanitizeError(err));
     res.status(500).json({ error: "Server error" });
   }
 });
