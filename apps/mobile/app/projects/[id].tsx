@@ -1,16 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  Alert,
-  FlatList,
-  Image,
-  Modal,
-  ScrollView,
-  View,
-} from 'react-native';
+import { Alert, FlatList, Image, Modal, ScrollView, Share, View } from 'react-native';
+import { Buffer } from 'buffer';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 
 import { getApiBaseUrl } from '@/src/config/api';
@@ -64,6 +59,7 @@ export default function ProjectDetailScreen() {
   const [descriptionRecording, setDescriptionRecording] = useState<Audio.Recording | null>(null);
   const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [isExportingDocx, setIsExportingDocx] = useState(false);
   const [activeTab, setActiveTab] = useState<ProjectTab>('notes');
   const [describingPhotos, setDescribingPhotos] = useState<Set<string>>(new Set());
   const [editingPhotos, setEditingPhotos] = useState<Record<string, { editing: boolean; caption: string }>>({});
@@ -747,6 +743,66 @@ export default function ProjectDetailScreen() {
     return false;
   };
 
+  const exportReportAsDocx = async () => {
+    if (!project?.report) {
+      Alert.alert('No report', 'Generate a report before exporting.');
+      return;
+    }
+
+    try {
+      setIsExportingDocx(true);
+
+      const response = await apiFetch(`${getApiBaseUrl()}/report/docx`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reportText: project.report,
+          project: {
+            name: project.name,
+            inspectionDate: project.inspectionDate,
+            inspector: project.inspector,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.error('Backend error: report export failed', { status: response.status });
+        Alert.alert('Export failed', errorText || 'Backend error.');
+        return;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString('base64');
+      const targetDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+
+      if (!targetDir) {
+        throw new Error('No writable directory available');
+      }
+
+      const safeName = (project.name || 'Project').replace(/[\\/:*?"<>|]/g, '_');
+      const fileUri = `${targetDir}Inspection Report - ${safeName}.docx`;
+
+      await FileSystem.writeAsStringAsync(fileUri, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      await Share.share({
+        url: fileUri,
+        title: 'Inspection report',
+        message: `Inspection report for ${project.name}`,
+      });
+    } catch (error) {
+      if (await handleApiError(error)) return;
+      console.error('Error exporting report DOCX', error);
+      Alert.alert('Export failed', 'Could not export the report. Please try again.');
+    } finally {
+      setIsExportingDocx(false);
+    }
+  };
+
   const renderTokenModal = () => (
     <Modal visible={showTokenModal} transparent animationType="fade" onRequestClose={() => setShowTokenModal(true)}>
       <View
@@ -928,13 +984,27 @@ export default function ProjectDetailScreen() {
 
   const renderReport = () => (
     <View style={{ gap: theme.spacing.md }}>
-      <PrimaryButton onPress={createReportForProject} loading={isGeneratingReport} disabled={!isTokenValid}>
-        {isGeneratingReport
-          ? 'Creating report...'
-          : project?.report
-          ? 'Regenerate report'
-          : 'Create report'}
-      </PrimaryButton>
+      <View style={{ gap: theme.spacing.sm }}>
+        <PrimaryButton onPress={createReportForProject} loading={isGeneratingReport} disabled={!isTokenValid}>
+          {isGeneratingReport
+            ? 'Creating report...'
+            : project?.report
+            ? 'Regenerate report'
+            : 'Create report'}
+        </PrimaryButton>
+
+        <SecondaryButton
+          onPress={exportReportAsDocx}
+          loading={isExportingDocx}
+          disabled={!project?.report || !isTokenValid}
+        >
+          Export DOCX
+        </SecondaryButton>
+
+        {!project?.report && (
+          <Caption muted>Generate report first.</Caption>
+        )}
+      </View>
 
       {!isTokenValid && (
         <Caption muted>Enter a valid tester token to enable report generation.</Caption>
