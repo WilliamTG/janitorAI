@@ -61,11 +61,15 @@ export default function ProjectDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [noteText, setNoteText] = useState('');
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [descriptionRecording, setDescriptionRecording] = useState<Audio.Recording | null>(null);
   const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [activeTab, setActiveTab] = useState<ProjectTab>('notes');
   const [describingPhotos, setDescribingPhotos] = useState<Set<string>>(new Set());
   const [editingPhotos, setEditingPhotos] = useState<Record<string, { editing: boolean; caption: string }>>({});
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState('');
+  const [isTranscribingDescription, setIsTranscribingDescription] = useState(false);
 
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
@@ -172,6 +176,12 @@ export default function ProjectDetailScreen() {
   }, [loadProject]);
 
   useEffect(() => {
+    if (!isEditingDescription) {
+      setDescriptionDraft(state.project?.projectDescriptionText ?? '');
+    }
+  }, [isEditingDescription, state.project]);
+
+  useEffect(() => {
     return () => {
       stopPlayback();
     };
@@ -195,6 +205,25 @@ export default function ProjectDetailScreen() {
     if (!project) return;
     const updatedProject = { ...project, report };
     await updateProjectLocally(updatedProject);
+  };
+
+  const saveProjectDescriptionText = async () => {
+    if (!project) return;
+    const trimmed = descriptionDraft.trim();
+
+    const updatedProject: Project = {
+      ...project,
+      projectDescriptionText: trimmed || undefined,
+      projectDescriptionUpdatedAt: new Date().toISOString(),
+    };
+
+    await updateProjectLocally(updatedProject);
+    setIsEditingDescription(false);
+  };
+
+  const cancelProjectDescriptionEdit = () => {
+    setDescriptionDraft(project?.projectDescriptionText ?? '');
+    setIsEditingDescription(false);
   };
 
   const addTextNote = async () => {
@@ -282,6 +311,70 @@ export default function ProjectDetailScreen() {
       await stopRecording();
     } else {
       await startRecording();
+    }
+  };
+
+  const startDescriptionRecording = async () => {
+    try {
+      if (!project) {
+        Alert.alert('Select project', 'Please wait for the project to load first.');
+        return;
+      }
+
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission needed', 'Microphone permission is required.');
+        return;
+      }
+
+      await stopPlayback();
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording: started } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      setDescriptionRecording(started);
+    } catch {
+      console.error('Failed to start recording project description');
+      Alert.alert('Error', 'Could not start recording.');
+    }
+  };
+
+  const stopDescriptionRecording = async () => {
+    try {
+      if (!descriptionRecording || !project) return;
+
+      await descriptionRecording.stopAndUnloadAsync();
+      const uri = descriptionRecording.getURI();
+      setDescriptionRecording(null);
+
+      if (!uri) {
+        Alert.alert('Error', 'No audio file found.');
+        return;
+      }
+
+      const updatedProject: Project = {
+        ...project,
+        projectDescriptionAudioUri: uri,
+        projectDescriptionTranscription: undefined,
+        projectDescriptionUpdatedAt: new Date().toISOString(),
+      };
+
+      await updateProjectLocally(updatedProject);
+    } catch {
+      console.error('Failed to stop recording project description');
+      Alert.alert('Error', 'Could not stop recording.');
+      setDescriptionRecording(null);
+    }
+  };
+
+  const handleDescriptionRecordPress = async () => {
+    if (descriptionRecording) {
+      await stopDescriptionRecording();
+    } else {
+      await startDescriptionRecording();
     }
   };
 
@@ -379,6 +472,68 @@ export default function ProjectDetailScreen() {
       if (await handleApiError(error)) return;
       console.error('Backend /transcribe error');
       Alert.alert('Error', 'Could not reach backend.');
+    }
+  };
+
+  const deleteProjectDescriptionAudio = async () => {
+    if (!project) return;
+
+    const updatedProject: Project = {
+      ...project,
+      projectDescriptionAudioUri: undefined,
+      projectDescriptionTranscription: undefined,
+      projectDescriptionUpdatedAt: new Date().toISOString(),
+    };
+
+    await updateProjectLocally(updatedProject);
+  };
+
+  const transcribeProjectDescription = async () => {
+    if (!project?.projectDescriptionAudioUri) {
+      Alert.alert('No audio', 'Record a project description first.');
+      return;
+    }
+
+    try {
+      setIsTranscribingDescription(true);
+      const response = await apiFetch(`${getApiBaseUrl()}/transcribe`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          audioUri: project.projectDescriptionAudioUri,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error('Backend /transcribe error: non-OK response');
+        Alert.alert('Transcription failed', 'The backend returned an error.');
+        return;
+      }
+
+      const data: any = await response.json();
+      const textFromApi: string | undefined = data.text;
+
+      if (!textFromApi) {
+        Alert.alert('No text', 'The transcription request succeeded but returned no text.');
+        return;
+      }
+
+      const updatedProject: Project = {
+        ...project,
+        projectDescriptionTranscription: textFromApi,
+        projectDescriptionUpdatedAt: new Date().toISOString(),
+      };
+
+      await updateProjectLocally(updatedProject);
+      Alert.alert('Transcription ready', 'Added to this project description.');
+    } catch (error) {
+      if (await handleApiError(error)) return;
+      console.error('Backend /transcribe error');
+      Alert.alert('Error', 'Could not reach backend.');
+    } finally {
+      setIsTranscribingDescription(false);
     }
   };
 
@@ -551,6 +706,8 @@ export default function ProjectDetailScreen() {
             name: project.name,
             inspectionDate: project.inspectionDate,
             inspector: project.inspector,
+            descriptionText: project.projectDescriptionText,
+            descriptionTranscription: project.projectDescriptionTranscription,
           },
           notes: payloadNotes,
         }),
@@ -795,6 +952,100 @@ export default function ProjectDetailScreen() {
     </View>
   );
 
+  const renderProjectDescription = () => (
+    <GlassCard style={{ gap: theme.spacing.sm }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Title style={{ fontSize: 18 }}>Project description</Title>
+        {!isEditingDescription && (
+          <SecondaryButton onPress={() => setIsEditingDescription(true)} width={120}>
+            Edit text
+          </SecondaryButton>
+        )}
+      </View>
+
+      <Caption muted>Add context about the project so the report focuses on the right things.</Caption>
+
+      {isEditingDescription ? (
+        <View style={{ gap: theme.spacing.sm }}>
+          <TextField
+            multiline
+            value={descriptionDraft}
+            onChangeText={setDescriptionDraft}
+            placeholder="Describe the project goals, constraints, client preferences, etc."
+            style={{ minHeight: 120, textAlignVertical: 'top' }}
+          />
+          <View style={{ flexDirection: 'row', gap: theme.spacing.sm, justifyContent: 'flex-end' }}>
+            <PrimaryButton onPress={saveProjectDescriptionText} width={120}>
+              Save
+            </PrimaryButton>
+            <SecondaryButton onPress={cancelProjectDescriptionEdit} width={120}>
+              Cancel
+            </SecondaryButton>
+          </View>
+        </View>
+      ) : (
+        <View style={{ gap: theme.spacing.sm }}>
+          <GlassCard style={{ backgroundColor: theme.colors.glass, borderColor: theme.colors.border }}>
+            <Body muted={!project?.projectDescriptionText}>
+              {project?.projectDescriptionText || 'No project description yet.'}
+            </Body>
+          </GlassCard>
+          <View style={{ flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+            <SecondaryButton onPress={() => setIsEditingDescription(true)} width={140}>
+              Edit text
+            </SecondaryButton>
+            <SecondaryButton onPress={handleDescriptionRecordPress} width={160}>
+              {descriptionRecording ? 'Stop & save voice' : 'Record voice'}
+            </SecondaryButton>
+          </View>
+        </View>
+      )}
+
+      <View style={{ gap: theme.spacing.xs }}>
+        <Caption muted>Voice description</Caption>
+        {project?.projectDescriptionAudioUri ? (
+          <View style={{ gap: theme.spacing.xs }}>
+            <View style={{ flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+              <SecondaryButton onPress={() => playAudio(project.projectDescriptionAudioUri)} width={120}>
+                ▶ Play
+              </SecondaryButton>
+              <SecondaryButton onPress={stopPlayback} width={120}>
+                ⏹ Stop
+              </SecondaryButton>
+              <SecondaryButton onPress={handleDescriptionRecordPress} width={140}>
+                {descriptionRecording ? 'Stop recording' : 'Re-record'}
+              </SecondaryButton>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+              {!project.projectDescriptionTranscription && (
+                <SecondaryButton
+                  onPress={transcribeProjectDescription}
+                  loading={isTranscribingDescription}
+                  width={160}
+                >
+                  Transcribe
+                </SecondaryButton>
+              )}
+              <SecondaryButton onPress={deleteProjectDescriptionAudio} width={140}>
+                Delete voice
+              </SecondaryButton>
+            </View>
+          </View>
+        ) : (
+          <Caption muted>No voice project description yet.</Caption>
+        )}
+
+        {project?.projectDescriptionTranscription && (
+          <View style={{ gap: theme.spacing.xs }}>
+            <Caption muted>Transcription</Caption>
+            <Body>{project.projectDescriptionTranscription}</Body>
+          </View>
+        )}
+      </View>
+    </GlassCard>
+  );
+
   const renderHeader = () => (
     <View style={{ gap: theme.spacing.md }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -866,6 +1117,7 @@ export default function ProjectDetailScreen() {
             ListHeaderComponent={
               <View style={{ gap: theme.spacing.md }}>
                 {renderHeader()}
+                {renderProjectDescription()}
                 {noteComposer}
                 {loading && <Caption muted>Loading notes…</Caption>}
               </View>
