@@ -76,6 +76,11 @@ apps/api/logs/
 apps/api/npm-debug.log
 apps/api/yarn.lock
 
+ai-engine/test_video/*
+ai-engine/knowlegde/*
+ai-engine/*.json
+ai-engine/.env
+
 ########################################
 # MISC
 ########################################
@@ -83,3 +88,5 @@ apps/api/yarn.lock
 *.tmp
 temp/
 tmp/
+*.pyc
+ai-engine/evidence.jpg
