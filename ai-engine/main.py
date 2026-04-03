@@ -29,9 +29,6 @@ def create_report(video_path, credentials_path, master_id, output_folder, gemini
     print(f"📚 Opplasting av kunnskapsbase fra: {knowledge_path}")
     knowledge_files = upload_knowledge_base(genai_client, knowledge_path)
 
-        # --- Inside your create_report function ---
-    knowledge_files = upload_knowledge_base(genai_client, "/Users/williamgreners/Documents/GitHub/janitorAI/ai-engine/knowlegde")
-
     # Add them to your content list
     contents = [video_file] + knowledge_files + [main_prompt()]
 
