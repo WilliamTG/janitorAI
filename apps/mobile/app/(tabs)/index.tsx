@@ -44,6 +44,28 @@ import {
 type ProjectTab = 'notes' | 'report';
 
 export default function Index() {
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const handleRunDemo = async () => {
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch("https://janitorai-backend.onrender.com/api/demo-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_filename: "sigurd_test_2.mp4" }),
+      });
+      const data = await response.json();
+      if (data.status === "success" && data.url) {
+        Alert.alert("Analyse ferdig!", "Rapport generert.", [
+          { text: "Åpne rapport", onPress: () => Linking.openURL(data.url) }
+        ]);
+      }
+    } catch (error) {
+      Alert.alert("Feil", "Kunne ikke koble til serveren.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
   const theme = useAppTheme();
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -732,7 +754,25 @@ export default function Index() {
           </View>
         </GlassCard>
       )}
-
+  {/* --- JANITOR AI DEMO KNAPP START --- */}
+        <GlassCard style={{ 
+          marginBottom: theme.spacing.md, 
+          borderWidth: 1, 
+          borderColor: theme.colors.accent,
+          backgroundColor: theme.colors.surfaceSecondary 
+        }}>
+          <Title style={{ fontSize: 16 }}>AI Video Analyse (Demo)</Title>
+          <Body muted style={{ marginBottom: theme.spacing.sm }}>
+            Klikk under for å analysere Sigurd-casen med Gemini 2.0 og generere full rapport.
+          </Body>
+          <PrimaryButton 
+            onPress={handleRunDemo} 
+            loading={isAnalyzing}
+          >
+            {isAnalyzing ? "Analyserer video..." : "KJØR SIGURD-CASE DEMO"}
+          </PrimaryButton>
+        </GlassCard>
+        {/* --- JANITOR AI DEMO KNAPP SLUTT --- */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Caption muted>Saved locally</Caption>
         <SecondaryButton onPress={toggleProjectForm} width={140}>

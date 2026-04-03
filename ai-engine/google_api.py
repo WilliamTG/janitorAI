@@ -59,3 +59,21 @@ def upload_knowledge_base(genai_client, folder_path):
             file = genai_client.files.upload(file=path)
             uploaded_files.append(file)
     return uploaded_files
+
+def download_knowledge_from_drive(drive_service, folder_id, local_path):
+    if not os.path.exists(local_path):
+        os.makedirs(local_path)
+        
+    results = drive_service.files().list(
+        q=f"'{folder_id}' in parents and mimeType='application/pdf'",
+        fields="files(id, name)"
+    ).execute()
+    
+    files = results.get('files', [])
+    for file in files:
+        file_id = file['id']
+        filename = file['name']
+        
+        request = drive_service.files().get_media(fileId=file_id)
+        with open(os.path.join(local_path, filename), 'wb') as f:
+            f.write(request.execute())

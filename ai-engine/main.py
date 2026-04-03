@@ -1,3 +1,4 @@
+import os
 import cv2
 import time
 from google import genai
@@ -18,6 +19,15 @@ def create_report(video_path, credentials_path, master_id, output_folder, gemini
     while video_file.state.name == "PROCESSING":
         time.sleep(2)
         video_file = genai_client.files.get(name=video_file.name)
+    
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    knowledge_path = os.path.join(current_dir, "temp_knowledge")
+    
+    if not os.path.exists(knowledge_path):
+        knowledge_path = os.path.join(current_dir, "knowlegde")
+
+    print(f"📚 Opplasting av kunnskapsbase fra: {knowledge_path}")
+    knowledge_files = upload_knowledge_base(genai_client, knowledge_path)
 
         # --- Inside your create_report function ---
     knowledge_files = upload_knowledge_base(genai_client, "/Users/williamgreners/Documents/GitHub/janitorAI/ai-engine/knowlegde")
