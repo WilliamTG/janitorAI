@@ -48,10 +48,16 @@ export default function Index() {
 
   const handleRunDemo = async () => {
     setIsAnalyzing(true);
+
     try {
+      const token = await loadTesterToken();
+      
       const response = await fetch("https://janitorai-backend.onrender.com/api/demo-report", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-tester-token": token || ""
+        },
         body: JSON.stringify({ video_filename: "sigurd_test_2.mp4" }),
       });
       const data = await response.json();

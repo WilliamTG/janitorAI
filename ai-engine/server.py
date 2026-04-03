@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 from main import create_report
 from google_api import connect_to_google_api_personal, download_knowledge_from_drive
@@ -17,6 +17,13 @@ TEMP_VIDEO_DIR = "./videos"
 
 @app.post("/api/demo-report")
 async def run_demo_analysis(request: DemoRequest):
+    client_token = request.headers.get("x-tester-token")
+    server_token = os.getenv("TESTER_TOKEN")
+    
+    if client_token != server_token:
+        print(f"🚫 Avviste forespørsel: Feil token ({client_token})")
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     token_path = RENDER_TOKEN_PATH if os.path.exists(RENDER_TOKEN_PATH) else LOCAL_TOKEN_PATH
     docs_service, drive_service = connect_to_google_api_personal(token_path)
     
