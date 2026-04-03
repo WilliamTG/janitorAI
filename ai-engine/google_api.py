@@ -19,27 +19,34 @@ def connect_to_google_api(credentials_path):
     drive_service = build('drive', 'v3', credentials=creds)
     return docs_service, drive_service
 
-def connect_to_google_api_personal():
+def connect_to_google_api_personal(token_path='token.json'):
     creds = None
-    # 1. The code looks for token.json (your saved session)
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
     
-    # 2. If no valid session, start the login process
+    # 1. Se etter token-filen på den stien vi sender inn
+    if os.path.exists(token_path):
+        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+    
+    # 2. Hvis vi ikke har gyldige credentials
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
+            print("🔄 Oppdaterer utgått Google-token...")
             creds.refresh(Request())
         else:
-            # IMPORTANT: This must point to the file you downloaded from Google
+            # Starter lokal innlogging (Dette vil bare skje på din Mac, aldri på Render)
             if not os.path.exists('client_secrets.json'):
-                raise FileNotFoundError("Put your downloaded JSON as 'client_secrets.json' in this folder.")
+                raise FileNotFoundError("Fant ikke 'client_secrets.json'. Dette kreves for første gangs innlogging.")
             
             flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)
             creds = flow.run_local_server(port=0)
         
-        # 3. Save the session to token.json for next time
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
+        # 3. Lagre den nye sessionen (hvis vi har lov)
+        try:
+            with open(token_path, 'w') as token:
+                token.write(creds.to_json())
+        except OSError:
+            # På Render vil /etc/secrets være read-only. 
+            # Det går fint for denne kjøringen, men vi kan ikke lagre filen permanent.
+            print(f"⚠️ Advarsel: Kunne ikke skrive til {token_path} (Sannsynligvis Read-Only miljø på Render). Bruker tokenet i minnet for denne forespørselen.")
 
     return build('docs', 'v1', credentials=creds), build('drive', 'v3', credentials=creds)
 
