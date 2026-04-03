@@ -52,7 +52,7 @@ export default function Index() {
     try {
       const token = await loadTesterToken();
       
-      const response = await fetch("https://janitorai-backend.onrender.com/api/demo-report", {
+      const response = await fetch("https://janitorai-ai-engine.onrender.com/api/demo-report", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
