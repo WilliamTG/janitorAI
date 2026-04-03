@@ -16,8 +16,8 @@ TEMP_KNOWLEDGE_DIR = "./temp_knowledge"
 TEMP_VIDEO_DIR = "./videos"
 
 @app.post("/api/demo-report")
-async def run_demo_analysis(request: DemoRequest):
-    client_token = request.headers.get("x-tester-token")
+async def run_demo_analysis(fastapi_req: Request, request: DemoRequest):
+    client_token = fastapi_req.headers.get("x-tester-token")
     server_token = os.getenv("TESTER_TOKEN")
     
     if client_token != server_token:
