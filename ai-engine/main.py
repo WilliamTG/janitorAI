@@ -33,7 +33,7 @@ def create_report(video_path, credentials_path, master_id, output_folder, gemini
     contents = [video_file] + knowledge_files + [main_prompt()]
 
     analysis = genai_client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         contents=contents,
         config={"response_mime_type": "application/json", 
                 "response_schema": DamageAnalysis,
