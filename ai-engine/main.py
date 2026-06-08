@@ -10,7 +10,7 @@ from template_replacement import static_replacements
 
 def create_report(video_path, credentials_path, master_id, output_folder, gemini_key):
     # 1. Init Connections
-    docs, drive = connect_to_google_api_personal()
+    docs, drive = connect_to_google_api_personal(credentials_path)
     genai_client = genai.Client(api_key=gemini_key)
 
     # 2. Gemini Analysis (Multimodal)
@@ -52,17 +52,20 @@ def create_report(video_path, credentials_path, master_id, output_folder, gemini
     doc_id = new_doc['id']
 
     # 4. Process Evidence Image
-    cap = cv2.VideoCapture(video_path)
-    if analysis.evidence_points:
+    if analysis.evidence_points and len(analysis.evidence_points) > 0:
     # Pick the timestamp Gemini identified as the best evidence
         best_point = analysis.evidence_points[0] 
         print(f"📸 Extracting frame at {best_point.timestamp_ms}ms: {best_point.caption}")
-    
-    cap.set(cv2.CAP_PROP_POS_MSEC, best_point.timestamp_ms)
-    ret, frame = cap.read()
-    if ret:
-        cv2.imwrite("evidence.jpg", frame)
-        upload_and_insert_image(drive, docs, doc_id, "evidence.jpg", "{{damage.cause.picture}}", output_folder)
+        
+        cap = cv2.VideoCapture(video_path)
+        cap.set(cv2.CAP_PROP_POS_MSEC, best_point.timestamp_ms)
+        ret, frame = cap.read()
+        if ret:
+            cv2.imwrite("evidence.jpg", frame)
+            upload_and_insert_image(drive, docs, doc_id, "evidence.jpg", "{{damage.cause.picture}}", output_folder)
+        cap.release()
+    else:
+        print("⚠️ Ingen bevis-tidspunkter funnet av Gemini. Hopper over bildeekstraksjon.")
 
     # 5. Final Text Replacement (Gemini + Static)
     replacements = static_replacements(dummy_values=True)

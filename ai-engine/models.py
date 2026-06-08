@@ -18,7 +18,8 @@ class DamageAnalysis(BaseModel):
         description="Beskrivelse til {{damage.extent.description}}. Fokus på fysisk spredning og materialer berørt."
     )
     repairs_description: str = Field(
-        description="Beskrivelse til {{damage.repairs_needed.description}}. Liste over nødvendige tekniske tiltak for utbedring.")
+        description="Beskrivelse til {{damage.repairs_needed.description}}. Liste over nødvendige tekniske tiltak for utbedring."
+    )
 
 class RepairAction(BaseModel):
     action: str = Field(description="Spesifikk handling, f.eks. 'Utskifting av bunnledningsmuffe'")
