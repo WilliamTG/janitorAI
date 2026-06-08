@@ -43,13 +43,17 @@ async def run_demo_analysis(fastapi_req: Request, request: DemoRequest):
 
     # 3. Kjør analysen
     try:
-        report_url = create_report(
+        doc_id = create_report(
             video_path=video_path,
             credentials_path=token_path,
             master_id=os.getenv("MASTER_ID"),
             output_folder=os.getenv("OUTPUT_FOLDER"),
             gemini_key=os.getenv("GEMINI_API_KEY")
         )
+        report_url = f"https://docs.google.com/document/d/{doc_id}"
         return {"status": "success", "url": report_url}
     except Exception as e:
+        print(f"❌ Error during analysis: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {"status": "error", "message": str(e)}

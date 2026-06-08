@@ -7,6 +7,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Linking,
   Modal,
   ScrollView,
   View,
@@ -51,23 +52,35 @@ export default function Index() {
 
     try {
       const token = await loadTesterToken();
-      
+
       const response = await fetch("https://janitorai-ai-engine.onrender.com/api/demo-report", {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "x-tester-token": token || ""
         },
         body: JSON.stringify({ video_filename: "sigurd_test_2.mp4" }),
       });
+
+      if (!response.ok) {
+        Alert.alert("Server Error", `HTTP ${response.status}: ${response.statusText}`);
+        return;
+      }
+
       const data = await response.json();
-      if (data.status === "success" && data.url) {
+
+      if (data.status === "error") {
+        Alert.alert("Analyse feilet", data.message || "Ukjent feil fra serveren.");
+      } else if (data.status === "success" && data.url) {
         Alert.alert("Analyse ferdig!", "Rapport generert.", [
           { text: "Åpne rapport", onPress: () => Linking.openURL(data.url) }
         ]);
+      } else {
+        Alert.alert("Ukjent svar", JSON.stringify(data));
       }
     } catch (error) {
-      Alert.alert("Feil", "Kunne ikke koble til serveren.");
+      console.error("Demo analysis error:", error);
+      Alert.alert("Feil", `Kunne ikke koble til serveren: ${error}`);
     } finally {
       setIsAnalyzing(false);
     }
