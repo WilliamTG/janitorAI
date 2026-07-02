@@ -14,6 +14,14 @@ export class UnauthorizedError extends Error {
   }
 }
 
+/**
+ * Synchronous access to the in-memory token (may be null before first load).
+ * Used to build media URLs that cannot set headers (e.g. <Image> sources).
+ */
+export function getCachedTesterToken(): string | null {
+  return cachedToken;
+}
+
 export async function loadTesterToken(): Promise<string | null> {
   if (cachedToken) return cachedToken;
   try {

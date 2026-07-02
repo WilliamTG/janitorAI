@@ -19,9 +19,13 @@ import apiFetch, {
 import { Note, Project } from '@/src/features/projects/types';
 import {
   loadProjects,
+  saveProjects,
   getProject,
   updateProject as updateProjectInStorage,
 } from '@/src/storage/projectsStorage';
+import { pullAndMerge, schedulePush, touchProject } from '@/src/sync/projectSync';
+import { persistMediaLocally } from '@/src/sync/persistMedia';
+import { displayMediaUri } from '@/src/sync/mediaUri';
 import {
   Body,
   Caption,
@@ -150,8 +154,18 @@ export default function ProjectDetailScreen() {
     }
 
     try {
-      const projects = await loadProjects();
-      const found = await getProject(projectId);
+      let projects = await loadProjects();
+      let found = await getProject(projectId);
+
+      if (!found) {
+        // Not on this device yet (fresh install / other device): try the server.
+        const merged = await pullAndMerge(projects);
+        if (merged) {
+          await saveProjects(merged);
+          projects = merged;
+          found = merged.find((p) => String(p.id) === String(projectId)) ?? null;
+        }
+      }
 
       console.log('[Projects] Loaded project detail result', {
         projectId,
@@ -177,18 +191,15 @@ export default function ProjectDetailScreen() {
     }
   }, [isEditingDescription, state.project]);
 
-  useEffect(() => {
-    return () => {
-      stopPlayback();
-    };
-  }, [stopPlayback]);
-
   const updateProjectLocally = async (updated: Project) => {
+    // Stamp the change time so sync can do last-write-wins.
+    const touched = touchProject(updated);
     // Update project in storage and get back all projects
-    const nextProjects = await updateProjectInStorage(updated);
-    const normalizedId = String(updated.id);
-    const normalizedProject = { ...updated, id: normalizedId };
+    const nextProjects = await updateProjectInStorage(touched);
+    const normalizedId = String(touched.id);
+    const normalizedProject = { ...touched, id: normalizedId };
     setState({ projects: nextProjects, project: normalizedProject });
+    schedulePush(normalizedProject);
   };
 
   const updateProjectNotes = async (notes: Note[]) => {
@@ -282,6 +293,8 @@ export default function ProjectDetailScreen() {
         return;
       }
 
+      const durableUri = await persistMediaLocally(uri);
+
       const trimmed = noteText.trim();
       const textForNote = trimmed || 'Voice note (no text added yet – transcription later)';
 
@@ -289,7 +302,7 @@ export default function ProjectDetailScreen() {
         id: Date.now().toString(),
         text: textForNote,
         createdAt: new Date().toISOString(),
-        audioUri: uri,
+        audioUri: durableUri,
       };
 
       const newNotes = [newNote, ...(project.notes || [])];
@@ -351,9 +364,12 @@ export default function ProjectDetailScreen() {
         return;
       }
 
+      const durableUri = await persistMediaLocally(uri);
+
       const updatedProject: Project = {
         ...project,
-        projectDescriptionAudioUri: uri,
+        projectDescriptionAudioUri: durableUri,
+        projectDescriptionAudioRemoteId: undefined,
         projectDescriptionTranscription: undefined,
         projectDescriptionUpdatedAt: new Date().toISOString(),
       };
@@ -389,6 +405,12 @@ export default function ProjectDetailScreen() {
       setCurrentSound(null);
     }
   }, [currentSound]);
+
+  useEffect(() => {
+    return () => {
+      stopPlayback();
+    };
+  }, [stopPlayback]);
 
   const playAudio = async (uri?: string) => {
     if (!uri) return;
@@ -477,6 +499,7 @@ export default function ProjectDetailScreen() {
     const updatedProject: Project = {
       ...project,
       projectDescriptionAudioUri: undefined,
+      projectDescriptionAudioRemoteId: undefined,
       projectDescriptionTranscription: undefined,
       projectDescriptionUpdatedAt: new Date().toISOString(),
     };
@@ -648,7 +671,7 @@ export default function ProjectDetailScreen() {
       return;
     }
 
-    const uri = result.assets[0].uri;
+    const uri = await persistMediaLocally(result.assets[0].uri);
 
     const trimmed = noteText.trim();
     const textForNote = trimmed || 'Photo note (no manual text added yet).';
@@ -891,7 +914,7 @@ export default function ProjectDetailScreen() {
               return (
                 <View key={photo.id} style={{ gap: theme.spacing.xs }}>
                   <Image
-                    source={{ uri: photo.uri }}
+                    source={{ uri: displayMediaUri(photo.uri, photo.remoteId) }}
                     style={{ width: 82, height: 82, borderRadius: theme.radii.sm }}
                   />
                   
@@ -988,7 +1011,7 @@ export default function ProjectDetailScreen() {
 
         {item.audioUri && (
           <View style={{ flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
-            <SecondaryButton onPress={() => playAudio(item.audioUri)} width={120}>
+            <SecondaryButton onPress={() => playAudio(displayMediaUri(item.audioUri, item.audioRemoteId))} width={120}>
               ▶ Play
             </SecondaryButton>
             <SecondaryButton onPress={stopPlayback} width={120}>
@@ -1110,7 +1133,7 @@ export default function ProjectDetailScreen() {
         {project?.projectDescriptionAudioUri ? (
           <View style={{ gap: theme.spacing.xs }}>
             <View style={{ flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
-              <SecondaryButton onPress={() => playAudio(project.projectDescriptionAudioUri)} width={120}>
+              <SecondaryButton onPress={() => playAudio(displayMediaUri(project.projectDescriptionAudioUri, project.projectDescriptionAudioRemoteId))} width={120}>
                 ▶ Play
               </SecondaryButton>
               <SecondaryButton onPress={stopPlayback} width={120}>

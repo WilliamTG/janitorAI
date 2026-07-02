@@ -3,6 +3,8 @@ export type Photo = {
   uri: string;
   caption: string;
   aiGenerated?: boolean;
+  /** ID of the durable copy stored on the backend (set after upload). */
+  remoteId?: string;
 };
 
 export type Note = {
@@ -10,6 +12,8 @@ export type Note = {
   text: string;
   createdAt: string;
   audioUri?: string;
+  /** ID of the durable audio copy stored on the backend (set after upload). */
+  audioRemoteId?: string;
   transcription?: string;
   images?: string[];
   photos?: Photo[];
@@ -24,8 +28,11 @@ export type Project = {
   report?: string;
   projectDescriptionText?: string;
   projectDescriptionAudioUri?: string;
+  projectDescriptionAudioRemoteId?: string;
   projectDescriptionTranscription?: string;
   projectDescriptionUpdatedAt?: string;
+  /** Last modification time (ISO). Used for last-write-wins sync. */
+  updatedAt?: string;
 };
 
 export const PROJECT_STORAGE_KEY = '@inspection_projects';

@@ -29,6 +29,16 @@ import {
   deleteProject as deleteProjectFromStorage,
 } from '@/src/storage/projectsStorage';
 import {
+  deleteProjectRemote,
+  pullAndMerge,
+  schedulePush,
+  syncNow,
+  touchProject,
+} from '@/src/sync/projectSync';
+import { persistMediaLocally } from '@/src/sync/persistMedia';
+import { displayMediaUri } from '@/src/sync/mediaUri';
+import SyncStatusIndicator from '@/src/components/SyncStatusIndicator';
+import {
   Body,
   Caption,
   DateField,
@@ -174,24 +184,61 @@ export default function Index() {
 
   useEffect(() => {
     (async () => {
+      let loaded: Project[] = [];
       try {
-        const loaded = await loadProjects();
+        loaded = await loadProjects();
         setProjects(loaded);
       } catch {
         console.warn('Failed to load projects');
       } finally {
         setIsLoading(false);
       }
+
+      // Pull the durable copies from the server and merge (needs the token,
+      // which is loaded by the token-validation effect before this resolves).
+      try {
+        const merged = await pullAndMerge(loaded);
+        if (merged) {
+          setProjects(merged);
+          await saveProjects(merged);
+        }
+      } catch {
+        console.warn('Initial sync failed');
+      }
     })();
   }, []);
 
-  const saveProjectsToStorage = async (newProjects: Project[]) => {
-    setProjects(newProjects);
+  const handleSyncNow = async () => {
     try {
-      await saveProjects(newProjects);
+      const merged = await syncNow(await loadProjects());
+      if (merged) {
+        setProjects(merged);
+        await saveProjects(merged);
+      }
+    } catch {
+      console.warn('Manual sync failed');
+    }
+  };
+
+  const saveProjectsToStorage = async (newProjects: Project[], changedProject?: Project) => {
+    let toSave = newProjects;
+    let touched: Project | undefined;
+
+    if (changedProject) {
+      touched = touchProject(changedProject);
+      toSave = newProjects.map((p) => (p.id === touched!.id ? touched! : p));
+    }
+
+    setProjects(toSave);
+    try {
+      await saveProjects(toSave);
     } catch {
       console.warn('Failed to save projects');
       Alert.alert('Warning', 'Could not save projects to your device.');
+    }
+
+    if (touched) {
+      schedulePush(touched);
     }
   };
 
@@ -230,7 +277,7 @@ export default function Index() {
     };
 
     const newProjects = [newProject, ...projects];
-    await saveProjectsToStorage(newProjects);
+    await saveProjectsToStorage(newProjects, newProject);
     resetProjectForm();
     setIsCreatingProject(false);
   };
@@ -242,16 +289,21 @@ export default function Index() {
     }
     const newProjects = await deleteProjectFromStorage(id);
     setProjects(newProjects);
+    deleteProjectRemote(id).catch(() => {});
   };
 
   const updateProjectNotes = async (projectId: string, notes: Note[]) => {
-    const newProjects = projects.map((p) => (p.id === projectId ? { ...p, notes } : p));
-    await saveProjectsToStorage(newProjects);
+    const changed = projects.find((p) => p.id === projectId);
+    const updated = changed ? { ...changed, notes } : undefined;
+    const newProjects = projects.map((p) => (p.id === projectId && updated ? updated : p));
+    await saveProjectsToStorage(newProjects, updated);
   };
 
   const updateProjectReport = async (projectId: string, report: string) => {
-    const newProjects = projects.map((p) => (p.id === projectId ? { ...p, report } : p));
-    await saveProjectsToStorage(newProjects);
+    const changed = projects.find((p) => p.id === projectId);
+    const updated = changed ? { ...changed, report } : undefined;
+    const newProjects = projects.map((p) => (p.id === projectId && updated ? updated : p));
+    await saveProjectsToStorage(newProjects, updated);
   };
 
   const addTextNote = async () => {
@@ -319,6 +371,8 @@ export default function Index() {
         return;
       }
 
+      const durableUri = await persistMediaLocally(uri);
+
       const trimmed = noteText.trim();
       const textForNote = trimmed || 'Voice note (no text added yet – transcription later)';
 
@@ -326,7 +380,7 @@ export default function Index() {
         id: Date.now().toString(),
         text: textForNote,
         createdAt: new Date().toISOString(),
-        audioUri: uri,
+        audioUri: durableUri,
       };
 
       const newNotes = [newNote, ...(selectedProject.notes || [])];
@@ -551,7 +605,7 @@ export default function Index() {
       return;
     }
 
-    const uri = result.assets[0].uri;
+    const uri = await persistMediaLocally(result.assets[0].uri);
 
     const trimmed = noteText.trim();
     const textForNote = trimmed || 'Photo note (no manual text added yet).';
@@ -793,7 +847,7 @@ export default function Index() {
         </GlassCard>
         {/* --- JANITOR AI DEMO KNAPP SLUTT --- */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Caption muted>Saved locally</Caption>
+        <SyncStatusIndicator onSyncNow={handleSyncNow} />
         <SecondaryButton onPress={toggleProjectForm} width={140}>
           {isCreatingProject ? 'Close form' : 'New project'}
         </SecondaryButton>
@@ -835,7 +889,7 @@ export default function Index() {
               return (
                 <View key={photo.id} style={{ gap: theme.spacing.xs }}>
                   <Image
-                    source={{ uri: photo.uri }}
+                    source={{ uri: displayMediaUri(photo.uri, photo.remoteId) }}
                     style={{ width: 82, height: 82, borderRadius: theme.radii.sm }}
                   />
                   
@@ -932,7 +986,7 @@ export default function Index() {
 
         {item.audioUri && (
           <View style={{ flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
-            <SecondaryButton onPress={() => playAudio(item.audioUri)} width={120}>
+            <SecondaryButton onPress={() => playAudio(displayMediaUri(item.audioUri, item.audioRemoteId))} width={120}>
               ▶ Play
             </SecondaryButton>
             <SecondaryButton onPress={stopPlayback} width={120}>
