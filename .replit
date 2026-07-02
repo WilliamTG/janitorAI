@@ -9,7 +9,6 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.development]
-TESTER_TOKEN = "a25afbaeb3fb55f087431a0909d88e3a"
 
 [workflows]
 runButton = "Project"
