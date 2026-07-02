@@ -47,6 +47,31 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+// ---------- STATIC WEB APP (PUBLIC, production) ----------
+// Serves the Expo web export when present (built via `expo export --platform web`).
+const path = require("path");
+const STATIC_DIR =
+  process.env.STATIC_DIR || path.join(__dirname, "../../mobile/dist");
+const API_PATHS = new Set([
+  "/health",
+  "/whoami",
+  "/report",
+  "/report/docx",
+  "/transcribe",
+  "/describe-image",
+]);
+if (fs.existsSync(STATIC_DIR)) {
+  app.use(express.static(STATIC_DIR, { extensions: ["html"] }));
+  app.use((req, res, next) => {
+    const acceptsHtml = (req.get("accept") || "").includes("text/html");
+    if (req.method !== "GET" || API_PATHS.has(req.path) || !acceptsHtml) {
+      return next();
+    }
+    res.sendFile(path.join(STATIC_DIR, "index.html"));
+  });
+  console.log(`Serving static web app from ${STATIC_DIR}`);
+}
+
 // ---------- APPLY TESTER TOKEN GUARD ----------
 // All routes after this point require x-tester-token header
 app.use(requireTesterToken);

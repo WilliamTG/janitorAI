@@ -1,0 +1,69 @@
+modules = ["nodejs-20", "python-3.12"]
+[agent]
+expertMode = true
+stack = "BEST_EFFORT_FALLBACK"
+
+[nix]
+channel = "stable-25_05"
+
+[userenv]
+
+[userenv.development]
+TESTER_TOKEN = "a25afbaeb3fb55f087431a0909d88e3a"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Backend API"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Backend API"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm --workspace apps/api run start"
+waitForPort = 3000
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd apps/mobile && API_BASE_URL=\"https://${REPLIT_DEV_DOMAIN}:3000\" npx expo start --web --port 5000"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 8099
+externalPort = 8099
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["bash", "-c", "PORT=5000 node apps/api/src/index.js"]
+build = ["bash", "-c", "npm install && cd apps/mobile && API_BASE_URL='' APP_ENV=production CI=1 npx expo export --platform web"]

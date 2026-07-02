@@ -13,7 +13,13 @@ import Constants from 'expo-constants';
  */
 export function getApiBaseUrl(): string {
   const baseUrl = Constants.expoConfig?.extra?.API_BASE_URL;
-  
+
+  // An empty string is valid: it means same-origin requests
+  // (the web app is served by the API server itself).
+  if (baseUrl === '') {
+    return '';
+  }
+
   if (!baseUrl) {
     console.warn('API_BASE_URL not configured in app.config.js, falling back to production URL');
     return 'https://janitorai-backend.onrender.com';

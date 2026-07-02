@@ -9,8 +9,10 @@ module.exports = ({ config }) => {
   const buildProfile =
     process.env.EAS_BUILD_PROFILE || process.env.APP_ENV || "development";
 
-  let apiBaseUrl;
-  switch (buildProfile) {
+  // API_BASE_URL env var overrides the profile-based default.
+  // An empty string means "same origin" (web app served by the API itself).
+  let apiBaseUrl = process.env.API_BASE_URL;
+  if (apiBaseUrl === undefined) switch (buildProfile) {
     case "production":
       apiBaseUrl = "https://janitorai-backend.onrender.com";
       break;
