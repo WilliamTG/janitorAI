@@ -11,6 +11,8 @@ export type Note = {
   id: string;
   text: string;
   createdAt: string;
+  /** Last modification time (ISO). Used for per-note merge across devices. */
+  updatedAt?: string;
   audioUri?: string;
   /** ID of the durable audio copy stored on the backend (set after upload). */
   audioRemoteId?: string;
@@ -33,6 +35,12 @@ export type Project = {
   projectDescriptionUpdatedAt?: string;
   /** Last modification time (ISO). Used for last-write-wins sync. */
   updatedAt?: string;
+  /**
+   * Tombstones for notes deleted on this project: note id -> deletion time
+   * (ISO). Lets the per-note merge keep a note deleted on one device deleted
+   * everywhere instead of resurrecting it from another device's copy.
+   */
+  deletedNotes?: Record<string, string>;
 };
 
 export const PROJECT_STORAGE_KEY = '@inspection_projects';

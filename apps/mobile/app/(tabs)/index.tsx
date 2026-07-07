@@ -23,6 +23,7 @@ import apiFetch, {
   validateTesterToken,
 } from '@/src/lib/apiFetch';
 import { Note, Project } from '@/src/features/projects/types';
+import { applyNoteChanges } from '@/src/features/projects/noteChanges';
 import {
   loadProjects,
   saveProjects,
@@ -294,7 +295,7 @@ export default function Index() {
 
   const updateProjectNotes = async (projectId: string, notes: Note[]) => {
     const changed = projects.find((p) => p.id === projectId);
-    const updated = changed ? { ...changed, notes } : undefined;
+    const updated = changed ? applyNoteChanges(changed, notes) : undefined;
     const newProjects = projects.map((p) => (p.id === projectId && updated ? updated : p));
     await saveProjectsToStorage(newProjects, updated);
   };

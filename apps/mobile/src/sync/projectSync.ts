@@ -211,7 +211,7 @@ function isDeviceLocalUri(uri?: string): boolean {
  * Server copies must not carry device-local file paths — they are meaningless
  * (and misleading) on other devices. Strip them where a durable remote copy
  * exists; the origin device restores its own local URIs on pull via
- * mergeLocalMediaUris.
+ * restoreLocalNoteMedia during mergeProjects.
  */
 function stripLocalUrisForServer(project: Project): Project {
   const notes = (project.notes || []).map((note) => {
@@ -431,12 +431,9 @@ export async function pullAndMerge(localProjects: Project[]): Promise<Project[] 
       continue;
     }
 
-    if (toTime(local.updatedAt) > toTime(server.updatedAt)) {
-      merged.push(local);
-      toPush.push(local);
-    } else {
-      merged.push(mergeLocalMediaUris(local, server));
-    }
+    const { project: mergedProject, changed } = mergeProjects(local, server);
+    merged.push(mergedProject);
+    if (changed) toPush.push(mergedProject);
   }
 
   for (const [id, server] of serverById) {
@@ -453,36 +450,136 @@ export async function pullAndMerge(localProjects: Project[]): Promise<Project[] 
   return merged;
 }
 
+function noteTime(note: Note): number {
+  return toTime(note.updatedAt) || toTime(note.createdAt);
+}
+
 /**
- * When the server version wins, keep local file URIs for media that this
- * device already has (they are faster and work offline).
+ * Logical content of a note, ignoring its updatedAt stamp and device-local
+ * media URIs (which legitimately differ per device). Used to (a) break exact
+ * timestamp ties deterministically so both devices converge on the same note,
+ * and (b) decide whether a merged note actually differs from the server copy.
  */
-function mergeLocalMediaUris(local: Project, server: Project): Project {
-  const localNotes = new Map((local.notes || []).map((n) => [n.id, n]));
+function noteLogicalKey(note: Note): string {
+  const { updatedAt, audioUri, photos, ...rest } = note;
+  const normPhotos = (photos || []).map((p) => {
+    const { uri, ...pRest } = p;
+    return pRest;
+  });
+  return JSON.stringify({ ...rest, photos: normPhotos });
+}
 
-  const notes = (server.notes || []).map((serverNote) => {
-    const localNote = localNotes.get(serverNote.id);
-    if (!localNote) return serverNote;
+/**
+ * When a note survives a merge, keep local file URIs for media that this device
+ * already has (they are faster and work offline than re-downloading remotes).
+ */
+function restoreLocalNoteMedia(winner: Note, local?: Note): Note {
+  if (!local) return winner;
 
-    const localPhotos = new Map((localNote.photos || []).map((p) => [p.id, p]));
-    const photos = serverNote.photos?.map((sp) => {
-      const lp = localPhotos.get(sp.id);
-      return lp && lp.uri && !sp.uri ? { ...sp, uri: lp.uri } : sp;
-    });
-
-    return {
-      ...serverNote,
-      audioUri: serverNote.audioUri || localNote.audioUri,
-      ...(photos ? { photos } : {}),
-    };
+  const localPhotos = new Map((local.photos || []).map((p) => [p.id, p]));
+  const photos = winner.photos?.map((sp) => {
+    const lp = localPhotos.get(sp.id);
+    return lp && lp.uri && !sp.uri ? { ...sp, uri: lp.uri } : sp;
   });
 
   return {
-    ...server,
-    notes,
-    projectDescriptionAudioUri:
-      server.projectDescriptionAudioUri || local.projectDescriptionAudioUri,
+    ...winner,
+    audioUri: winner.audioUri || local.audioUri,
+    ...(photos ? { photos } : {}),
   };
+}
+
+/**
+ * Merge a project that exists on both this device and the server.
+ *
+ * Notes are merged per-id (union): the newest version of each note (by its
+ * updatedAt) wins, notes present on only one side are kept, and a note whose
+ * deletion tombstone is newer than its last edit stays deleted. Project-level
+ * fields (name, inspector, report, description...) follow whole-project
+ * newest-wins. `changed` is true when the merged result differs from the
+ * server copy and therefore needs to be pushed back.
+ */
+export function mergeProjects(
+  local: Project,
+  server: Project,
+): { project: Project; changed: boolean } {
+  let changed = false;
+
+  // Merge note tombstones (latest deletion time wins per id).
+  const localDel = local.deletedNotes || {};
+  const serverDel = server.deletedNotes || {};
+  const deletedNotes: Record<string, string> = { ...serverDel };
+  for (const [id, t] of Object.entries(localDel)) {
+    if (toTime(t) > toTime(deletedNotes[id])) {
+      deletedNotes[id] = t;
+      if (toTime(t) > toTime(serverDel[id])) changed = true;
+    }
+  }
+
+  const localNotes = new Map((local.notes || []).map((n) => [n.id, n]));
+  const serverNotes = new Map((server.notes || []).map((n) => [n.id, n]));
+  const allIds = new Set<string>([...localNotes.keys(), ...serverNotes.keys()]);
+
+  const notes: Note[] = [];
+  for (const id of allIds) {
+    const ln = localNotes.get(id);
+    const sn = serverNotes.get(id);
+
+    let winner: Note;
+    if (!sn) {
+      winner = ln!;
+    } else if (!ln) {
+      winner = sn;
+    } else {
+      const lt = noteTime(ln);
+      const st = noteTime(sn);
+      if (lt !== st) {
+        winner = lt > st ? ln : sn;
+      } else if (noteLogicalKey(ln) === noteLogicalKey(sn)) {
+        // Same logical content at the same time: keep server, nothing to push.
+        winner = sn;
+      } else {
+        // Exact timestamp tie with differing content: pick deterministically by
+        // logical content so both devices converge on the same note.
+        winner = noteLogicalKey(ln) > noteLogicalKey(sn) ? ln : sn;
+      }
+    }
+
+    const delAt = deletedNotes[id];
+    if (delAt && toTime(delAt) >= noteTime(winner)) {
+      // Deleted after its last edit -> stays deleted everywhere.
+      if (sn && toTime(serverDel[id]) < noteTime(sn)) changed = true;
+      continue;
+    }
+
+    // Push back whenever the surviving note differs from the server copy.
+    if (!sn || noteLogicalKey(winner) !== noteLogicalKey(sn)) changed = true;
+
+    notes.push(restoreLocalNoteMedia(winner, ln));
+  }
+
+  // Notes are prepended on creation (newest first); preserve that ordering.
+  notes.sort((a, b) => toTime(b.createdAt) - toTime(a.createdAt));
+
+  const localNewer = toTime(local.updatedAt) > toTime(server.updatedAt);
+  if (localNewer) changed = true;
+  const base = localNewer ? local : server;
+
+  const project: Project = {
+    ...base,
+    id: server.id,
+    notes,
+    deletedNotes,
+    updatedAt: new Date(
+      Math.max(toTime(local.updatedAt), toTime(server.updatedAt)),
+    ).toISOString(),
+    projectDescriptionAudioUri:
+      base.projectDescriptionAudioUri ||
+      local.projectDescriptionAudioUri ||
+      server.projectDescriptionAudioUri,
+  };
+
+  return { project, changed };
 }
 
 /**

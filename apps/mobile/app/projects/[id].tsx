@@ -17,6 +17,7 @@ import apiFetch, {
   validateTesterToken,
 } from '@/src/lib/apiFetch';
 import { Note, Project } from '@/src/features/projects/types';
+import { applyNoteChanges } from '@/src/features/projects/noteChanges';
 import {
   loadProjects,
   saveProjects,
@@ -204,7 +205,7 @@ export default function ProjectDetailScreen() {
 
   const updateProjectNotes = async (notes: Note[]) => {
     if (!project) return;
-    const updatedProject = { ...project, notes };
+    const updatedProject = applyNoteChanges(project, notes);
     await updateProjectLocally(updatedProject);
   };
 
