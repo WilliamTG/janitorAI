@@ -1,10 +1,18 @@
 import React, { useState } from 'react';
 import { Platform, View } from 'react-native';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 
+import { Caption } from './Typography';
 import { TextField } from './TextField';
 import { useAppTheme } from './theme';
+
+// Native-only — not used on web
+let DateTimePicker: any = null;
+let DateTimePickerEvent: any = null;
+if (Platform.OS !== 'web') {
+  const pkg = require('@react-native-community/datetimepicker');
+  DateTimePicker = pkg.default;
+}
 
 export type DateFieldProps = {
   value?: string;
@@ -12,18 +20,72 @@ export type DateFieldProps = {
   label?: string;
 };
 
+/** Returns today's date as a local YYYY-MM-DD string (timezone-safe). */
+export function localDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export const DateField = ({ value, onChange, label }: DateFieldProps) => {
   const [showPicker, setShowPicker] = useState(false);
   const theme = useAppTheme();
 
-  const handleChange = (_event: DateTimePickerEvent, selected?: Date) => {
+  // Always have a valid date to display and fall back to
+  const effectiveValue = value || localDateString(new Date());
+
+  // ─── Web: native <input type="date"> ──────────────────────────────────────
+  if (Platform.OS === 'web') {
+    return (
+      <View style={{ gap: theme.spacing.xs }}>
+        {label && <Caption style={{ color: theme.colors.muted }}>{label}</Caption>}
+        <View style={{ position: 'relative' }}>
+          {/* @ts-ignore — <input> is valid JSX in React Native Web */}
+          <input
+            type="date"
+            value={effectiveValue}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
+            style={{
+              width: '100%',
+              border: `1px solid ${theme.colors.border}`,
+              borderRadius: theme.radii.md,
+              backgroundColor: theme.colors.surface,
+              color: theme.colors.foreground,
+              padding: theme.spacing.sm,
+              paddingRight: (theme.spacing.lg ?? 24) * 1.4,
+              fontSize: 16,
+              boxSizing: 'border-box',
+              fontFamily: 'inherit',
+              cursor: 'pointer',
+              outline: 'none',
+            } as React.CSSProperties}
+          />
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              right: theme.spacing.sm,
+              top: 0,
+              bottom: 0,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <Ionicons name="calendar-outline" size={18} color={theme.colors.muted} />
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // ─── Native: DateTimePicker (iOS / Android) ───────────────────────────────
+  const handleChange = (_event: any, selected?: Date) => {
     if (Platform.OS !== 'ios') {
       setShowPicker(false);
     }
-
     if (selected) {
-      const formatted = selected.toISOString().split('T')[0];
-      onChange(formatted);
+      onChange(selected.toISOString().split('T')[0]);
     }
   };
 
@@ -31,14 +93,19 @@ export const DateField = ({ value, onChange, label }: DateFieldProps) => {
     <View>
       <TextField
         label={label}
-        value={value}
+        value={effectiveValue}
         placeholder="Select a date"
         editable={false}
         rightIcon={<Ionicons name="calendar-outline" size={18} color={theme.colors.muted} />}
         onPressIn={() => setShowPicker(true)}
       />
       {showPicker && (
-        <DateTimePicker value={value ? new Date(value) : new Date()} mode="date" display="default" onChange={handleChange} />
+        <DateTimePicker
+          value={new Date(effectiveValue)}
+          mode="date"
+          display="default"
+          onChange={handleChange}
+        />
       )}
     </View>
   );

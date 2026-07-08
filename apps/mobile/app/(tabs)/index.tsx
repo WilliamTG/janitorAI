@@ -45,6 +45,7 @@ import {
   DateField,
   GlassCard,
   IconButton,
+  localDateString,
   PrimaryButton,
   Screen,
   SecondaryButton,
@@ -63,7 +64,7 @@ export default function Index() {
 
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [projectName, setProjectName] = useState('');
-  const [projectDate, setProjectDate] = useState('');
+  const [projectDate, setProjectDate] = useState(() => localDateString(new Date()));
   const [projectInspector, setProjectInspector] = useState('');
 
   const [noteText, setNoteText] = useState('');
@@ -208,7 +209,7 @@ export default function Index() {
 
   const resetProjectForm = () => {
     setProjectName('');
-    setProjectDate('');
+    setProjectDate(localDateString(new Date()));
     setProjectInspector('');
   };
 
