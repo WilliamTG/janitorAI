@@ -903,9 +903,17 @@ export default function ProjectDetailScreen() {
       setIsGeneratingGoogleDoc(true);
       setGoogleDocUrl(null);
 
-      // Prefer the first note that has an uploaded video; fall back to 'demo'
+      // Require an uploaded video — no demo fallback
       const videoNote = (project.notes || []).find(n => n.videoRemoteId);
-      const videoFilename = videoNote?.videoRemoteId ?? 'demo';
+      if (!videoNote) {
+        Alert.alert(
+          'No video found',
+          'Please add a video note to this project before generating a Google Doc report.',
+        );
+        setIsGeneratingGoogleDoc(false);
+        return;
+      }
+      const videoFilename = videoNote.videoRemoteId;
 
       const response = await apiFetch(`${getApiBaseUrl()}/report/google-doc`, {
         method: 'POST',

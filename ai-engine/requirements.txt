@@ -7,3 +7,4 @@ opencv-python-headless>=4.9.0
 python-dotenv>=1.0.1
 uvicorn
 fastapi
+requests>=2.31.0

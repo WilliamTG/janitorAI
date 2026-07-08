@@ -397,21 +397,39 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     const { report_meta, video_filename } = req.body;
     const token = req.headers["x-tester-token"];
 
-    const response = await fetch(`${aiEngineUrl}/api/demo-report`, {
+    // Require a real media ID — no demo fallback
+    if (!video_filename || video_filename === "demo") {
+      return res.status(400).json({
+        status: "error",
+        message: "No video found. Please add a video note to this project before generating a report.",
+      });
+    }
+
+    // Build a URL the AI engine can use to download the video directly from
+    // this API server's media storage. Token is embedded as ?token= so the
+    // AI engine can fetch it with a plain HTTP GET (no custom headers needed).
+    const apiBaseUrl =
+      process.env.API_BASE_URL ||
+      `${req.protocol}://${req.get("host")}`;
+    const videoUrl = `${apiBaseUrl}/api/media/${video_filename}?token=${encodeURIComponent(
+      process.env.TESTER_TOKEN || ""
+    )}`;
+
+    const response = await fetch(`${aiEngineUrl}/api/report`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-tester-token": token || "",
       },
       body: JSON.stringify({
-        video_filename: video_filename || "demo",
+        video_url: videoUrl,
         report_meta: report_meta || {},
       }),
     });
 
     const data = await response.json();
     if (!response.ok) {
-      console.error("AI engine /api/demo-report error:", { status: response.status });
+      console.error("AI engine /api/report error:", { status: response.status });
       return res.status(502).json({ error: "AI engine error" });
     }
 
