@@ -20,6 +20,7 @@ npm-workspaces monorepo imported from GitHub:
 - Without `DATABASE_URL` the projects routes return 503 and the app falls back to device-only storage (sync pill shows "Cloud sync not set up"). A 404 (backend not yet redeployed with the routes) is treated the same.
 - Mobile: `apps/mobile/src/sync/` (projectSync.ts: debounced push, pull-and-merge, tombstones; mediaUri.ts: web prefers remote media, native prefers local; persistMedia.ts: moves recordings/photos to permanent storage on native), `src/components/SyncStatusIndicator.tsx` (pill on home screen; tap = sync now).
 - Offline-first: local save always wins locally first, pushed ~2s later; last-write-wins across devices.
+- Disk-space guard: `apps/api/src/diskSpace.js` — the media sweep logs a prominent warning at 80% disk usage and uploads are rejected with a clear 507 (`MEDIA_STORAGE_FULL`) at 95% (tunable via `MEDIA_DISK_WARN_PERCENT` / `MEDIA_DISK_CRITICAL_PERCENT`).
 - Render setup (Postgres, disk, env vars, smoke test): see `docs/RENDER_SETUP.md`.
 
 ## Environment Variables

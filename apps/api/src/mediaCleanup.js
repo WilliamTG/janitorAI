@@ -15,7 +15,12 @@
 // Whole-project deletion still removes its media immediately (projects.js).
 
 const fs = require("fs");
+const path = require("path");
 const { getPool, initDb, isDbEnabled } = require("./db");
+const { checkAndLogDiskUsage } = require("./diskSpace");
+
+const MEDIA_DIR =
+  process.env.MEDIA_DIR || path.join(__dirname, "../media-uploads");
 
 // Never mark media uploaded less than this long ago (upload happens before
 // the project PUT that links it).
@@ -139,16 +144,26 @@ function reconcileAfterUpsert() {
   });
 }
 
-/** Run a sweep on boot and every SWEEP_INTERVAL_MS thereafter. */
+/**
+ * Run a sweep on boot and every SWEEP_INTERVAL_MS thereafter. Each run also
+ * checks free space on the media disk and logs a prominent warning when
+ * usage crosses the warn/critical thresholds (see diskSpace.js).
+ */
 function startMediaSweepScheduler() {
-  if (!isDbEnabled()) return;
+  const checkDisk = () =>
+    checkAndLogDiskUsage(MEDIA_DIR).catch((err) => {
+      console.error("Media disk check error:", sanitizeError(err));
+    });
 
-  const run = () =>
+  const run = () => {
+    checkDisk();
+    if (!isDbEnabled()) return;
     initDb()
       .then(() => sweepOrphanedMedia())
       .catch((err) => {
         console.error("Media sweep error:", sanitizeError(err));
       });
+  };
 
   run();
   const timer = setInterval(run, SWEEP_INTERVAL_MS);

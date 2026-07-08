@@ -11,6 +11,11 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { getPool, requireDb } = require("../db");
+const {
+  getDiskUsage,
+  isCritical,
+  CRITICAL_PERCENT,
+} = require("../diskSpace");
 
 const router = express.Router();
 
@@ -78,7 +83,30 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB
 });
 
-router.post("/", upload.single("file"), async (req, res) => {
+// Refuse uploads BEFORE multer writes anything to disk when the media disk
+// is critically full. A clear 507 beats a generic 500 from a failed write
+// (and avoids half-written files). Unknown usage never blocks uploads.
+async function rejectWhenDiskFull(req, res, next) {
+  try {
+    const usage = await getDiskUsage(MEDIA_DIR);
+    if (isCritical(usage)) {
+      console.error(
+        `POST /api/media rejected: media disk ${usage.usedPercent.toFixed(1)}% full (limit ${CRITICAL_PERCENT}%)`
+      );
+      return res.status(507).json({
+        error:
+          "Media storage on the server is full. New photos and recordings can't be uploaded until space is freed or the disk is enlarged. Your data is still saved on this device and will sync once space is available.",
+        code: "MEDIA_STORAGE_FULL",
+      });
+    }
+  } catch (err) {
+    // Never let the guard itself break uploads.
+    console.error("Media disk guard error:", sanitizeError(err));
+  }
+  next();
+}
+
+router.post("/", rejectWhenDiskFull, upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
   }
