@@ -747,6 +747,12 @@ export default function ProjectDetailScreen() {
       setNoteText('');
     };
 
+    // Alert.alert is a no-op on web — go straight to the library picker
+    if (Platform.OS === 'web') {
+      await pickPhoto(true);
+      return;
+    }
+
     Alert.alert('Add photo', 'Choose a source', [
       { text: 'Take photo', onPress: () => pickPhoto(false) },
       { text: 'Choose from library', onPress: () => pickPhoto(true) },
@@ -823,6 +829,12 @@ export default function ProjectDetailScreen() {
       await updateProjectNotes(newNotes);
       setNoteText('');
     };
+
+    // Alert.alert is a no-op on web — go straight to the library picker
+    if (Platform.OS === 'web') {
+      await pickVideo(true);
+      return;
+    }
 
     Alert.alert('Add video', 'Choose a source', [
       { text: 'Record video', onPress: () => pickVideo(false) },

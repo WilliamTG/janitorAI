@@ -8,6 +8,7 @@ import {
   FlatList,
   Image,
   Modal,
+  Platform,
   ScrollView,
   View,
 } from 'react-native';
@@ -564,16 +565,24 @@ export default function Index() {
       return;
     }
 
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Camera permission is required.');
-      return;
+    let result: ImagePicker.ImagePickerResult;
+    if (Platform.OS === 'web') {
+      // On web, camera access is unreliable — use the file picker instead
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7,
+      });
+    } else {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Camera permission is required.');
+        return;
+      }
+      result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7,
+      });
     }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
 
     if (result.canceled || !result.assets || result.assets.length === 0) {
       return;
