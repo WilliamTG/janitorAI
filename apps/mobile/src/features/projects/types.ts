@@ -1,3 +1,47 @@
+export type ReportContributor = {
+  name?: string;
+  role?: string;
+  phone?: string;
+  email?: string;
+};
+
+export type ReportBuilding = {
+  type?: string;
+  size?: string;
+  buildingYear?: string;
+  renovationsDone?: string;
+  otherInfo?: string;
+  damagedAreaDescription?: string;
+  damagedAreaEstimatedValue?: string;
+};
+
+/** Metadata the inspector fills in per project; maps 1-to-1 to the Google Doc template keys. */
+export type ReportMeta = {
+  caseNumber?: string;
+  workingNumber?: string;
+  inspectionDoneByName?: string;
+  inspectionDoneByPhone?: string;
+  inspectionDoneByCompany?: string;
+  pictureObject?: string;
+  insuranceCompany?: string;
+  insuranceAgent?: string;
+  customerName?: string;
+  addressStreet?: string;
+  addressPostcodeCity?: string;
+  damageDate?: string;
+  inspectionDate?: string;
+  /** At least one contributor; rendered as report.contributor.1.*, .2.*, … */
+  contributors?: ReportContributor[];
+  /** At least one building; rendered as bulding.0.*, bulding.1.*, … */
+  buildings?: ReportBuilding[];
+  possibleRecourse?: string;
+  measuresToPreventFutureDamage?: string;
+  startedRepairs?: string;
+  habitableValueLossPerMonth?: string;
+  habitableOtherInfo?: string;
+  summaryText?: string;
+};
+
 export type Photo = {
   id: string;
   uri: string;
@@ -19,6 +63,10 @@ export type Note = {
   transcription?: string;
   images?: string[];
   photos?: Photo[];
+  /** Local URI for a video clip attached to this note. */
+  videoUri?: string;
+  /** ID of the durable video copy stored on the backend (set after upload). */
+  videoRemoteId?: string;
 };
 
 export type Project = {
@@ -41,6 +89,8 @@ export type Project = {
    * everywhere instead of resurrecting it from another device's copy.
    */
   deletedNotes?: Record<string, string>;
+  /** Per-project metadata used to populate Google Doc template placeholders. */
+  reportMeta?: ReportMeta;
 };
 
 export const PROJECT_STORAGE_KEY = '@inspection_projects';

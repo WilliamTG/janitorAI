@@ -8,6 +8,7 @@ app = FastAPI()
 
 class DemoRequest(BaseModel):
     video_filename: str  # This is ignored for demo - we always use the hardcoded demo video
+    report_meta: dict = {}  # Per-project metadata for template replacements
 
 # Stier på serveren
 RENDER_TOKEN_PATH = "/etc/secrets/token.json"
@@ -57,7 +58,8 @@ async def run_demo_analysis(fastapi_req: Request, request: DemoRequest):
             credentials_path=token_path,
             master_id=os.getenv("MASTER_ID"),
             output_folder=os.getenv("OUTPUT_FOLDER"),
-            gemini_key=os.getenv("GEMINI_API_KEY")
+            gemini_key=os.getenv("GEMINI_API_KEY"),
+            report_meta=request.report_meta,
         )
         report_url = f"https://docs.google.com/document/d/{doc_id}"
         return {"status": "success", "url": report_url}

@@ -39,8 +39,8 @@ function sanitizeError(err) {
   return err && err.message ? err.message : String(err);
 }
 
-// Multer config for uploads (audio)
-const upload = multer({ dest: "uploads/" });
+// Multer config for uploads (audio / images) — 20 MB cap keeps Render RAM safe
+const upload = multer({ dest: "uploads/", limits: { fileSize: 20 * 1024 * 1024 } });
 
 // ---------- HEALTH CHECK (PUBLIC) ----------
 app.get("/health", (req, res) => {
@@ -57,6 +57,7 @@ const API_PATHS = new Set([
   "/whoami",
   "/report",
   "/report/docx",
+  "/report/google-doc",
   "/transcribe",
   "/describe-image",
 ]);
@@ -156,13 +157,29 @@ app.post("/report", heavyLimiter, async (req, res) => {
         }`
       : "";
 
+    // Build a structured block from per-project report metadata (filled in by inspector)
+    const rm = project.reportMeta || {};
+    const rmLines = [];
+    if (rm.caseNumber) rmLines.push(`- Case number: ${rm.caseNumber}`);
+    if (rm.customerName) rmLines.push(`- Customer: ${rm.customerName}`);
+    if (rm.addressStreet || rm.addressPostcodeCity)
+      rmLines.push(`- Address: ${[rm.addressStreet, rm.addressPostcodeCity].filter(Boolean).join(", ")}`);
+    if (rm.damageDate) rmLines.push(`- Damage date: ${rm.damageDate}`);
+    if (rm.insuranceCompany) rmLines.push(`- Insurance: ${rm.insuranceCompany}`);
+    if (rm.possibleRecourse) rmLines.push(`- Possible recourse: ${rm.possibleRecourse}`);
+    if (rm.startedRepairs) rmLines.push(`- Started repairs: ${rm.startedRepairs}`);
+    if (rm.summaryText) rmLines.push(`- Summary note from inspector: ${rm.summaryText}`);
+    const reportMetaBlock = rmLines.length
+      ? `\nCase metadata (from inspector):\n${rmLines.join("\n")}\n`
+      : "";
+
     const userContent = `
 Project metadata:
 - Project name: ${project.name}
 - Inspection date: ${project.inspectionDate}
 - Inspector: ${project.inspector}
 
-${descriptionBlock}
+${descriptionBlock}${reportMetaBlock}
 Project focus reminder: Use the project description/context (if provided) to orient the report before reviewing raw observations.
 
 Raw observations:
@@ -366,6 +383,42 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
     res.status(500).json({ error: "Server error" });
   } finally {
     fs.unlink(filePath, () => {});
+  }
+});
+
+// ---------- GOOGLE DOC REPORT (AI ENGINE PROXY) ----------
+app.post("/report/google-doc", heavyLimiter, async (req, res) => {
+  const aiEngineUrl = process.env.AI_ENGINE_URL;
+  if (!aiEngineUrl) {
+    return res.status(503).json({ error: "AI engine not configured" });
+  }
+
+  try {
+    const { report_meta, video_filename } = req.body;
+    const token = req.headers["x-tester-token"];
+
+    const response = await fetch(`${aiEngineUrl}/api/demo-report`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-tester-token": token || "",
+      },
+      body: JSON.stringify({
+        video_filename: video_filename || "demo",
+        report_meta: report_meta || {},
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      console.error("AI engine /api/demo-report error:", { status: response.status });
+      return res.status(502).json({ error: "AI engine error" });
+    }
+
+    res.json(data);
+  } catch (err) {
+    console.error("Backend /report/google-doc error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
   }
 });
 

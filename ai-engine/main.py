@@ -7,9 +7,9 @@ from models import DamageAnalysis
 from google_api import connect_to_google_api_personal, upload_knowledge_base
 from doc_engine import replace_text_in_doc, upload_and_insert_image
 from prompt import system_prompt, main_prompt
-from template_replacement import static_replacements
+from template_replacement import build_replacements
 
-def create_report(video_path, credentials_path, master_id, output_folder, gemini_key):
+def create_report(video_path, credentials_path, master_id, output_folder, gemini_key, report_meta: dict | None = None):
     # 1. Init Connections
     docs, drive = connect_to_google_api_personal(credentials_path)
     genai_client = genai.Client(api_key=gemini_key)
@@ -98,8 +98,8 @@ def create_report(video_path, credentials_path, master_id, output_folder, gemini
     else:
         print("⚠️ Ingen bevis-tidspunkter funnet av Gemini. Hopper over bildeekstraksjon.")
 
-    # 5. Final Text Replacement (Gemini + Static)
-    replacements = static_replacements(dummy_values=True)
+    # 5. Final Text Replacement (Gemini + project metadata)
+    replacements = build_replacements(report_meta or {})
     
     replacements.update({
         "{{damage.cause.area}}": analysis.area,

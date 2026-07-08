@@ -70,10 +70,23 @@ export function touchProject(project: Project): Project {
 
 // ---------- MEDIA UPLOAD ----------
 
-function guessFileMeta(uri: string, kind: 'photo' | 'audio'): { name: string; type: string } {
+function guessFileMeta(uri: string, kind: 'photo' | 'audio' | 'video'): { name: string; type: string } {
   const extMatch = uri.split('?')[0].match(/\.([A-Za-z0-9]+)$/);
-  const ext = extMatch ? extMatch[1].toLowerCase() : kind === 'photo' ? 'jpg' : 'm4a';
-  const type = kind === 'photo' ? `image/${ext === 'jpg' ? 'jpeg' : ext}` : `audio/${ext}`;
+  const ext = extMatch
+    ? extMatch[1].toLowerCase()
+    : kind === 'photo'
+    ? 'jpg'
+    : kind === 'video'
+    ? 'mp4'
+    : 'm4a';
+  let type: string;
+  if (kind === 'photo') {
+    type = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+  } else if (kind === 'video') {
+    type = `video/${ext}`;
+  } else {
+    type = `audio/${ext}`;
+  }
   return { name: `${kind}.${ext}`, type };
 }
 
@@ -84,7 +97,7 @@ const uploadsInFlight = new Map<string, Promise<string | null>>();
 
 async function uploadMedia(
   uri: string,
-  kind: 'photo' | 'audio',
+  kind: 'photo' | 'audio' | 'video',
   projectId: string,
 ): Promise<string | null> {
   const cached = uploadedByUri.get(uri);
@@ -104,7 +117,7 @@ async function uploadMedia(
 
 async function doUploadMedia(
   uri: string,
-  kind: 'photo' | 'audio',
+  kind: 'photo' | 'audio' | 'video',
   projectId: string,
 ): Promise<string | null> {
   try {
@@ -178,6 +191,14 @@ async function uploadPendingMedia(project: Project): Promise<{ project: Project;
         nextNote = { ...nextNote, photos };
       }
 
+      if (note.videoUri && !note.videoRemoteId) {
+        const remoteId = await uploadMedia(note.videoUri, 'video', project.id);
+        if (remoteId) {
+          nextNote = { ...nextNote, videoRemoteId: remoteId };
+          changed = true;
+        }
+      }
+
       return nextNote;
     }),
   );
@@ -226,6 +247,9 @@ function stripLocalUrisForServer(project: Project): Project {
           p.remoteId && isDeviceLocalUri(p.uri) ? { ...p, uri: '' } : p,
         ),
       };
+    }
+    if (next.videoRemoteId && isDeviceLocalUri(next.videoUri)) {
+      next = { ...next, videoUri: undefined };
     }
     return next;
   });
@@ -461,7 +485,7 @@ function noteTime(note: Note): number {
  * and (b) decide whether a merged note actually differs from the server copy.
  */
 function noteLogicalKey(note: Note): string {
-  const { updatedAt, audioUri, photos, ...rest } = note;
+  const { updatedAt, audioUri, videoUri, photos, ...rest } = note;
   const normPhotos = (photos || []).map((p) => {
     const { uri, ...pRest } = p;
     return pRest;
@@ -485,6 +509,7 @@ function restoreLocalNoteMedia(winner: Note, local?: Note): Note {
   return {
     ...winner,
     audioUri: winner.audioUri || local.audioUri,
+    videoUri: winner.videoUri || local.videoUri,
     ...(photos ? { photos } : {}),
   };
 }

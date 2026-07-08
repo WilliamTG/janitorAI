@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, Image, Modal, ScrollView, View } from 'react-native';
+import { Alert, FlatList, Image, Linking, Modal, ScrollView, TouchableOpacity, View } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 
@@ -16,7 +16,8 @@ import apiFetch, {
   UnauthorizedError,
   validateTesterToken,
 } from '@/src/lib/apiFetch';
-import { Note, Project } from '@/src/features/projects/types';
+import { Note, Project, ReportMeta } from '@/src/features/projects/types';
+import { ReportDetailsSection } from '@/src/features/projects/ReportDetailsSection';
 import { applyNoteChanges } from '@/src/features/projects/noteChanges';
 import {
   loadProjects,
@@ -65,12 +66,17 @@ export default function ProjectDetailScreen() {
   const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [isExportingDocx, setIsExportingDocx] = useState(false);
+  const [isGeneratingGoogleDoc, setIsGeneratingGoogleDoc] = useState(false);
+  const [googleDocUrl, setGoogleDocUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ProjectTab>('notes');
   const [describingPhotos, setDescribingPhotos] = useState<Set<string>>(new Set());
   const [editingPhotos, setEditingPhotos] = useState<Record<string, { editing: boolean; caption: string }>>({});
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState('');
   const [isTranscribingDescription, setIsTranscribingDescription] = useState(false);
+
+  const [reportMetaDraft, setReportMetaDraft] = useState<ReportMeta>({ contributors: [{}], buildings: [{}] });
+  const [reportMetaOpen, setReportMetaOpen] = useState(false);
 
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
@@ -192,6 +198,18 @@ export default function ProjectDetailScreen() {
     }
   }, [isEditingDescription, state.project]);
 
+  // Initialise reportMeta draft whenever a (different) project loads.
+  useEffect(() => {
+    if (project) {
+      setReportMetaDraft({
+        contributors: [{}],
+        buildings: [{}],
+        ...project.reportMeta,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
+
   const updateProjectLocally = async (updated: Project) => {
     // Stamp the change time so sync can do last-write-wins.
     const touched = touchProject(updated);
@@ -212,6 +230,12 @@ export default function ProjectDetailScreen() {
   const updateProjectReport = async (report: string) => {
     if (!project) return;
     const updatedProject = { ...project, report };
+    await updateProjectLocally(updatedProject);
+  };
+
+  const saveReportMeta = async () => {
+    if (!project) return;
+    const updatedProject: Project = { ...project, reportMeta: reportMetaDraft };
     await updateProjectLocally(updatedProject);
   };
 
@@ -651,47 +675,158 @@ export default function ProjectDetailScreen() {
     await updateProjectNotes(newNotes);
   };
 
+  const MAX_PHOTO_BYTES = 8 * 1024 * 1024; // 8 MB
+  const MAX_VIDEO_DURATION_SECONDS = 120;   // 2 minutes
+
   const addPhotoNote = async () => {
     if (!project) {
       Alert.alert('Select project', 'Please wait for the project to load first.');
       return;
     }
 
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Camera permission is required.');
-      return;
-    }
+    const pickPhoto = async (fromLibrary: boolean) => {
+      if (fromLibrary) {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Photo library access is required.');
+          return;
+        }
+      } else {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Camera permission is required.');
+          return;
+        }
+      }
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
+      const result = fromLibrary
+        ? await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.6,
+            exif: false,
+          })
+        : await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.6,
+            exif: false,
+          });
 
-    if (result.canceled || !result.assets || result.assets.length === 0) {
-      return;
-    }
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
 
-    const uri = await persistMediaLocally(result.assets[0].uri);
+      const asset = result.assets[0];
 
-    const trimmed = noteText.trim();
-    const textForNote = trimmed || 'Photo note (no manual text added yet).';
+      // Guard: reject oversized photos
+      if (asset.fileSize && asset.fileSize > MAX_PHOTO_BYTES) {
+        Alert.alert(
+          'Photo too large',
+          `This photo is ${(asset.fileSize / 1024 / 1024).toFixed(1)} MB. Please choose a photo under 8 MB to keep uploads fast and within server limits.`,
+        );
+        return;
+      }
 
-    const newNote: Note = {
-      id: Date.now().toString(),
-      text: textForNote,
-      createdAt: new Date().toISOString(),
-      photos: [{
+      const uri = await persistMediaLocally(asset.uri);
+      const trimmed = noteText.trim();
+      const textForNote = trimmed || 'Photo note (no text added yet).';
+
+      const newNote: Note = {
         id: Date.now().toString(),
-        uri,
-        caption: '',
-        aiGenerated: false,
-      }],
+        text: textForNote,
+        createdAt: new Date().toISOString(),
+        photos: [{
+          id: Date.now().toString(),
+          uri,
+          caption: '',
+          aiGenerated: false,
+        }],
+      };
+
+      const newNotes = [newNote, ...(project.notes || [])];
+      await updateProjectNotes(newNotes);
+      setNoteText('');
     };
 
-    const newNotes = [newNote, ...(project.notes || [])];
-    await updateProjectNotes(newNotes);
-    setNoteText('');
+    Alert.alert('Add photo', 'Choose a source', [
+      { text: 'Take photo', onPress: () => pickPhoto(false) },
+      { text: 'Choose from library', onPress: () => pickPhoto(true) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const addVideoNote = async () => {
+    if (!project) {
+      Alert.alert('Select project', 'Please wait for the project to load first.');
+      return;
+    }
+
+    const pickVideo = async (fromLibrary: boolean) => {
+      if (fromLibrary) {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Photo library access is required to pick videos.');
+          return;
+        }
+      } else {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Camera permission is required to record video.');
+          return;
+        }
+      }
+
+      const result = fromLibrary
+        ? await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+            videoMaxDuration: MAX_VIDEO_DURATION_SECONDS,
+          })
+        : await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+            videoMaxDuration: MAX_VIDEO_DURATION_SECONDS,
+          });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+
+      const asset = result.assets[0];
+
+      // Guard: check duration
+      if (asset.duration && asset.duration > MAX_VIDEO_DURATION_SECONDS * 1000) {
+        Alert.alert(
+          'Video too long',
+          `Please select a video shorter than ${MAX_VIDEO_DURATION_SECONDS} seconds (2 minutes) to keep uploads within server limits.`,
+        );
+        return;
+      }
+
+      // Guard: check file size (must fit within server's 50 MB cap with headroom)
+      const MAX_VIDEO_BYTES = 40 * 1024 * 1024; // 40 MB
+      if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
+        Alert.alert(
+          'Video too large',
+          `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 40 MB to keep uploads reliable.`,
+        );
+        return;
+      }
+
+      const uri = await persistMediaLocally(asset.uri);
+      const trimmed = noteText.trim();
+      const textForNote = trimmed || 'Video note (no text added yet).';
+
+      const newNote: Note = {
+        id: Date.now().toString(),
+        text: textForNote,
+        createdAt: new Date().toISOString(),
+        videoUri: uri,
+      };
+
+      const newNotes = [newNote, ...(project.notes || [])];
+      await updateProjectNotes(newNotes);
+      setNoteText('');
+    };
+
+    Alert.alert('Add video', 'Choose a source', [
+      { text: 'Record video', onPress: () => pickVideo(false) },
+      { text: 'Choose from library', onPress: () => pickVideo(true) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
 
@@ -728,6 +863,7 @@ export default function ProjectDetailScreen() {
             inspector: project.inspector,
             descriptionText: project.projectDescriptionText,
             descriptionTranscription: project.projectDescriptionTranscription,
+            reportMeta: reportMetaDraft,
           },
           notes: payloadNotes,
         }),
@@ -755,6 +891,49 @@ export default function ProjectDetailScreen() {
       Alert.alert('Error', 'Could not reach backend.');
     } finally {
       setIsGeneratingReport(false);
+    }
+  };
+
+  const generateGoogleDocReport = async () => {
+    if (!project) return;
+
+    try {
+      setIsGeneratingGoogleDoc(true);
+      setGoogleDocUrl(null);
+
+      // Prefer the first note that has an uploaded video; fall back to 'demo'
+      const videoNote = (project.notes || []).find(n => n.videoRemoteId);
+      const videoFilename = videoNote?.videoRemoteId ?? 'demo';
+
+      const response = await apiFetch(`${getApiBaseUrl()}/report/google-doc`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          report_meta: reportMetaDraft,
+          video_filename: videoFilename,
+        }),
+      });
+
+      if (!response.ok) {
+        Alert.alert('Error', 'Failed to generate Google Doc report.');
+        return;
+      }
+
+      const data = await response.json();
+      if (data.status === 'error') {
+        Alert.alert('Error', data.message || 'AI engine returned an error.');
+        return;
+      }
+      if (data.url) {
+        setGoogleDocUrl(data.url);
+      } else {
+        Alert.alert('Error', 'No document URL returned.');
+      }
+    } catch (error) {
+      if (await handleApiError(error)) return;
+      Alert.alert('Error', 'Could not reach backend.');
+    } finally {
+      setIsGeneratingGoogleDoc(false);
     }
   };
 
@@ -902,6 +1081,29 @@ export default function ProjectDetailScreen() {
       <GlassCard style={{ marginBottom: theme.spacing.sm, gap: theme.spacing.xs }}>
         <Body>{item.text}</Body>
         <Caption muted>{new Date(item.createdAt).toLocaleString()}</Caption>
+
+        {/* Video clip — show whenever local URI or remote copy exists */}
+        {(item.videoUri || item.videoRemoteId) && (
+          <View
+            style={{
+              marginTop: theme.spacing.xs,
+              padding: theme.spacing.sm,
+              backgroundColor: theme.colors.surfaceSecondary,
+              borderRadius: theme.radii.md,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: theme.spacing.sm,
+            }}
+          >
+            <Ionicons name="videocam-outline" size={22} color={theme.colors.accent} />
+            <View style={{ flex: 1 }}>
+              <Caption>Video clip attached</Caption>
+              {item.videoRemoteId
+                ? <Caption muted>✓ Uploaded to server</Caption>
+                : <Caption muted>Pending upload…</Caption>}
+            </View>
+          </View>
+        )}
 
         {(item.photos?.length || 0) > 0 && (
           <View style={{ marginTop: theme.spacing.xs, gap: theme.spacing.sm }}>
@@ -1064,6 +1266,29 @@ export default function ProjectDetailScreen() {
         )}
       </View>
 
+      {isTokenValid && (
+        <View style={{ gap: theme.spacing.sm }}>
+          <View style={{ height: 1, backgroundColor: theme.colors.border }} />
+          <SecondaryButton
+            onPress={generateGoogleDocReport}
+            loading={isGeneratingGoogleDoc}
+          >
+            {isGeneratingGoogleDoc ? 'Generating Google Doc…' : 'Generate Google Doc report'}
+          </SecondaryButton>
+
+          {googleDocUrl && (
+            <GlassCard style={{ gap: theme.spacing.xs }}>
+              <Caption muted>Google Doc report ready:</Caption>
+              <TouchableOpacity onPress={() => Linking.openURL(googleDocUrl)}>
+                <Body style={{ color: theme.colors.accent, textDecorationLine: 'underline' }}>
+                  {googleDocUrl}
+                </Body>
+              </TouchableOpacity>
+            </GlassCard>
+          )}
+        </View>
+      )}
+
       {!isTokenValid && (
         <Caption muted>Enter a valid tester token to enable report generation.</Caption>
       )}
@@ -1219,13 +1444,16 @@ export default function ProjectDetailScreen() {
       />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: theme.spacing.sm }}>
         <PrimaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addTextNote}>
-          Save text note
+          Save note
         </PrimaryButton>
         <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={handleRecordPress}>
           {recording ? 'Stop & save voice' : 'Voice note'}
         </SecondaryButton>
         <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addPhotoNote}>
-          Add photo
+          📷 Add photo
+        </SecondaryButton>
+        <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addVideoNote}>
+          🎬 Add video
         </SecondaryButton>
       </View>
     </GlassCard>
@@ -1265,6 +1493,13 @@ export default function ProjectDetailScreen() {
         {renderTokenModal()}
         <View style={{ gap: theme.spacing.md }}>
           {renderHeader()}
+          <ReportDetailsSection
+            meta={reportMetaDraft}
+            onChange={setReportMetaDraft}
+            onSave={saveReportMeta}
+            isOpen={reportMetaOpen}
+            onToggle={() => setReportMetaOpen((o) => !o)}
+          />
           {activeTab === 'report' && renderReport()}
         </View>
       </Screen>

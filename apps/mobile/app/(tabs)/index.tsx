@@ -7,7 +7,6 @@ import {
   Alert,
   FlatList,
   Image,
-  Linking,
   Modal,
   ScrollView,
   View,
@@ -23,6 +22,7 @@ import apiFetch, {
   validateTesterToken,
 } from '@/src/lib/apiFetch';
 import { Note, Project } from '@/src/features/projects/types';
+import { loadProfile } from '@/src/storage/profileStorage';
 import { applyNoteChanges } from '@/src/features/projects/noteChanges';
 import {
   loadProjects,
@@ -56,46 +56,6 @@ import {
 type ProjectTab = 'notes' | 'report';
 
 export default function Index() {
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-
-  const handleRunDemo = async () => {
-    setIsAnalyzing(true);
-
-    try {
-      const token = await loadTesterToken();
-
-      const response = await fetch("https://janitorai-ai-engine.onrender.com/api/demo-report", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tester-token": token || ""
-        },
-        body: JSON.stringify({ video_filename: "sigurd_test_2.mp4" }),
-      });
-
-      if (!response.ok) {
-        Alert.alert("Server Error", `HTTP ${response.status}: ${response.statusText}`);
-        return;
-      }
-
-      const data = await response.json();
-
-      if (data.status === "error") {
-        Alert.alert("Analyse feilet", data.message || "Ukjent feil fra serveren.");
-      } else if (data.status === "success" && data.url) {
-        Alert.alert("Analyse ferdig!", "Rapport generert.", [
-          { text: "Åpne rapport", onPress: () => Linking.openURL(data.url) }
-        ]);
-      } else {
-        Alert.alert("Ukjent svar", JSON.stringify(data));
-      }
-    } catch (error) {
-      console.error("Demo analysis error:", error);
-      Alert.alert("Feil", `Kunne ikke koble til serveren: ${error}`);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
   const theme = useAppTheme();
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -269,12 +229,21 @@ export default function Index() {
       return;
     }
 
+    const profile = await loadProfile();
+
     const newProject: Project = {
       id: Date.now().toString(),
       name,
       inspectionDate: date || 'No date set',
       inspector: inspector || 'Unknown inspector',
       notes: [],
+      reportMeta: {
+        contributors: [{}],
+        buildings: [{}],
+        inspectionDoneByName: profile.name || undefined,
+        inspectionDoneByPhone: profile.phone || undefined,
+        inspectionDoneByCompany: profile.company || undefined,
+      },
     };
 
     const newProjects = [newProject, ...projects];
@@ -828,25 +797,6 @@ export default function Index() {
           </View>
         </GlassCard>
       )}
-  {/* --- JANITOR AI DEMO KNAPP START --- */}
-        <GlassCard style={{ 
-          marginBottom: theme.spacing.md, 
-          borderWidth: 1, 
-          borderColor: theme.colors.accent,
-          backgroundColor: theme.colors.surfaceSecondary 
-        }}>
-          <Title style={{ fontSize: 16 }}>AI Video Analyse (Demo)</Title>
-          <Body muted style={{ marginBottom: theme.spacing.sm }}>
-            Klikk under for å analysere Sigurd-casen med Gemini 2.0 og generere full rapport.
-          </Body>
-          <PrimaryButton 
-            onPress={handleRunDemo} 
-            loading={isAnalyzing}
-          >
-            {isAnalyzing ? "Analyserer video..." : "KJØR SIGURD-CASE DEMO"}
-          </PrimaryButton>
-        </GlassCard>
-        {/* --- JANITOR AI DEMO KNAPP SLUTT --- */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <SyncStatusIndicator onSyncNow={handleSyncNow} />
         <SecondaryButton onPress={toggleProjectForm} width={140}>
