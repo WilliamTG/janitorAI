@@ -3,6 +3,7 @@
 const express = require("express");
 const fs = require("fs");
 const { getPool, requireDb } = require("../db");
+const { reconcileAfterUpsert } = require("../mediaCleanup");
 
 const router = express.Router();
 
@@ -111,6 +112,10 @@ router.put("/:id", async (req, res) => {
       });
     }
 
+    // Fire-and-forget: mark media that is no longer referenced by any
+    // project (actual file deletion happens after a grace period).
+    reconcileAfterUpsert();
+
     res.json({ project: result.rows[0].data });
   } catch (err) {
     console.error("PUT /api/projects/:id error:", sanitizeError(err));
@@ -140,6 +145,10 @@ router.delete("/:id", async (req, res) => {
     for (const row of mediaRows.rows) {
       fs.unlink(row.file_path, () => {});
     }
+
+    // Also catch media rows whose project_id didn't match (e.g. uploads made
+    // without a projectId) but that were only referenced by this project.
+    reconcileAfterUpsert();
 
     res.json({ deleted: true });
   } catch (err) {

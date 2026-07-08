@@ -369,6 +369,12 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
   }
 });
 
+// ---------- ORPHANED MEDIA CLEANUP ----------
+// Sweep on boot + every few hours: deletes media files that have not been
+// referenced by any project for longer than the grace period.
+const { startMediaSweepScheduler } = require("./mediaCleanup");
+startMediaSweepScheduler();
+
 // ---------- START SERVER ----------
 app.listen(PORT, () => {
   console.log(`Backend listening on port ${PORT}`);

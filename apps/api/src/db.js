@@ -62,6 +62,11 @@ CREATE TABLE IF NOT EXISTS media (
 );
 
 CREATE INDEX IF NOT EXISTS media_project_id_idx ON media (project_id);
+
+-- Orphan cleanup: when a media file stops being referenced by any project
+-- JSON it is marked here first; it is only physically deleted after a grace
+-- period (see mediaCleanup.js). NULL = referenced (or not yet checked).
+ALTER TABLE media ADD COLUMN IF NOT EXISTS unreferenced_at TIMESTAMPTZ;
 `;
 
 async function initDb() {
