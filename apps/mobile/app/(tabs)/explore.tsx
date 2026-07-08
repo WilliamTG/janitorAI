@@ -1,15 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React from 'react';
-import { View } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import { Alert, View } from 'react-native';
 
 import { isDevelopment } from '@/src/config/api';
+import { loadProfile, saveProfile, InspectorProfile } from '@/src/storage/profileStorage';
 import {
   Body,
   Caption,
   GlassCard,
   Screen,
   SecondaryButton,
+  TextField,
   Title,
   useAppTheme,
 } from '@/src/ui';
@@ -52,6 +54,27 @@ export default function GuideScreen() {
   const theme = useAppTheme();
   const router = useRouter();
 
+  const [profile, setProfile] = useState<InspectorProfile>({ name: '', phone: '', company: '' });
+  const [isSaving, setIsSaving] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile().then(setProfile);
+    }, [])
+  );
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await saveProfile(profile);
+      Alert.alert('Saved', 'Your profile has been saved. New projects will be pre-filled with these details.');
+    } catch {
+      Alert.alert('Error', 'Could not save profile. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <Screen>
       <View style={{ gap: theme.spacing.md }}>
@@ -63,6 +86,39 @@ export default function GuideScreen() {
             JanitorAI turns your field observations into professional reports in minutes.
           </Body>
         </View>
+
+        {/* My Profile */}
+        <GlassCard style={{ gap: theme.spacing.sm }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+            <Ionicons name="person-circle-outline" size={22} color={theme.colors.accent} />
+            <Title style={{ fontSize: 16 }}>My profile</Title>
+          </View>
+          <Body muted>
+            Save your details once — they'll pre-fill the inspector block whenever you create a new project.
+          </Body>
+          <TextField
+            label="Full name"
+            value={profile.name}
+            onChangeText={(text) => setProfile((p) => ({ ...p, name: text }))}
+            placeholder="Jane Smith"
+          />
+          <TextField
+            label="Phone"
+            value={profile.phone}
+            onChangeText={(text) => setProfile((p) => ({ ...p, phone: text }))}
+            placeholder="+1 555 000 1234"
+            keyboardType="phone-pad"
+          />
+          <TextField
+            label="Company"
+            value={profile.company}
+            onChangeText={(text) => setProfile((p) => ({ ...p, company: text }))}
+            placeholder="Acme Inspections"
+          />
+          <SecondaryButton onPress={handleSave} disabled={isSaving}>
+            {isSaving ? 'Saving…' : 'Save profile'}
+          </SecondaryButton>
+        </GlassCard>
 
         {/* Steps */}
         <Step

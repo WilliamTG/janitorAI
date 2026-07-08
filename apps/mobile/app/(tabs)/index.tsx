@@ -22,6 +22,7 @@ import apiFetch, {
   validateTesterToken,
 } from '@/src/lib/apiFetch';
 import { Note, Project } from '@/src/features/projects/types';
+import { loadProfile } from '@/src/storage/profileStorage';
 import { applyNoteChanges } from '@/src/features/projects/noteChanges';
 import {
   loadProjects,
@@ -228,12 +229,21 @@ export default function Index() {
       return;
     }
 
+    const profile = await loadProfile();
+
     const newProject: Project = {
       id: Date.now().toString(),
       name,
       inspectionDate: date || 'No date set',
       inspector: inspector || 'Unknown inspector',
       notes: [],
+      reportMeta: {
+        contributors: [{}],
+        buildings: [{}],
+        inspectionDoneByName: profile.name || undefined,
+        inspectionDoneByPhone: profile.phone || undefined,
+        inspectionDoneByCompany: profile.company || undefined,
+      },
     };
 
     const newProjects = [newProject, ...projects];
