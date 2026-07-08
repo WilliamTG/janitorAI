@@ -57,6 +57,7 @@ const API_PATHS = new Set([
   "/whoami",
   "/report",
   "/report/docx",
+  "/report/google-doc",
   "/transcribe",
   "/describe-image",
 ]);
@@ -382,6 +383,42 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
     res.status(500).json({ error: "Server error" });
   } finally {
     fs.unlink(filePath, () => {});
+  }
+});
+
+// ---------- GOOGLE DOC REPORT (AI ENGINE PROXY) ----------
+app.post("/report/google-doc", heavyLimiter, async (req, res) => {
+  const aiEngineUrl = process.env.AI_ENGINE_URL;
+  if (!aiEngineUrl) {
+    return res.status(503).json({ error: "AI engine not configured" });
+  }
+
+  try {
+    const { report_meta, video_filename } = req.body;
+    const token = req.headers["x-tester-token"];
+
+    const response = await fetch(`${aiEngineUrl}/api/demo-report`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-tester-token": token || "",
+      },
+      body: JSON.stringify({
+        video_filename: video_filename || "demo",
+        report_meta: report_meta || {},
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      console.error("AI engine /api/demo-report error:", { status: response.status });
+      return res.status(502).json({ error: "AI engine error" });
+    }
+
+    res.json(data);
+  } catch (err) {
+    console.error("Backend /report/google-doc error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
   }
 });
 

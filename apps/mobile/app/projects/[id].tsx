@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, Image, Modal, ScrollView, View } from 'react-native';
+import { Alert, FlatList, Image, Linking, Modal, ScrollView, TouchableOpacity, View } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 
@@ -66,6 +66,8 @@ export default function ProjectDetailScreen() {
   const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [isExportingDocx, setIsExportingDocx] = useState(false);
+  const [isGeneratingGoogleDoc, setIsGeneratingGoogleDoc] = useState(false);
+  const [googleDocUrl, setGoogleDocUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ProjectTab>('notes');
   const [describingPhotos, setDescribingPhotos] = useState<Set<string>>(new Set());
   const [editingPhotos, setEditingPhotos] = useState<Record<string, { editing: boolean; caption: string }>>({});
@@ -892,6 +894,49 @@ export default function ProjectDetailScreen() {
     }
   };
 
+  const generateGoogleDocReport = async () => {
+    if (!project) return;
+
+    try {
+      setIsGeneratingGoogleDoc(true);
+      setGoogleDocUrl(null);
+
+      // Prefer the first note that has an uploaded video; fall back to 'demo'
+      const videoNote = (project.notes || []).find(n => n.videoRemoteId);
+      const videoFilename = videoNote?.videoRemoteId ?? 'demo';
+
+      const response = await apiFetch(`${getApiBaseUrl()}/report/google-doc`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          report_meta: reportMetaDraft,
+          video_filename: videoFilename,
+        }),
+      });
+
+      if (!response.ok) {
+        Alert.alert('Error', 'Failed to generate Google Doc report.');
+        return;
+      }
+
+      const data = await response.json();
+      if (data.status === 'error') {
+        Alert.alert('Error', data.message || 'AI engine returned an error.');
+        return;
+      }
+      if (data.url) {
+        setGoogleDocUrl(data.url);
+      } else {
+        Alert.alert('Error', 'No document URL returned.');
+      }
+    } catch (error) {
+      if (await handleApiError(error)) return;
+      Alert.alert('Error', 'Could not reach backend.');
+    } finally {
+      setIsGeneratingGoogleDoc(false);
+    }
+  };
+
   const handleApiError = async (error: unknown) => {
     if (error instanceof UnauthorizedError || (error as any)?.status === 401) {
       await handleUnauthorized();
@@ -1220,6 +1265,29 @@ export default function ProjectDetailScreen() {
           <Caption muted>Generate report first.</Caption>
         )}
       </View>
+
+      {isTokenValid && (
+        <View style={{ gap: theme.spacing.sm }}>
+          <View style={{ height: 1, backgroundColor: theme.colors.border }} />
+          <SecondaryButton
+            onPress={generateGoogleDocReport}
+            loading={isGeneratingGoogleDoc}
+          >
+            {isGeneratingGoogleDoc ? 'Generating Google Doc…' : 'Generate Google Doc report'}
+          </SecondaryButton>
+
+          {googleDocUrl && (
+            <GlassCard style={{ gap: theme.spacing.xs }}>
+              <Caption muted>Google Doc report ready:</Caption>
+              <TouchableOpacity onPress={() => Linking.openURL(googleDocUrl)}>
+                <Body style={{ color: theme.colors.accent, textDecorationLine: 'underline' }}>
+                  {googleDocUrl}
+                </Body>
+              </TouchableOpacity>
+            </GlassCard>
+          )}
+        </View>
+      )}
 
       {!isTokenValid && (
         <Caption muted>Enter a valid tester token to enable report generation.</Caption>
