@@ -1,67 +1,79 @@
 import time
 
-def static_replacements(dummy_values=False):
+
+def build_replacements(report_meta: dict) -> dict:
     """
-    Returnerer en dictionary med erstatninger for alle statiske felter i malen.
-    Hvis dummy_values=True, fylles den med data for demo-formål (Sigurd/Ocab-case).
+    Builds the Google Doc template replacement dictionary from project metadata.
+
+    report_meta is a dict matching the mobile app's ReportMeta shape:
+      caseNumber, workingNumber, inspectionDoneByName, inspectionDoneByPhone,
+      inspectionDoneByCompany, pictureObject, insuranceCompany, insuranceAgent,
+      customerName, addressStreet, addressPostcodeCity, damageDate, inspectionDate,
+      contributors: [{name, role, phone, email?}, ...],
+      buildings: [{type, size, buildingYear, renovationsDone, otherInfo,
+                   damagedAreaDescription, damagedAreaEstimatedValue}, ...],
+      possibleRecourse, measuresToPreventFutureDamage, startedRepairs,
+      habitableValueLossPerMonth, habitableOtherInfo, summaryText
     """
-    
-    if dummy_values:
-        return {
-            # --- Informasjon om skaden ---
-            "{{claim.case_number}}": "2026-99123-SK",
-            "{{report.inspection.done_by.name}}":"William Grener",
-            "{{report.inspection.done_by.phone}}":"99887766",
-            "{{report.inspection.done_by.company}}":"JanitorAI",
-            "{{report.working_number}}":"WN-2026-XYZ56",
-            "{{report.created}}":time.strftime("%d.%m.%Y"),
-            "{{report.picture.object}}": "Kjeller / Bod",
-            "{{claim.insurance.company}}": "Tryg Forsikring",
-            "{{claim.insurance.agent}}": "Jan Johansen",
-            "{{claim.customer.name}}": "Sigurd Myklebust",
-            "{{claim.address.street}}": "Kjellerveien 12",
-            "{{claim.address.postcode_city}}": "0123 Oslo",
-            "{{claim.damage_date}}": "28.03.2026",
-            "{{claim.Inspection_date}}": time.strftime("%d.%m.%Y"),
 
-            # --- Deltakere ---
-            "{{report.contributor.1.name}}": "Sigurd Myklebust",
-            "{{report.contributor.1.role}}": "Forsikringstaker",
-            "{{report.contributor.1.phone}}": "40295320",
-            "{{report.contributor.2.name}}": "William Grener",
-            "{{report.contributor.2.role}}": "Takstkonsulent (JanitorAI)",
-            "{{report.contributor.2.phone}}": "99887766",
-            "{{report.contributor.2.email}}": "william@janitorai.no",
+    def v(key, default="-"):
+        val = report_meta.get(key)
+        if val is None or str(val).strip() == "":
+            return default
+        return str(val).strip()
 
-            # --- Bygningstype og info ---
-            "{{bulding.0.type}}": "Enebolig",
-            "{{bulding.0.size}}": "210",
-            "{{bulding.0.bulding_year}}": "1984",
-            "{{bulding.0.renovations_done}}": "Modernisert kjeller 2012",
-            "{{bulding.0.other_info}}": "Bygget på Leca grunnmur, trebjelkelag.",
-            "{{bulding.1.type}}": "-",
-            "{{bulding.1.size}}": "-",
-            "{{bulding.1.bulding_year}}": "-",
-            "{{bulding.1.renovations_done}}": "-",
-            "{{bulding.1.other_info}}": "-",
+    result = {
+        "{{claim.case_number}}": v("caseNumber"),
+        "{{report.inspection.done_by.name}}": v("inspectionDoneByName"),
+        "{{report.inspection.done_by.phone}}": v("inspectionDoneByPhone"),
+        "{{report.inspection.done_by.company}}": v("inspectionDoneByCompany"),
+        "{{report.working_number}}": v("workingNumber"),
+        "{{report.created}}": time.strftime("%d.%m.%Y"),
+        "{{report.picture.object}}": v("pictureObject"),
+        "{{claim.insurance.company}}": v("insuranceCompany"),
+        "{{claim.insurance.agent}}": v("insuranceAgent"),
+        "{{claim.customer.name}}": v("customerName"),
+        "{{claim.address.street}}": v("addressStreet"),
+        "{{claim.address.postcode_city}}": v("addressPostcodeCity"),
+        "{{claim.damage_date}}": v("damageDate"),
+        "{{claim.Inspection_date}}": v("inspectionDate", time.strftime("%d.%m.%Y")),
+        "{{damage.possible_recourse}}": v("possibleRecourse"),
+        "{{damage.measures_to_prevenet_future_damage.description}}": v("measuresToPreventFutureDamage"),
+        "{{damage.started_repairs}}": v("startedRepairs"),
+        "{{habitable.value_loss_per_month_nok}}": v("habitableValueLossPerMonth", "0"),
+        "{{habitable.other_info}}": v("habitableOtherInfo"),
+        "{{summary.text}}": v("summaryText"),
+        # Floor plan placeholder — image is inserted by doc_engine
+        "{{report.picture.floor_plan}}": "Se vedlagt planskisse",
+    }
 
-            # --- Løsøre ---
-            "{{bulding.0.damaged_area.description}}": "Vaskemaskin og div. lagret utstyr i bod",
-            "{{bulding.0.damaged_area.estimated_value}}": "15.000 NOK",
-            "{{bulding.1.damaged_area.description}}": "-",
-            "{{bulding.1.damaged_area.estimated_value}}": "-",
+    # Contributors — 1-indexed: report.contributor.1.*, report.contributor.2.*, …
+    # Always emit at least 2 slots so every placeholder in the master template is replaced.
+    contributors = list(report_meta.get("contributors") or [{}])
+    while len(contributors) < 2:
+        contributors.append({})
+    for i, c in enumerate(contributors, 1):
+        prefix = "{{report.contributor." + str(i) + "."
+        result[prefix + "name}}"] = str(c.get("name") or "-").strip() or "-"
+        result[prefix + "role}}"] = str(c.get("role") or "-").strip() or "-"
+        result[prefix + "phone}}"] = str(c.get("phone") or "-").strip() or "-"
+        # Always emit email key so template placeholder is replaced (avoids leaked {{...}} in doc)
+        email = c.get("email")
+        result[prefix + "email}}"] = str(email).strip() if (email and str(email).strip()) else "-"
 
-            # --- Diverse status-felter ---
-            "{{damage.possible_recourse}}": "Ingen åpenbar regress mot tredjepart.",
-            "{{damage.measures_to_prevenet_future_damage.description}}": "Sikre slemning av grunnmur og etablere bedre fall fra husvegg.",
-            "{{damage.started_repairs}}": "Vannsuging utført, avfukter satt i drift.",
-            "{{habitable.value_loss_per_month_nok}}": "0",
-            "{{habitable.other_info}}": "Kjelleren kan ikke benyttes til opphold før tørking er ferdigstilt.",
-            "{{summary.text}}": "Skaden skyldes akutt inntrengning av vann mot ubeskyttet grunnmur under ekstremnedbør. Omfanget er begrenset til kjellerbod og gang.",
+    # Buildings — 0-indexed: bulding.0.*, bulding.1.*, …  (note: typo in template is intentional)
+    # Always emit at least 2 slots so every placeholder in the master template is replaced.
+    buildings = list(report_meta.get("buildings") or [{}])
+    while len(buildings) < 2:
+        buildings.append({})
+    for i, b in enumerate(buildings):
+        prefix = "{{bulding." + str(i) + "."
+        result[prefix + "type}}"] = str(b.get("type") or "-").strip() or "-"
+        result[prefix + "size}}"] = str(b.get("size") or "-").strip() or "-"
+        result[prefix + "bulding_year}}"] = str(b.get("buildingYear") or "-").strip() or "-"
+        result[prefix + "renovations_done}}"] = str(b.get("renovationsDone") or "-").strip() or "-"
+        result[prefix + "other_info}}"] = str(b.get("otherInfo") or "-").strip() or "-"
+        result[prefix + "damaged_area.description}}"] = str(b.get("damagedAreaDescription") or "-").strip() or "-"
+        result[prefix + "damaged_area.estimated_value}}"] = str(b.get("damagedAreaEstimatedValue") or "-").strip() or "-"
 
-            # --- Bilder og Planskisse ---
-            "{{report.picture.floor_plan}}": "Se vedlagt planskisse", # Bildet settes inn av doc_engine
-        }
-    else:
-        # Returner tomme verdier hvis ikke dummy (for produksjon)
-        return {}
+    return result

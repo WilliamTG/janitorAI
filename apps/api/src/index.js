@@ -156,13 +156,29 @@ app.post("/report", heavyLimiter, async (req, res) => {
         }`
       : "";
 
+    // Build a structured block from per-project report metadata (filled in by inspector)
+    const rm = project.reportMeta || {};
+    const rmLines = [];
+    if (rm.caseNumber) rmLines.push(`- Case number: ${rm.caseNumber}`);
+    if (rm.customerName) rmLines.push(`- Customer: ${rm.customerName}`);
+    if (rm.addressStreet || rm.addressPostcodeCity)
+      rmLines.push(`- Address: ${[rm.addressStreet, rm.addressPostcodeCity].filter(Boolean).join(", ")}`);
+    if (rm.damageDate) rmLines.push(`- Damage date: ${rm.damageDate}`);
+    if (rm.insuranceCompany) rmLines.push(`- Insurance: ${rm.insuranceCompany}`);
+    if (rm.possibleRecourse) rmLines.push(`- Possible recourse: ${rm.possibleRecourse}`);
+    if (rm.startedRepairs) rmLines.push(`- Started repairs: ${rm.startedRepairs}`);
+    if (rm.summaryText) rmLines.push(`- Summary note from inspector: ${rm.summaryText}`);
+    const reportMetaBlock = rmLines.length
+      ? `\nCase metadata (from inspector):\n${rmLines.join("\n")}\n`
+      : "";
+
     const userContent = `
 Project metadata:
 - Project name: ${project.name}
 - Inspection date: ${project.inspectionDate}
 - Inspector: ${project.inspector}
 
-${descriptionBlock}
+${descriptionBlock}${reportMetaBlock}
 Project focus reminder: Use the project description/context (if provided) to orient the report before reviewing raw observations.
 
 Raw observations:

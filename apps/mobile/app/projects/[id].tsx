@@ -16,7 +16,8 @@ import apiFetch, {
   UnauthorizedError,
   validateTesterToken,
 } from '@/src/lib/apiFetch';
-import { Note, Project } from '@/src/features/projects/types';
+import { Note, Project, ReportMeta } from '@/src/features/projects/types';
+import { ReportDetailsSection } from '@/src/features/projects/ReportDetailsSection';
 import { applyNoteChanges } from '@/src/features/projects/noteChanges';
 import {
   loadProjects,
@@ -71,6 +72,9 @@ export default function ProjectDetailScreen() {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState('');
   const [isTranscribingDescription, setIsTranscribingDescription] = useState(false);
+
+  const [reportMetaDraft, setReportMetaDraft] = useState<ReportMeta>({ contributors: [{}], buildings: [{}] });
+  const [reportMetaOpen, setReportMetaOpen] = useState(false);
 
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
@@ -192,6 +196,18 @@ export default function ProjectDetailScreen() {
     }
   }, [isEditingDescription, state.project]);
 
+  // Initialise reportMeta draft whenever a (different) project loads.
+  useEffect(() => {
+    if (project) {
+      setReportMetaDraft({
+        contributors: [{}],
+        buildings: [{}],
+        ...project.reportMeta,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
+
   const updateProjectLocally = async (updated: Project) => {
     // Stamp the change time so sync can do last-write-wins.
     const touched = touchProject(updated);
@@ -212,6 +228,12 @@ export default function ProjectDetailScreen() {
   const updateProjectReport = async (report: string) => {
     if (!project) return;
     const updatedProject = { ...project, report };
+    await updateProjectLocally(updatedProject);
+  };
+
+  const saveReportMeta = async () => {
+    if (!project) return;
+    const updatedProject: Project = { ...project, reportMeta: reportMetaDraft };
     await updateProjectLocally(updatedProject);
   };
 
@@ -839,6 +861,7 @@ export default function ProjectDetailScreen() {
             inspector: project.inspector,
             descriptionText: project.projectDescriptionText,
             descriptionTranscription: project.projectDescriptionTranscription,
+            reportMeta: reportMetaDraft,
           },
           notes: payloadNotes,
         }),
@@ -1402,6 +1425,13 @@ export default function ProjectDetailScreen() {
         {renderTokenModal()}
         <View style={{ gap: theme.spacing.md }}>
           {renderHeader()}
+          <ReportDetailsSection
+            meta={reportMetaDraft}
+            onChange={setReportMetaDraft}
+            onSave={saveReportMeta}
+            isOpen={reportMetaOpen}
+            onToggle={() => setReportMetaOpen((o) => !o)}
+          />
           {activeTab === 'report' && renderReport()}
         </View>
       </Screen>
