@@ -38,9 +38,9 @@ export const DateField = ({ value, onChange, label }: DateFieldProps) => {
   // ─── Web: native <input type="date"> ──────────────────────────────────────
   if (Platform.OS === 'web') {
     return (
-      <View style={{ gap: theme.spacing.xs }}>
+      <View style={{ gap: theme.spacing.xs, width: '100%', minWidth: 0 }}>
         {label && <Caption style={{ color: theme.colors.muted }}>{label}</Caption>}
-        <View style={{ position: 'relative' }}>
+        <View style={{ width: '100%', minWidth: 0 }}>
           {/* @ts-ignore — <input> is valid JSX in React Native Web */}
           <input
             type="date"
@@ -53,7 +53,6 @@ export const DateField = ({ value, onChange, label }: DateFieldProps) => {
               backgroundColor: theme.colors.surface,
               color: theme.colors.foreground,
               padding: theme.spacing.sm,
-              paddingRight: (theme.spacing.lg ?? 24) * 1.4,
               fontSize: 16,
               boxSizing: 'border-box',
               fontFamily: 'inherit',
@@ -61,19 +60,6 @@ export const DateField = ({ value, onChange, label }: DateFieldProps) => {
               outline: 'none',
             } as React.CSSProperties}
           />
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              right: theme.spacing.sm,
-              top: 0,
-              bottom: 0,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
-            <Ionicons name="calendar-outline" size={18} color={theme.colors.muted} />
-          </View>
         </View>
       </View>
     );
