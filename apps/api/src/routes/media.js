@@ -80,7 +80,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB cap (Render free tier RAM guard)
 });
 
 // Refuse uploads BEFORE multer writes anything to disk when the media disk

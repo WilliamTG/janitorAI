@@ -19,6 +19,10 @@ export type Note = {
   transcription?: string;
   images?: string[];
   photos?: Photo[];
+  /** Local URI for a video clip attached to this note. */
+  videoUri?: string;
+  /** ID of the durable video copy stored on the backend (set after upload). */
+  videoRemoteId?: string;
 };
 
 export type Project = {

@@ -39,8 +39,8 @@ function sanitizeError(err) {
   return err && err.message ? err.message : String(err);
 }
 
-// Multer config for uploads (audio)
-const upload = multer({ dest: "uploads/" });
+// Multer config for uploads (audio / images) — 20 MB cap keeps Render RAM safe
+const upload = multer({ dest: "uploads/", limits: { fileSize: 20 * 1024 * 1024 } });
 
 // ---------- HEALTH CHECK (PUBLIC) ----------
 app.get("/health", (req, res) => {
