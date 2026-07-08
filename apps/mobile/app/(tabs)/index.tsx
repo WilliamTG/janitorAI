@@ -84,11 +84,12 @@ export default function Index() {
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
 
-  const handleUnauthorized = async () => {
+  // showModal=true only when an in-flight AI call was rejected; never on cold start.
+  const handleUnauthorized = async (showModal = true) => {
     await clearTesterToken();
     setTokenStatus('invalid');
     setTokenError('Invalid access token. Please enter a valid token to continue.');
-    setShowTokenModal(true);
+    if (showModal) setShowTokenModal(true);
   };
 
   useEffect(() => {
@@ -96,8 +97,8 @@ export default function Index() {
       const storedToken = await loadTesterToken();
 
       if (!storedToken) {
+        // No token yet — mark invalid but don't pop modal; the banner prompts softly.
         setTokenStatus('invalid');
-        setShowTokenModal(true);
         return;
       }
 
@@ -107,9 +108,11 @@ export default function Index() {
         setTokenStatus('valid');
         setTokenError(null);
       } else {
-        await handleUnauthorized();
+        // Stored token no longer valid — clear quietly; modal only on next AI action.
+        await handleUnauthorized(false);
       }
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const saveToken = async () => {

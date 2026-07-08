@@ -11,7 +11,7 @@ const LABELS: Record<SyncState, string> = {
   synced: 'Saved to cloud',
   offline: 'Offline — saved on device',
   error: 'Sync error',
-  disabled: 'Cloud sync not set up',
+  disabled: 'Saved on device',
 };
 
 const ICONS: Record<SyncState, keyof typeof Ionicons.glyphMap> = {

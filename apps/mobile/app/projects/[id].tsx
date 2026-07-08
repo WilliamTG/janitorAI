@@ -87,11 +87,12 @@ export default function ProjectDetailScreen() {
   const project = state.project;
   const isTokenValid = tokenStatus === 'valid';
 
-  const handleUnauthorized = useCallback(async () => {
+  // showModal=true only when an in-flight AI call was rejected; never on cold start.
+  const handleUnauthorized = useCallback(async (showModal = true) => {
     await clearTesterToken();
     setTokenStatus('invalid');
     setTokenError('Invalid access token. Please enter a valid token to continue.');
-    setShowTokenModal(true);
+    if (showModal) setShowTokenModal(true);
   }, []);
 
   useEffect(() => {
@@ -99,8 +100,8 @@ export default function ProjectDetailScreen() {
       const storedToken = await loadTesterToken();
 
       if (!storedToken) {
+        // No token yet — mark invalid but don't pop modal; the banner prompts softly.
         setTokenStatus('invalid');
-        setShowTokenModal(true);
         return;
       }
 
@@ -110,7 +111,8 @@ export default function ProjectDetailScreen() {
         setTokenStatus('valid');
         setTokenError(null);
       } else {
-        await handleUnauthorized();
+        // Stored token no longer valid — clear quietly; modal only on next AI action.
+        await handleUnauthorized(false);
       }
     })();
   }, [handleUnauthorized]);

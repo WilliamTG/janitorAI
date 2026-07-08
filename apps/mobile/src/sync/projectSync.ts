@@ -295,7 +295,8 @@ export async function pushProject(project: Project): Promise<Project> {
     }
 
     if (response.status === 401) {
-      setSyncState('error');
+      // No valid token — show a soft "not configured" indicator, not a red error.
+      setSyncState('disabled');
       return toPush;
     }
 
@@ -308,7 +309,8 @@ export async function pushProject(project: Project): Promise<Project> {
     return toPush;
   } catch (error) {
     if (error instanceof UnauthorizedError) {
-      setSyncState('error');
+      // Auth failure during fetch — same soft treatment.
+      setSyncState('disabled');
     } else {
       setSyncState('offline');
     }
@@ -412,7 +414,8 @@ export async function pullAndMerge(localProjects: Project[]): Promise<Project[] 
     }
 
     if (!response.ok) {
-      setSyncState(response.status === 401 ? 'error' : 'offline');
+      // 401 = no token configured — show soft "saved on device", not a red error.
+      setSyncState(response.status === 401 ? 'disabled' : 'offline');
       return null;
     }
 
