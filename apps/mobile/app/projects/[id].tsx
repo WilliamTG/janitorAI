@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, Image, Linking, Modal, ScrollView, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Image, Linking, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 
@@ -965,82 +965,115 @@ export default function ProjectDetailScreen() {
     try {
       setIsExportingDocx(true);
 
-      const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
-
-      if (!baseDir) {
-        Alert.alert(
-          'Export failed',
-          'Could not access a safe storage directory on this device. Please try again on a supported device.',
-        );
-        return;
-      }
-
-      const reportsDir = `${baseDir}reports/`;
-      const reportsDirInfo = await FileSystem.getInfoAsync(reportsDir);
-
-      if (!reportsDirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(reportsDir, { intermediates: true });
-      }
-
+      const token = await loadTesterToken();
       const safeName = (project.name || 'Project').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Project';
       const dateStamp = new Date().toISOString().split('T')[0];
       const fileName = `Inspection Report - ${safeName} - ${dateStamp}.docx`;
-      const fileUri = `${reportsDir}${fileName}`;
 
-      const token = await loadTesterToken();
-      const downloadHeaders: Record<string, string> = {
+      const requestBody = JSON.stringify({
+        reportText: project.report,
+        project: {
+          name: project.name,
+          inspectionDate: project.inspectionDate,
+          inspector: project.inspector,
+        },
+      });
+
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-
       if (token) {
-        downloadHeaders['x-tester-token'] = token;
+        headers['x-tester-token'] = token;
       }
 
-      const downloadResumable = FileSystem.createDownloadResumable(
-        `${getApiBaseUrl()}/report/docx`,
-        fileUri,
-        {
-          headers: downloadHeaders,
-          httpMethod: 'POST',
-          body: JSON.stringify({
-            reportText: project.report,
-            project: {
-              name: project.name,
-              inspectionDate: project.inspectionDate,
-              inspector: project.inspector,
-            },
-          }),
-        },
-      );
+      if (Platform.OS === 'web') {
+        // On web: fetch as blob and trigger a browser download
+        const response = await fetch(`${getApiBaseUrl()}/report/docx`, {
+          method: 'POST',
+          headers,
+          body: requestBody,
+        });
 
-      const downloadResult = await downloadResumable.downloadAsync();
+        if (response.status === 401) {
+          await handleUnauthorized();
+          return;
+        }
 
-      if (!downloadResult) {
-        throw new Error('Download failed');
+        if (!response.ok) {
+          console.error('Backend error: report export failed', { status: response.status });
+          Alert.alert('Export failed', 'Backend error. Please try again.');
+          return;
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        // On native: download to filesystem then share
+        const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
+
+        if (!baseDir) {
+          Alert.alert(
+            'Export failed',
+            'Could not access a safe storage directory on this device. Please try again on a supported device.',
+          );
+          return;
+        }
+
+        const reportsDir = `${baseDir}reports/`;
+        const reportsDirInfo = await FileSystem.getInfoAsync(reportsDir);
+
+        if (!reportsDirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(reportsDir, { intermediates: true });
+        }
+
+        const fileUri = `${reportsDir}${fileName}`;
+
+        const downloadResumable = FileSystem.createDownloadResumable(
+          `${getApiBaseUrl()}/report/docx`,
+          fileUri,
+          {
+            headers,
+            httpMethod: 'POST',
+            body: requestBody,
+          },
+        );
+
+        const downloadResult = await downloadResumable.downloadAsync();
+
+        if (!downloadResult) {
+          throw new Error('Download failed');
+        }
+
+        if (downloadResult.status === 401) {
+          await handleUnauthorized();
+          return;
+        }
+
+        if (downloadResult.status && downloadResult.status >= 400) {
+          console.error('Backend error: report export failed', { status: downloadResult.status });
+          Alert.alert('Export failed', 'Backend error. Please try again.');
+          return;
+        }
+
+        const isSharingAvailable = await Sharing.isAvailableAsync();
+
+        if (!isSharingAvailable) {
+          Alert.alert('Report saved', 'The report was saved to your device, but sharing is not available.');
+          return;
+        }
+
+        await Sharing.shareAsync(downloadResult.uri, {
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          dialogTitle: 'Share inspection report',
+        });
       }
-
-      if (downloadResult.status === 401) {
-        await handleUnauthorized();
-        return;
-      }
-
-      if (downloadResult.status && downloadResult.status >= 400) {
-        console.error('Backend error: report export failed', { status: downloadResult.status });
-        Alert.alert('Export failed', 'Backend error. Please try again.');
-        return;
-      }
-
-      const isSharingAvailable = await Sharing.isAvailableAsync();
-
-      if (!isSharingAvailable) {
-        Alert.alert('Report saved', 'The report was saved to your device, but sharing is not available.');
-        return;
-      }
-
-      await Sharing.shareAsync(downloadResult.uri, {
-        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        dialogTitle: 'Share inspection report',
-      });
     } catch (error) {
       if (await handleApiError(error)) return;
       console.error('Error exporting report DOCX', error);
