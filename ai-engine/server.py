@@ -51,8 +51,14 @@ def download_video_from_url(video_url: str, local_dir: str) -> str:
     Downloads a video from the app's media storage endpoint to a local temp
     directory.  Uses an atomic write (temp file + rename) so concurrent calls
     for the same media ID never read a half-written file.
+
+    The file is saved with an extension derived from the Content-Type header so
+    Gemini can detect the mime type without needing an explicit hint.
+
     Returns the local file path.
     """
+    import mimetypes as _mimetypes
+
     _validate_video_url(video_url)
 
     if not os.path.exists(local_dir):
@@ -61,12 +67,13 @@ def download_video_from_url(video_url: str, local_dir: str) -> str:
     # Stable cache key: last path segment of the URL (media UUID), no query string
     url_path = video_url.split("?")[0]
     media_id = url_path.rstrip("/").split("/")[-1]
-    local_path = os.path.join(local_dir, media_id)
 
-    # Cache hit — only valid after a complete atomic write
-    if os.path.exists(local_path):
-        print(f"✅ Video already cached locally: {local_path}")
-        return local_path
+    # Check if a cached copy already exists (with any extension)
+    for existing in os.listdir(local_dir):
+        if existing == media_id or existing.startswith(media_id + "."):
+            cached = os.path.join(local_dir, existing)
+            print(f"✅ Video already cached locally: {cached}")
+            return cached
 
     print(f"📥 Downloading video from media storage: {url_path} ...")
     response = requests.get(video_url, stream=True, timeout=120)
@@ -75,6 +82,14 @@ def download_video_from_url(video_url: str, local_dir: str) -> str:
     if response.status_code == 401:
         raise PermissionError("Unauthorized when fetching video from media storage (401)")
     response.raise_for_status()
+
+    # Derive file extension from Content-Type so Gemini can detect mime type
+    content_type = response.headers.get("Content-Type", "video/mp4").split(";")[0].strip()
+    ext = _mimetypes.guess_extension(content_type) or ".mp4"
+    # guess_extension can return ".mp4v" for video/mp4 — normalise
+    if ext in (".mp4v", ".mpg4"):
+        ext = ".mp4"
+    local_path = os.path.join(local_dir, media_id + ext)
 
     # Write to a temp file in the same directory, then atomically rename so a
     # concurrent reader never sees a partial file.
