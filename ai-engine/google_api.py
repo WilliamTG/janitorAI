@@ -21,17 +21,27 @@ def connect_to_google_api_personal():
     """
     Initializes Docs and Drive services using a Google Service Account.
 
-    Credentials are read from the environment variable 'service_account.json',
-    which should contain the full service account JSON as a string (set this
-    as a Replit / Render secret). Using a service account avoids the 7-day
-    OAuth token expiry that affected the previous user-credential flow.
+    Credentials are loaded from (in priority order):
+    1. Render Secret File at /etc/secrets/service_account.json
+    2. Environment variable 'service_account.json' (full JSON string)
     """
-    sa_json = os.environ.get("service_account.json")
+    sa_json = None
+
+    # 1. Render Secret File (preferred — Render stores secret files here)
+    secret_file_path = "/etc/secrets/service_account.json"
+    if os.path.exists(secret_file_path):
+        with open(secret_file_path, "r") as f:
+            sa_json = f.read().strip()
+
+    # 2. Fall back to environment variable (full JSON as string)
+    if not sa_json:
+        sa_json = os.environ.get("service_account.json")
+
     if not sa_json:
         raise EnvironmentError(
             "Missing required secret 'service_account.json'. "
-            "Set it as an environment secret containing the full "
-            "Google Service Account credentials JSON."
+            "Add it as a Render Secret File or as an environment variable "
+            "containing the full Google Service Account credentials JSON."
         )
 
     info = json.loads(sa_json)

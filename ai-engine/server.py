@@ -132,7 +132,7 @@ async def run_analysis(fastapi_req: Request, request: ReportRequest):
         doc_id = create_report(
             video_path=video_path,
             master_id=os.getenv("MASTER_ID"),
-            output_folder=os.getenv("OUTPUT_FOLDER"),
+            output_folder=os.getenv("OUTPUT_FOLDER") or os.getenv("FOLDER_ID"),
             gemini_key=os.getenv("GEMINI_API_KEY"),
             report_meta=request.report_meta,
         )
