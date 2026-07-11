@@ -9,9 +9,9 @@ from doc_engine import replace_text_in_doc, upload_and_insert_image
 from prompt import system_prompt, main_prompt
 from template_replacement import build_replacements
 
-def create_report(video_path, credentials_path, master_id, output_folder, gemini_key, report_meta: dict | None = None):
+def create_report(video_path, master_id, output_folder, gemini_key, report_meta: dict | None = None):
     # 1. Init Connections
-    docs, drive = connect_to_google_api_personal(credentials_path)
+    docs, drive = connect_to_google_api_personal()
     genai_client = genai.Client(api_key=gemini_key)
 
     # 2. Gemini Analysis (Multimodal)

@@ -13,9 +13,6 @@ class ReportRequest(BaseModel):
     video_url: str          # Full URL to the inspector's uploaded video (includes auth token)
     report_meta: dict = {}  # Per-project metadata for template replacements
 
-# Server paths
-RENDER_TOKEN_PATH = "/etc/secrets/token.json"
-LOCAL_TOKEN_PATH = "token.json"
 TEMP_KNOWLEDGE_DIR = "./temp_knowledge"
 TEMP_VIDEO_DIR = "./videos"
 
@@ -110,8 +107,7 @@ async def run_analysis(fastapi_req: Request, request: ReportRequest):
     if not request.video_url:
         raise HTTPException(status_code=400, detail="video_url is required")
 
-    token_path = RENDER_TOKEN_PATH if os.path.exists(RENDER_TOKEN_PATH) else LOCAL_TOKEN_PATH
-    docs_service, drive_service = connect_to_google_api_personal(token_path)
+    docs_service, drive_service = connect_to_google_api_personal()
 
     # 1. Download reference knowledge base (PDFs) from Google Drive
     knowledge_id = os.getenv("KNOWLEDGE_FOLDER")
@@ -130,7 +126,6 @@ async def run_analysis(fastapi_req: Request, request: ReportRequest):
     try:
         doc_id = create_report(
             video_path=video_path,
-            credentials_path=token_path,
             master_id=os.getenv("MASTER_ID"),
             output_folder=os.getenv("OUTPUT_FOLDER"),
             gemini_key=os.getenv("GEMINI_API_KEY"),

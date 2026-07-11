@@ -1,9 +1,7 @@
 import os
+import json
 from google.oauth2 import service_account
-from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
 
 SCOPES = [
     'https://www.googleapis.com/auth/drive',
@@ -11,7 +9,7 @@ SCOPES = [
 ]
 
 def connect_to_google_api(credentials_path):
-    """Initializes and returns the Docs and Drive services."""
+    """Initializes Docs and Drive services from a service account file on disk."""
     creds = service_account.Credentials.from_service_account_file(
         credentials_path, scopes=SCOPES
     )
@@ -19,36 +17,29 @@ def connect_to_google_api(credentials_path):
     drive_service = build('drive', 'v3', credentials=creds)
     return docs_service, drive_service
 
-def connect_to_google_api_personal(token_path='token.json'):
-    creds = None
-    
-    # 1. Se etter token-filen på den stien vi sender inn
-    if os.path.exists(token_path):
-        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-    
-    # 2. Hvis vi ikke har gyldige credentials
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            print("🔄 Oppdaterer utgått Google-token...")
-            creds.refresh(Request())
-        else:
-            # Starter lokal innlogging (Dette vil bare skje på din Mac, aldri på Render)
-            if not os.path.exists('client_secrets.json'):
-                raise FileNotFoundError("Fant ikke 'client_secrets.json'. Dette kreves for første gangs innlogging.")
-            
-            flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-        
-        # 3. Lagre den nye sessionen (hvis vi har lov)
-        try:
-            with open(token_path, 'w') as token:
-                token.write(creds.to_json())
-        except OSError:
-            # På Render vil /etc/secrets være read-only. 
-            # Det går fint for denne kjøringen, men vi kan ikke lagre filen permanent.
-            print(f"⚠️ Advarsel: Kunne ikke skrive til {token_path} (Sannsynligvis Read-Only miljø på Render). Bruker tokenet i minnet for denne forespørselen.")
+def connect_to_google_api_personal():
+    """
+    Initializes Docs and Drive services using a Google Service Account.
 
-    return build('docs', 'v1', credentials=creds), build('drive', 'v3', credentials=creds)
+    Credentials are read from the environment variable 'service_account.json',
+    which should contain the full service account JSON as a string (set this
+    as a Replit / Render secret). Using a service account avoids the 7-day
+    OAuth token expiry that affected the previous user-credential flow.
+    """
+    sa_json = os.environ.get("service_account.json")
+    if not sa_json:
+        raise EnvironmentError(
+            "Missing required secret 'service_account.json'. "
+            "Set it as an environment secret containing the full "
+            "Google Service Account credentials JSON."
+        )
+
+    info = json.loads(sa_json)
+    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+
+    docs_service = build('docs', 'v1', credentials=creds)
+    drive_service = build('drive', 'v3', credentials=creds)
+    return docs_service, drive_service
 
 def export_doc_as_pdf(drive_service, doc_id):
     """Downloads the Google Doc as a PDF buffer."""
