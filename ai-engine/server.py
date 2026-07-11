@@ -107,7 +107,12 @@ async def run_analysis(fastapi_req: Request, request: ReportRequest):
     if not request.video_url:
         raise HTTPException(status_code=400, detail="video_url is required")
 
-    docs_service, drive_service = connect_to_google_api_personal()
+    try:
+        docs_service, drive_service = connect_to_google_api_personal()
+    except EnvironmentError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Failed to connect to Google API: {str(e)}")
 
     # 1. Download reference knowledge base (PDFs) from Google Drive
     knowledge_id = os.getenv("KNOWLEDGE_FOLDER")
