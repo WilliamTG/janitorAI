@@ -18,6 +18,7 @@ import apiFetch, {
 } from '@/src/lib/apiFetch';
 import { Note, Project, ReportMeta } from '@/src/features/projects/types';
 import { ReportDetailsSection } from '@/src/features/projects/ReportDetailsSection';
+import { ReportGeneratingOverlay } from '@/src/features/projects/ReportGeneratingOverlay';
 import { applyNoteChanges } from '@/src/features/projects/noteChanges';
 import {
   loadProjects,
@@ -1601,6 +1602,9 @@ export default function ProjectDetailScreen() {
       />
 
       {renderContent()}
+
+      <ReportGeneratingOverlay visible={isGeneratingReport} mode="report" />
+      <ReportGeneratingOverlay visible={isGeneratingGoogleDoc} mode="googleDoc" />
     </View>
   );
 }

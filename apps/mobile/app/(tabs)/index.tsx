@@ -23,6 +23,7 @@ import apiFetch, {
   validateTesterToken,
 } from '@/src/lib/apiFetch';
 import { Note, Project } from '@/src/features/projects/types';
+import { ReportGeneratingOverlay } from '@/src/features/projects/ReportGeneratingOverlay';
 import { loadProfile } from '@/src/storage/profileStorage';
 import { applyNoteChanges } from '@/src/features/projects/noteChanges';
 import {
@@ -1111,7 +1112,12 @@ export default function Index() {
   };
 
   if (selectedProject) {
-    return renderProjectDetail();
+    return (
+      <>
+        {renderProjectDetail()}
+        <ReportGeneratingOverlay visible={isGeneratingReport} mode="report" />
+      </>
+    );
   }
 
   return renderProjectList();
