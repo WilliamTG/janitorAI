@@ -1,46 +1,50 @@
-const crypto = require('crypto');
+// requireTesterToken.js
+// Validates the x-tester-token header against the tester_tokens DB table.
+// Falls back to a constant-time env-var comparison when the DB is not enabled
+// (local dev / no DATABASE_URL), so smoke tests work without Postgres.
 
-/**
- * Middleware to verify tester token from environment variables
- * Protects sensitive API endpoints
- */
-function requireTesterToken(req, res, next) {
-  const expectedToken = process.env.TESTER_TOKEN;
+const crypto = require("crypto");
+const { isDbEnabled, lookupToken } = require("../db");
 
-  // Check if TESTER_TOKEN is configured
-  if (!expectedToken) {
-    return res.status(503).json({ error: 'TESTER_TOKEN not configured' });
-  }
+async function requireTesterToken(req, res, next) {
+  const providedToken = req.get("x-tester-token");
 
-  // Read x-tester-token header (case-insensitive)
-  const providedToken = req.get('x-tester-token');
-
-  // Verify token exists
   if (!providedToken) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // Use constant-time comparison to prevent timing attacks
+  // ── DB-backed path ────────────────────────────────────────────────────────
+  if (isDbEnabled()) {
+    try {
+      const token = await lookupToken(providedToken);
+      if (!token) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      req.testerToken = token;
+      return next();
+    } catch (err) {
+      console.error("Token lookup error:", err && err.message);
+      return res.status(503).json({ error: "Auth service unavailable" });
+    }
+  }
+
+  // ── Env-var fallback (no DB) ───────────────────────────────────────────────
+  const expectedToken = process.env.TESTER_TOKEN;
+  if (!expectedToken) {
+    return res.status(503).json({ error: "TESTER_TOKEN not configured" });
+  }
+
   try {
-    const expectedBuffer = Buffer.from(expectedToken);
-    const providedBuffer = Buffer.from(providedToken);
-
-    // Ensure both buffers have same length before comparison
-    if (expectedBuffer.length !== providedBuffer.length) {
-      return res.status(401).json({ error: 'Unauthorized' });
+    const a = Buffer.from(expectedToken);
+    const b = Buffer.from(providedToken);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
-
-    const tokensMatch = crypto.timingSafeEqual(expectedBuffer, providedBuffer);
-    
-    if (!tokensMatch) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-  } catch (err) {
-    // timingSafeEqual throws if buffers have different lengths
-    return res.status(401).json({ error: 'Unauthorized' });
+  } catch {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // Token is valid, proceed
+  req.testerToken = providedToken;
   next();
 }
 

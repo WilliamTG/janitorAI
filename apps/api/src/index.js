@@ -412,7 +412,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
       process.env.API_BASE_URL ||
       `${req.protocol}://${req.get("host")}`;
     const videoUrl = `${apiBaseUrl}/api/media/${video_filename}?token=${encodeURIComponent(
-      process.env.TESTER_TOKEN || ""
+      req.testerToken || ""
     )}`;
 
     const response = await fetch(`${aiEngineUrl}/api/report`, {

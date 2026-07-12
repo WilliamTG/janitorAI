@@ -4,13 +4,15 @@
 //
 // Auth: accepts the tester token via the x-tester-token header OR a ?token=
 // query parameter (needed for <Image>/<audio> tags that cannot set headers).
+// Validated against the tester_tokens DB table; falls back to TESTER_TOKEN
+// env var when no DB is configured.
 
 const express = require("express");
 const multer = require("multer");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { getPool, requireDb } = require("../db");
+const { getPool, requireDb, isDbEnabled, lookupToken } = require("../db");
 const {
   getDiskUsage,
   isCritical,
@@ -28,13 +30,8 @@ function sanitizeError(err) {
   return err && err.message ? err.message : String(err);
 }
 
-// ---------- AUTH (header or query token) ----------
-function requireTokenHeaderOrQuery(req, res, next) {
-  const expectedToken = process.env.TESTER_TOKEN;
-  if (!expectedToken) {
-    return res.status(503).json({ error: "TESTER_TOKEN not configured" });
-  }
-
+// ── Auth: header or ?token= query ────────────────────────────────────────────
+async function requireTokenHeaderOrQuery(req, res, next) {
   const providedToken =
     req.get("x-tester-token") ||
     (typeof req.query.token === "string" ? req.query.token : "");
@@ -43,26 +40,45 @@ function requireTokenHeaderOrQuery(req, res, next) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
+  // DB-backed validation
+  if (isDbEnabled()) {
+    try {
+      const token = await lookupToken(providedToken);
+      if (!token) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      req.testerToken = token;
+      return next();
+    } catch (err) {
+      console.error("Media token lookup error:", err && err.message);
+      return res.status(503).json({ error: "Auth service unavailable" });
+    }
+  }
+
+  // Env-var fallback (no DB)
+  const expectedToken = process.env.TESTER_TOKEN;
+  if (!expectedToken) {
+    return res.status(503).json({ error: "TESTER_TOKEN not configured" });
+  }
+
   try {
-    const expectedBuffer = Buffer.from(expectedToken);
-    const providedBuffer = Buffer.from(providedToken);
-    if (
-      expectedBuffer.length !== providedBuffer.length ||
-      !crypto.timingSafeEqual(expectedBuffer, providedBuffer)
-    ) {
+    const a = Buffer.from(expectedToken);
+    const b = Buffer.from(providedToken);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
       return res.status(401).json({ error: "Unauthorized" });
     }
   } catch {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
+  req.testerToken = providedToken;
   next();
 }
 
 router.use(requireTokenHeaderOrQuery);
 router.use(requireDb);
 
-// ---------- UPLOAD ----------
+// ── Upload ────────────────────────────────────────────────────────────────────
 const ALLOWED_EXTENSIONS = new Set([
   ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif",
   ".m4a", ".mp3", ".wav", ".aac", ".ogg", ".webm", ".caf", ".mp4", ".3gp",
@@ -80,12 +96,9 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB cap (Render free tier RAM guard)
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB cap
 });
 
-// Refuse uploads BEFORE multer writes anything to disk when the media disk
-// is critically full. A clear 507 beats a generic 500 from a failed write
-// (and avoids half-written files). Unknown usage never blocks uploads.
 async function rejectWhenDiskFull(req, res, next) {
   try {
     const usage = await getDiskUsage(MEDIA_DIR);
@@ -100,7 +113,6 @@ async function rejectWhenDiskFull(req, res, next) {
       });
     }
   } catch (err) {
-    // Never let the guard itself break uploads.
     console.error("Media disk guard error:", sanitizeError(err));
   }
   next();
@@ -120,8 +132,8 @@ router.post("/", rejectWhenDiskFull, upload.single("file"), async (req, res) => 
 
     const pool = getPool();
     await pool.query(
-      `INSERT INTO media (id, project_id, kind, mime_type, original_name, size_bytes, file_path)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `INSERT INTO media (id, project_id, kind, mime_type, original_name, size_bytes, file_path, tester_token)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         id,
         projectId,
@@ -130,6 +142,7 @@ router.post("/", rejectWhenDiskFull, upload.single("file"), async (req, res) => 
         req.file.originalname || null,
         req.file.size || null,
         filePath,
+        req.testerToken,
       ]
     );
 
@@ -141,7 +154,10 @@ router.post("/", rejectWhenDiskFull, upload.single("file"), async (req, res) => 
   }
 });
 
-// ---------- DOWNLOAD / STREAM ----------
+// ── Download / stream ─────────────────────────────────────────────────────────
+// The media ID is a UUID (unguessable); the route is already auth-gated above.
+// We intentionally do not scope by tester_token here so the AI engine can
+// fetch any media file it has the ID for (it receives the URL from the API).
 router.get("/:id", async (req, res) => {
   try {
     const id = String(req.params.id);

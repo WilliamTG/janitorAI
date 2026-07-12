@@ -16,7 +16,6 @@ function needsSsl() {
   if (!DATABASE_URL) return false;
   if (process.env.DATABASE_SSL === "false") return false;
   if (process.env.DATABASE_SSL === "true") return true;
-  // Render external URLs and most managed Postgres providers require SSL.
   return (
     DATABASE_URL.includes("render.com") ||
     DATABASE_URL.includes("sslmode=require")
@@ -38,36 +37,85 @@ function getPool() {
   return pool;
 }
 
+// ── Schema ────────────────────────────────────────────────────────────────────
+// tester_tokens is created first so the VARCHAR FK-like references are valid.
+// All other tables use ADD COLUMN IF NOT EXISTS for safe incremental migration.
+
 const SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS tester_tokens (
+  token       VARCHAR   PRIMARY KEY,
+  tester_name TEXT,
+  is_active   BOOLEAN   NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS projects (
-  id TEXT PRIMARY KEY,
-  data JSONB NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  id            TEXT      PRIMARY KEY,
+  data          JSONB     NOT NULL,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  tester_token  VARCHAR
 );
 
 CREATE TABLE IF NOT EXISTS deleted_projects (
-  id TEXT PRIMARY KEY,
-  deleted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  id            TEXT      PRIMARY KEY,
+  deleted_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  tester_token  VARCHAR
 );
 
 CREATE TABLE IF NOT EXISTS media (
-  id TEXT PRIMARY KEY,
-  project_id TEXT,
-  kind TEXT,
-  mime_type TEXT,
+  id            TEXT      PRIMARY KEY,
+  project_id    TEXT,
+  kind          TEXT,
+  mime_type     TEXT,
   original_name TEXT,
-  size_bytes BIGINT,
-  file_path TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  size_bytes    BIGINT,
+  file_path     TEXT      NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS media_project_id_idx ON media (project_id);
 
--- Orphan cleanup: when a media file stops being referenced by any project
--- JSON it is marked here first; it is only physically deleted after a grace
--- period (see mediaCleanup.js). NULL = referenced (or not yet checked).
-ALTER TABLE media ADD COLUMN IF NOT EXISTS unreferenced_at TIMESTAMPTZ;
+-- Incremental migrations for pre-existing deployments
+ALTER TABLE projects        ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
+ALTER TABLE deleted_projects ADD COLUMN IF NOT EXISTS tester_token   VARCHAR;
+ALTER TABLE media           ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
+ALTER TABLE media           ADD COLUMN IF NOT EXISTS unreferenced_at TIMESTAMPTZ;
 `;
+
+// ── Default-token seed + data migration ──────────────────────────────────────
+// If TESTER_TOKEN env var is set we always upsert it as an active token so
+// existing clients continue to work without any manual DB setup.
+// Any existing rows that have no tester_token assigned are claimed by it.
+
+async function seedDefaultToken(p) {
+  const envToken = process.env.TESTER_TOKEN;
+  if (!envToken) return;
+
+  await p.query(
+    `INSERT INTO tester_tokens (token, tester_name, is_active)
+     VALUES ($1, 'default', TRUE)
+     ON CONFLICT (token) DO UPDATE SET is_active = TRUE`,
+    [envToken]
+  );
+
+  // Migrate legacy rows that pre-date multi-tenancy
+  await p.query(
+    `UPDATE projects        SET tester_token = $1 WHERE tester_token IS NULL`,
+    [envToken]
+  );
+  await p.query(
+    `UPDATE deleted_projects SET tester_token = $1 WHERE tester_token IS NULL`,
+    [envToken]
+  );
+  await p.query(
+    `UPDATE media           SET tester_token = $1 WHERE tester_token IS NULL`,
+    [envToken]
+  );
+
+  console.log("Tester token seeded/migrated (default)");
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
 
 async function initDb() {
   if (!isDbEnabled()) return false;
@@ -75,7 +123,8 @@ async function initDb() {
     initPromise = (async () => {
       const p = getPool();
       await p.query(SCHEMA_SQL);
-      console.log("Postgres schema ready (projects, deleted_projects, media)");
+      console.log("Postgres schema ready");
+      await seedDefaultToken(p);
       return true;
     })().catch((err) => {
       console.error("Failed to initialize database schema:", err && err.message);
@@ -84,6 +133,20 @@ async function initDb() {
     });
   }
   return initPromise;
+}
+
+/**
+ * Look up a token in the DB. Returns the token string if valid+active, else null.
+ * Safe to call only when isDbEnabled() === true.
+ */
+async function lookupToken(token) {
+  const p = getPool();
+  if (!p) return null;
+  const result = await p.query(
+    "SELECT token FROM tester_tokens WHERE token = $1 AND is_active = TRUE",
+    [token]
+  );
+  return result.rows.length > 0 ? result.rows[0].token : null;
 }
 
 /**
@@ -104,4 +167,4 @@ function requireDb(req, res, next) {
     });
 }
 
-module.exports = { getPool, initDb, isDbEnabled, requireDb };
+module.exports = { getPool, initDb, isDbEnabled, lookupToken, requireDb };
