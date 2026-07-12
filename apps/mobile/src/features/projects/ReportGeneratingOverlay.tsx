@@ -17,13 +17,7 @@ import { Body, Caption, useAppTheme } from '@/src/ui';
 
 type Step = { icon: string; label: string; durationMs: number };
 
-const REPORT_STEPS: Step[] = [
-  { icon: '🔍', label: 'Analyzing content', durationMs: 2600 },
-  { icon: '🧠', label: 'Collecting knowledge', durationMs: 3200 },
-  { icon: '✍️', label: 'Drafting your report', durationMs: 99999 },
-];
-
-const GOOGLE_DOC_STEPS: Step[] = [
+const STEPS: Step[] = [
   { icon: '🎬', label: 'Analyzing video', durationMs: 3000 },
   { icon: '🗣️', label: 'Transcribing content', durationMs: 4500 },
   { icon: '🧠', label: 'Collecting knowledge', durationMs: 3000 },
@@ -182,12 +176,11 @@ function StepRow({ step, state, index }: { step: Step; state: StepState; index: 
 
 type Props = {
   visible: boolean;
-  mode: 'report' | 'googleDoc';
 };
 
-export function ReportGeneratingOverlay({ visible, mode }: Props) {
+export function ReportGeneratingOverlay({ visible }: Props) {
   const theme = useAppTheme();
-  const steps = mode === 'googleDoc' ? GOOGLE_DOC_STEPS : REPORT_STEPS;
+  const steps = STEPS;
   const [currentStep, setCurrentStep] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -247,7 +240,7 @@ export function ReportGeneratingOverlay({ visible, mode }: Props) {
           <PulsingOrb />
 
           <Body style={{ fontWeight: '700', fontSize: 18, textAlign: 'center', marginBottom: 6 }}>
-            {mode === 'googleDoc' ? 'Generating Google Doc' : 'Creating report'}
+            Generating Google Doc
           </Body>
           <Caption muted style={{ textAlign: 'center', marginBottom: 22 }}>
             The AI is working on it — this may take a moment.

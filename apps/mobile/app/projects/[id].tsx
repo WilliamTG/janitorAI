@@ -1,11 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, Image, Linking, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
-import * as Sharing from 'expo-sharing';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 
 import { getApiBaseUrl } from '@/src/config/api';
@@ -65,8 +63,6 @@ export default function ProjectDetailScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [descriptionRecording, setDescriptionRecording] = useState<Audio.Recording | null>(null);
   const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
-  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-  const [isExportingDocx, setIsExportingDocx] = useState(false);
   const [isGeneratingGoogleDoc, setIsGeneratingGoogleDoc] = useState(false);
   const [googleDocUrl, setGoogleDocUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ProjectTab>('notes');
@@ -227,12 +223,6 @@ export default function ProjectDetailScreen() {
   const updateProjectNotes = async (notes: Note[]) => {
     if (!project) return;
     const updatedProject = applyNoteChanges(project, notes);
-    await updateProjectLocally(updatedProject);
-  };
-
-  const updateProjectReport = async (report: string) => {
-    if (!project) return;
-    const updatedProject = { ...project, report };
     await updateProjectLocally(updatedProject);
   };
 
@@ -846,69 +836,6 @@ export default function ProjectDetailScreen() {
 
 
 
-  const createReportForProject = async () => {
-    if (!project) return;
-
-    const notes = project.notes || [];
-    if (notes.length === 0) {
-      Alert.alert('No notes', 'Add some notes first.');
-      return;
-    }
-
-    const payloadNotes = notes.map((n) => ({
-      text: n.text,
-      createdAt: new Date(n.createdAt).toLocaleString(),
-      transcription: n.transcription,
-      photos: n.photos?.map(p => ({ caption: p.caption })) || [],
-      legacyImagesCount: n.images ? n.images.length : 0,
-    }));
-
-    try {
-      setIsGeneratingReport(true);
-
-      const response = await apiFetch(`${getApiBaseUrl()}/report`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          project: {
-            name: project.name,
-            inspectionDate: project.inspectionDate,
-            inspector: project.inspector,
-            descriptionText: project.projectDescriptionText,
-            descriptionTranscription: project.projectDescriptionTranscription,
-            reportMeta: reportMetaDraft,
-          },
-          notes: payloadNotes,
-        }),
-      });
-
-      if (!response.ok) {
-        console.error('Backend error: report generation failed');
-        Alert.alert('Report generation failed', 'Backend error.');
-        return;
-      }
-
-      const data = await response.json();
-      const reportText = data.report;
-
-      if (!reportText) {
-        Alert.alert('No report', 'Backend returned no report text.');
-        return;
-      }
-
-      await updateProjectReport(reportText);
-      Alert.alert('Report created', 'Saved to this project.');
-    } catch (error) {
-      if (await handleApiError(error)) return;
-      console.error('Error calling backend');
-      Alert.alert('Error', 'Could not reach backend.');
-    } finally {
-      setIsGeneratingReport(false);
-    }
-  };
-
   const generateGoogleDocReport = async () => {
     if (!project) return;
 
@@ -928,12 +855,37 @@ export default function ProjectDetailScreen() {
       }
       const videoFilename = videoNote.videoRemoteId;
 
+      // Build enriched project context: include all notes with content, resolve
+      // photo URIs to their remote IDs so the backend can construct absolute URLs.
+      const enrichedNotes = (project.notes || [])
+        .filter(n => n.text || n.transcription || (n.photos && n.photos.length > 0))
+        .map(n => ({
+          ...(n.text ? { text: n.text } : {}),
+          ...(n.transcription ? { transcription: n.transcription } : {}),
+          photos: (n.photos || [])
+            .filter(p => p.remoteId || p.uri)
+            .map(p => ({
+              uri: p.remoteId ?? p.uri,
+              ...(p.caption ? { caption: p.caption } : {}),
+            })),
+        }));
+
+      const projectContext = {
+        name: project.name,
+        inspectionDate: project.inspectionDate,
+        inspector: project.inspector,
+        ...(project.projectDescriptionText ? { projectDescriptionText: project.projectDescriptionText } : {}),
+        ...(project.projectDescriptionTranscription ? { projectDescriptionTranscription: project.projectDescriptionTranscription } : {}),
+        notes: enrichedNotes,
+      };
+
       const response = await apiFetch(`${getApiBaseUrl()}/report/google-doc`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           report_meta: reportMetaDraft,
           video_filename: videoFilename,
+          project: projectContext,
         }),
       });
 
@@ -967,133 +919,6 @@ export default function ProjectDetailScreen() {
     }
 
     return false;
-  };
-
-  const exportReportAsDocx = async () => {
-    if (!project?.report) {
-      Alert.alert('No report', 'Generate a report before exporting.');
-      return;
-    }
-
-    try {
-      setIsExportingDocx(true);
-
-      const token = await loadTesterToken();
-      const safeName = (project.name || 'Project').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Project';
-      const dateStamp = new Date().toISOString().split('T')[0];
-      const fileName = `Inspection Report - ${safeName} - ${dateStamp}.docx`;
-
-      const requestBody = JSON.stringify({
-        reportText: project.report,
-        project: {
-          name: project.name,
-          inspectionDate: project.inspectionDate,
-          inspector: project.inspector,
-        },
-      });
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['x-tester-token'] = token;
-      }
-
-      if (Platform.OS === 'web') {
-        // On web: fetch as blob and trigger a browser download
-        const response = await fetch(`${getApiBaseUrl()}/report/docx`, {
-          method: 'POST',
-          headers,
-          body: requestBody,
-        });
-
-        if (response.status === 401) {
-          await handleUnauthorized();
-          return;
-        }
-
-        if (!response.ok) {
-          console.error('Backend error: report export failed', { status: response.status });
-          Alert.alert('Export failed', 'Backend error. Please try again.');
-          return;
-        }
-
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } else {
-        // On native: download to filesystem then share
-        const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
-
-        if (!baseDir) {
-          Alert.alert(
-            'Export failed',
-            'Could not access a safe storage directory on this device. Please try again on a supported device.',
-          );
-          return;
-        }
-
-        const reportsDir = `${baseDir}reports/`;
-        const reportsDirInfo = await FileSystem.getInfoAsync(reportsDir);
-
-        if (!reportsDirInfo.exists) {
-          await FileSystem.makeDirectoryAsync(reportsDir, { intermediates: true });
-        }
-
-        const fileUri = `${reportsDir}${fileName}`;
-
-        const downloadResumable = FileSystem.createDownloadResumable(
-          `${getApiBaseUrl()}/report/docx`,
-          fileUri,
-          {
-            headers,
-            httpMethod: 'POST',
-            body: requestBody,
-          },
-        );
-
-        const downloadResult = await downloadResumable.downloadAsync();
-
-        if (!downloadResult) {
-          throw new Error('Download failed');
-        }
-
-        if (downloadResult.status === 401) {
-          await handleUnauthorized();
-          return;
-        }
-
-        if (downloadResult.status && downloadResult.status >= 400) {
-          console.error('Backend error: report export failed', { status: downloadResult.status });
-          Alert.alert('Export failed', 'Backend error. Please try again.');
-          return;
-        }
-
-        const isSharingAvailable = await Sharing.isAvailableAsync();
-
-        if (!isSharingAvailable) {
-          Alert.alert('Report saved', 'The report was saved to your device, but sharing is not available.');
-          return;
-        }
-
-        await Sharing.shareAsync(downloadResult.uri, {
-          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          dialogTitle: 'Share inspection report',
-        });
-      }
-    } catch (error) {
-      if (await handleApiError(error)) return;
-      console.error('Error exporting report DOCX', error);
-      Alert.alert('Export failed', 'Could not export the report. Please try again.');
-    } finally {
-      setIsExportingDocx(false);
-    }
   };
 
   const renderTokenModal = () => (
@@ -1300,63 +1125,27 @@ export default function ProjectDetailScreen() {
 
   const renderReport = () => (
     <View style={{ gap: theme.spacing.md }}>
-      <View style={{ gap: theme.spacing.sm }}>
-        <PrimaryButton onPress={createReportForProject} loading={isGeneratingReport} disabled={!isTokenValid}>
-          {isGeneratingReport
-            ? 'Creating report...'
-            : project?.report
-            ? 'Regenerate report'
-            : 'Create report'}
-        </PrimaryButton>
-
-        <SecondaryButton
-          onPress={exportReportAsDocx}
-          loading={isExportingDocx}
-          disabled={!project?.report || !isTokenValid}
-        >
-          Export DOCX
-        </SecondaryButton>
-
-        {!project?.report && (
-          <Caption muted>Generate report first.</Caption>
-        )}
-      </View>
-
-      {isTokenValid && (
-        <View style={{ gap: theme.spacing.sm }}>
-          <View style={{ height: 1, backgroundColor: theme.colors.border }} />
-          <SecondaryButton
-            onPress={generateGoogleDocReport}
-            loading={isGeneratingGoogleDoc}
-          >
-            {isGeneratingGoogleDoc ? 'Generating Google Doc…' : 'Generate Google Doc report'}
-          </SecondaryButton>
-
-          {googleDocUrl && (
-            <GlassCard style={{ gap: theme.spacing.xs }}>
-              <Caption muted>Google Doc report ready:</Caption>
-              <TouchableOpacity onPress={() => Linking.openURL(googleDocUrl)}>
-                <Body style={{ color: theme.colors.accent, textDecorationLine: 'underline' }}>
-                  {googleDocUrl}
-                </Body>
-              </TouchableOpacity>
-            </GlassCard>
-          )}
-        </View>
-      )}
+      <PrimaryButton
+        onPress={generateGoogleDocReport}
+        loading={isGeneratingGoogleDoc}
+        disabled={!isTokenValid}
+      >
+        {isGeneratingGoogleDoc ? 'Generating…' : 'Generate Google Doc Report'}
+      </PrimaryButton>
 
       {!isTokenValid && (
         <Caption muted>Enter a valid tester token to enable report generation.</Caption>
       )}
 
-      {project?.report ? (
-        <GlassCard style={{ maxHeight: 420 }}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Body>{project.report}</Body>
-          </ScrollView>
+      {googleDocUrl && (
+        <GlassCard style={{ gap: theme.spacing.xs }}>
+          <Caption muted>Google Doc report ready:</Caption>
+          <TouchableOpacity onPress={() => Linking.openURL(googleDocUrl)}>
+            <Body style={{ color: theme.colors.accent, textDecorationLine: 'underline' }}>
+              {googleDocUrl}
+            </Body>
+          </TouchableOpacity>
         </GlassCard>
-      ) : (
-        <Caption muted>No report yet. Generate one to view it here.</Caption>
       )}
     </View>
   );
@@ -1603,8 +1392,7 @@ export default function ProjectDetailScreen() {
 
       {renderContent()}
 
-      <ReportGeneratingOverlay visible={isGeneratingReport} mode="report" />
-      <ReportGeneratingOverlay visible={isGeneratingGoogleDoc} mode="googleDoc" />
+      <ReportGeneratingOverlay visible={isGeneratingGoogleDoc} />
     </View>
   );
 }

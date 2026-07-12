@@ -23,7 +23,6 @@ import apiFetch, {
   validateTesterToken,
 } from '@/src/lib/apiFetch';
 import { Note, Project } from '@/src/features/projects/types';
-import { ReportGeneratingOverlay } from '@/src/features/projects/ReportGeneratingOverlay';
 import { loadProfile } from '@/src/storage/profileStorage';
 import { applyNoteChanges } from '@/src/features/projects/noteChanges';
 import {
@@ -74,7 +73,6 @@ export default function Index() {
   const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [activeProjectTab, setActiveProjectTab] = useState<ProjectTab>('notes');
   const [describingPhotos, setDescribingPhotos] = useState<Set<string>>(new Set());
   const [editingPhotos, setEditingPhotos] = useState<Record<string, { editing: boolean; caption: string }>>({});
@@ -271,13 +269,6 @@ export default function Index() {
   const updateProjectNotes = async (projectId: string, notes: Note[]) => {
     const changed = projects.find((p) => p.id === projectId);
     const updated = changed ? applyNoteChanges(changed, notes) : undefined;
-    const newProjects = projects.map((p) => (p.id === projectId && updated ? updated : p));
-    await saveProjectsToStorage(newProjects, updated);
-  };
-
-  const updateProjectReport = async (projectId: string, report: string) => {
-    const changed = projects.find((p) => p.id === projectId);
-    const updated = changed ? { ...changed, report } : undefined;
     const newProjects = projects.map((p) => (p.id === projectId && updated ? updated : p));
     await saveProjectsToStorage(newProjects, updated);
   };
@@ -613,66 +604,6 @@ export default function Index() {
 
 
 
-  const createReportForSelectedProject = async () => {
-    if (!selectedProject) return;
-
-    const notes = selectedProject.notes || [];
-    if (notes.length === 0) {
-      Alert.alert('No notes', 'Add some notes first.');
-      return;
-    }
-
-    const payloadNotes = notes.map((n) => ({
-      text: n.text,
-      createdAt: new Date(n.createdAt).toLocaleString(),
-      transcription: n.transcription,
-      photos: n.photos?.map(p => ({ caption: p.caption })) || [],
-      legacyImagesCount: n.images ? n.images.length : 0,
-    }));
-
-    try {
-      setIsGeneratingReport(true);
-
-      const response = await apiFetch(`${getApiBaseUrl()}/report`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          project: {
-            name: selectedProject.name,
-            inspectionDate: selectedProject.inspectionDate,
-            inspector: selectedProject.inspector,
-          },
-          notes: payloadNotes,
-        }),
-      });
-
-      if (!response.ok) {
-        console.error('Backend error: report generation failed');
-        Alert.alert('Report generation failed', 'Backend error.');
-        return;
-      }
-
-      const data = await response.json();
-      const reportText = data.report;
-
-      if (!reportText) {
-        Alert.alert('No report', 'Backend returned no report text.');
-        return;
-      }
-
-      await updateProjectReport(selectedProject.id, reportText);
-      Alert.alert('Report created', 'Saved to this project.');
-    } catch (error) {
-      if (await handleApiError(error)) return;
-      console.error('Error calling backend');
-      Alert.alert('Error', 'Could not reach backend.');
-    } finally {
-      setIsGeneratingReport(false);
-    }
-  };
-
   const handleApiError = async (error: unknown) => {
     if (error instanceof UnauthorizedError || (error as any)?.status === 401) {
       await handleUnauthorized();
@@ -981,23 +912,12 @@ export default function Index() {
 
   const renderReport = () => (
     <View style={{ gap: theme.spacing.md }}>
-      <PrimaryButton onPress={createReportForSelectedProject} loading={isGeneratingReport}>
-        {isGeneratingReport
-          ? 'Creating report...'
-          : selectedProject?.report
-          ? 'Regenerate report'
-          : 'Create report'}
-      </PrimaryButton>
-
-      {selectedProject?.report ? (
-        <GlassCard style={{ maxHeight: 420 }}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Body>{selectedProject.report}</Body>
-          </ScrollView>
-        </GlassCard>
-      ) : (
-        <Caption muted>No report yet. Generate one to view it here.</Caption>
-      )}
+      <GlassCard style={{ gap: theme.spacing.sm, alignItems: 'center' }}>
+        <Body style={{ textAlign: 'center', fontWeight: '600' }}>Generate Google Doc Report</Body>
+        <Caption muted style={{ textAlign: 'center' }}>
+          Open the project to fill in case details and generate your Google Doc report.
+        </Caption>
+      </GlassCard>
     </View>
   );
 
@@ -1112,12 +1032,7 @@ export default function Index() {
   };
 
   if (selectedProject) {
-    return (
-      <>
-        {renderProjectDetail()}
-        <ReportGeneratingOverlay visible={isGeneratingReport} mode="report" />
-      </>
-    );
+    return renderProjectDetail();
   }
 
   return renderProjectList();
