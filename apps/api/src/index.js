@@ -84,6 +84,11 @@ if (fs.existsSync(STATIC_DIR)) {
 const mediaRouter = require("./routes/media");
 app.use("/api/media", mediaRouter);
 
+// ---------- ADMIN DASHBOARD (public HTML shell, API calls carry the secret) --
+app.get("/admin-dashboard", (req, res) => {
+  res.sendFile(path.join(__dirname, "admin-dashboard.html"));
+});
+
 // ---------- ADMIN (own auth: x-admin-secret header) ----------
 // Mounted before the global tester-token guard so it uses its own middleware.
 const adminRouter = require("./routes/admin");

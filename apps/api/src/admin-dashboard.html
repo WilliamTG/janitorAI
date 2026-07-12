@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JanitorAI – Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1623;
+      --surface:   #1a2233;
+      --surface2:  #212d42;
+      --border:    rgba(100,120,160,0.25);
+      --accent:    #3b82f6;
+      --accent-h:  #60a5fa;
+      --danger:    #ef4444;
+      --danger-h:  #f87171;
+      --success:   #22c55e;
+      --text:      #e2e8f0;
+      --muted:     #94a3b8;
+      --radius:    10px;
+      --shadow:    0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    /* ── Overlay / modal ── */
+    #overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+    #overlay.hidden { display: none; }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      width: min(400px, 92vw);
+      box-shadow: var(--shadow);
+    }
+    .modal h2 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    .modal p  { color: var(--muted); font-size: 0.875rem; margin-bottom: 1.25rem; }
+
+    /* ── Main layout ── */
+    .container { max-width: 860px; margin: 0 auto; }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 2rem; gap: 1rem; flex-wrap: wrap;
+    }
+    header h1 { font-size: 1.5rem; letter-spacing: -0.02em; }
+    header h1 span { color: var(--accent); }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+    .card-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+
+    /* ── Form row ── */
+    .form-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .form-row input { flex: 1; min-width: 160px; }
+
+    input[type="text"], input[type="password"] {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 0.95rem;
+      padding: 0.6rem 0.9rem;
+      outline: none;
+      width: 100%;
+      transition: border-color 0.15s;
+    }
+    input:focus { border-color: var(--accent); }
+    input::placeholder { color: var(--muted); }
+
+    /* ── Buttons ── */
+    button {
+      border: none; cursor: pointer;
+      font-size: 0.9rem; font-weight: 600;
+      border-radius: var(--radius);
+      padding: 0.6rem 1.2rem;
+      transition: background 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+    button:active { transform: scale(0.97); }
+
+    .btn-primary { background: var(--accent);  color: #fff; }
+    .btn-primary:hover { background: var(--accent-h); }
+
+    .btn-danger  { background: transparent; color: var(--danger); border: 1px solid var(--danger); padding: 0.35rem 0.8rem; font-size: 0.8rem; }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+
+    .btn-ghost   { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { color: var(--text); border-color: var(--muted); }
+
+    /* ── Token table ── */
+    .token-list { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .token-list th {
+      text-align: left; padding: 0 0.5rem 0.75rem;
+      color: var(--muted); font-weight: 500; font-size: 0.8rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .token-list td {
+      padding: 0.75rem 0.5rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .token-list tr:last-child td { border-bottom: none; }
+    .token-list tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.72rem; font-weight: 600;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      letter-spacing: 0.04em;
+    }
+    .badge-active  { background: rgba(34,197,94,0.15); color: var(--success); }
+    .badge-revoked { background: rgba(239,68,68,0.12); color: var(--danger); }
+
+    .token-string {
+      font-family: 'Menlo', 'Consolas', monospace;
+      font-size: 0.8rem;
+      color: var(--muted);
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Status bar ── */
+    #status {
+      font-size: 0.82rem;
+      padding: 0.5rem 0.9rem;
+      border-radius: var(--radius);
+      margin-bottom: 1rem;
+      display: none;
+    }
+    #status.info    { background: rgba(59,130,246,0.15); color: var(--accent-h); display:block; }
+    #status.success { background: rgba(34,197,94,0.15);  color: var(--success);  display:block; }
+    #status.error   { background: rgba(239,68,68,0.15);  color: var(--danger-h); display:block; }
+
+    .empty-state { text-align: center; color: var(--muted); padding: 2rem 0; font-size: 0.9rem; }
+
+    .sign-out { font-size: 0.8rem; color: var(--muted); cursor: pointer; }
+    .sign-out:hover { color: var(--danger); }
+  </style>
+</head>
+<body>
+
+  <!-- ── Auth overlay ── -->
+  <div id="overlay">
+    <div class="modal">
+      <h2>🔐 Admin access</h2>
+      <p>Enter the ADMIN_SECRET to continue. It will be kept in your session only.</p>
+      <div style="display:flex; flex-direction:column; gap:0.75rem;">
+        <input id="secretInput" type="password" placeholder="ADMIN_SECRET" autocomplete="current-password" />
+        <div id="authError" style="color:var(--danger);font-size:0.82rem;display:none;">Incorrect secret — try again.</div>
+        <button class="btn-primary" onclick="submitSecret()">Unlock dashboard</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Main UI ── -->
+  <div class="container">
+    <header>
+      <h1>JanitorAI <span>Admin</span></h1>
+      <span class="sign-out" onclick="signOut()" title="Clear session and sign out">Sign out</span>
+    </header>
+
+    <div id="status"></div>
+
+    <!-- Provision form -->
+    <div class="card">
+      <div class="card-title">Provision new tester token</div>
+      <div class="form-row">
+        <input id="testerName" type="text" placeholder="Tester name (e.g. Alice)" />
+        <button class="btn-primary" onclick="provisionToken()">＋ Provision token</button>
+      </div>
+      <p style="color:var(--muted);font-size:0.8rem;margin-top:0.75rem;">
+        A cryptographically random token will be generated automatically.
+      </p>
+    </div>
+
+    <!-- Token list -->
+    <div class="card">
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Tester tokens</span>
+        <button class="btn-ghost" style="font-size:0.78rem;padding:0.3rem 0.75rem;" onclick="loadTokens()">↻ Refresh</button>
+      </div>
+      <div id="tokenTableWrap">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ── Session storage key ──────────────────────────────────────────────────────
+  const SESSION_KEY = 'janitor_admin_secret';
+
+  function getSecret() {
+    return sessionStorage.getItem(SESSION_KEY) || '';
+  }
+
+  function setSecret(s) {
+    sessionStorage.setItem(SESSION_KEY, s);
+  }
+
+  function signOut() {
+    sessionStorage.removeItem(SESSION_KEY);
+    location.reload();
+  }
+
+  // ── Auth flow ─────────────────────────────────────────────────────────────────
+  async function submitSecret() {
+    const val = document.getElementById('secretInput').value.trim();
+    if (!val) return;
+
+    // Verify by hitting the list endpoint — a 401 means wrong secret.
+    const res = await fetch('/api/admin/tokens', {
+      headers: { 'x-admin-secret': val },
+    });
+
+    if (res.status === 401) {
+      document.getElementById('authError').style.display = 'block';
+      return;
+    }
+    if (!res.ok) {
+      document.getElementById('authError').textContent = 'Server error — check that ADMIN_SECRET is configured.';
+      document.getElementById('authError').style.display = 'block';
+      return;
+    }
+
+    setSecret(val);
+    document.getElementById('overlay').classList.add('hidden');
+    renderTokenList(await res.json());
+  }
+
+  document.getElementById('secretInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submitSecret();
+  });
+
+  // ── Token generation ──────────────────────────────────────────────────────────
+  function generateToken() {
+    const buf = new Uint8Array(24);
+    crypto.getRandomValues(buf);
+    return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  // ── Status bar ────────────────────────────────────────────────────────────────
+  let statusTimer = null;
+  function showStatus(msg, type = 'info') {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = type;
+    if (statusTimer) clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => { el.className = ''; el.textContent = ''; }, 5000);
+  }
+
+  // ── Admin API helpers ─────────────────────────────────────────────────────────
+  async function apiFetch(path, opts = {}) {
+    const res = await fetch(path, {
+      ...opts,
+      headers: {
+        'x-admin-secret': getSecret(),
+        'Content-Type': 'application/json',
+        ...(opts.headers || {}),
+      },
+    });
+    if (res.status === 401) { signOut(); throw new Error('Unauthorized'); }
+    return res;
+  }
+
+  // ── Load & render token list ──────────────────────────────────────────────────
+  async function loadTokens() {
+    document.getElementById('tokenTableWrap').innerHTML = '<div class="empty-state">Loading…</div>';
+    try {
+      const res = await apiFetch('/api/admin/tokens');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
+      renderTokenList(data);
+    } catch (err) {
+      showStatus('Failed to load tokens: ' + err.message, 'error');
+    }
+  }
+
+  function renderTokenList(data) {
+    const tokens = data.tokens || [];
+    const wrap = document.getElementById('tokenTableWrap');
+
+    if (tokens.length === 0) {
+      wrap.innerHTML = '<div class="empty-state">No tokens yet. Provision one above.</div>';
+      return;
+    }
+
+    const rows = tokens.map(t => {
+      const date = new Date(t.created_at).toLocaleDateString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric'
+      });
+      const badge = t.is_active
+        ? '<span class="badge badge-active">Active</span>'
+        : '<span class="badge badge-revoked">Revoked</span>';
+      const revokeBtn = t.is_active
+        ? `<button class="btn-danger" onclick="revokeToken('${escHtml(t.token)}', this)">Revoke</button>`
+        : '—';
+
+      return `<tr>
+        <td>${escHtml(t.tester_name || '—')}</td>
+        <td><div class="token-string" title="${escHtml(t.token)}">${escHtml(t.token)}</div></td>
+        <td>${badge}</td>
+        <td style="color:var(--muted)">${date}</td>
+        <td>${revokeBtn}</td>
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <table class="token-list">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Token</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  function escHtml(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Provision ─────────────────────────────────────────────────────────────────
+  async function provisionToken() {
+    const nameEl = document.getElementById('testerName');
+    const name = nameEl.value.trim();
+    if (!name) { nameEl.focus(); showStatus('Please enter a tester name.', 'error'); return; }
+
+    const token = generateToken();
+
+    try {
+      const res = await apiFetch('/api/admin/tokens', {
+        method: 'POST',
+        body: JSON.stringify({ token, tester_name: name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
+
+      nameEl.value = '';
+      showStatus(`✓ Token provisioned for ${name}.  Copy it now: ${token}`, 'success');
+      loadTokens();
+    } catch (err) {
+      showStatus('Failed to provision: ' + err.message, 'error');
+    }
+  }
+
+  document.getElementById('testerName').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') provisionToken();
+  });
+
+  // ── Revoke ────────────────────────────────────────────────────────────────────
+  async function revokeToken(token, btn) {
+    if (!confirm(`Revoke token for "${token.slice(0, 12)}…"?\n\nThis will immediately block their access.`)) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Revoking…';
+
+    try {
+      const res = await apiFetch(`/api/admin/tokens/${encodeURIComponent(token)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
+      showStatus(`✓ Token revoked for ${data.token?.tester_name || token.slice(0, 12) + '…'}.`, 'success');
+      loadTokens();
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'Revoke';
+      showStatus('Failed to revoke: ' + err.message, 'error');
+    }
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────────────────────
+  (function init() {
+    const stored = getSecret();
+    if (stored) {
+      // Validate stored secret before hiding overlay
+      fetch('/api/admin/tokens', { headers: { 'x-admin-secret': stored } })
+        .then(res => {
+          if (res.status === 401) { signOut(); return; }
+          return res.json().then(data => {
+            document.getElementById('overlay').classList.add('hidden');
+            renderTokenList(data);
+          });
+        })
+        .catch(() => { /* leave overlay visible */ });
+    }
+  })();
+</script>
+</body>
+</html>
