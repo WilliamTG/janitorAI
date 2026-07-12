@@ -1,6 +1,7 @@
 import os
 import json
-from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
 SCOPES = [
@@ -8,55 +9,78 @@ SCOPES = [
     'https://www.googleapis.com/auth/documents'
 ]
 
-def connect_to_google_api(credentials_path):
-    """Initializes Docs and Drive services from a service account file on disk."""
-    creds = service_account.Credentials.from_service_account_file(
-        credentials_path, scopes=SCOPES
-    )
-    docs_service = build('docs', 'v1', credentials=creds)
-    drive_service = build('drive', 'v3', credentials=creds)
-    return docs_service, drive_service
 
 def connect_to_google_api_personal():
     """
-    Initializes Docs and Drive services using a Google Service Account.
+    Initializes Docs and Drive services using personal user OAuth2 credentials.
 
-    Credentials are loaded from (in priority order):
-    1. Render Secret File at /etc/secrets/service_account.json
-    2. Environment variable 'service_account.json' (full JSON string)
+    The token is loaded from the first available source (in priority order):
+      1. Render Secret File at /etc/secrets/token.json
+      2. Environment variable TOKEN_JSON  (full token JSON as a string)
+      3. Local file pointed to by TOKEN_PATH env var (defaults to ./token.json)
+
+    If the access token is expired it is refreshed automatically using the
+    refresh token — no user interaction required as long as the refresh token
+    is still valid (permanent once the OAuth app is in Production status).
     """
-    sa_json = None
+    token_data = None
 
-    # 1. Render Secret File (preferred — Render stores secret files here)
-    secret_file_path = "/etc/secrets/service_account.json"
-    if os.path.exists(secret_file_path):
-        with open(secret_file_path, "r") as f:
-            sa_json = f.read().strip()
+    # 1. Render Secret File (preferred for production deployments)
+    render_secret = "/etc/secrets/token.json"
+    if os.path.exists(render_secret):
+        with open(render_secret, "r") as f:
+            token_data = f.read().strip()
+        print("🔑 Loaded OAuth token from Render Secret File")
 
-    # 2. Fall back to environment variable (full JSON as string)
-    if not sa_json:
-        sa_json = os.environ.get("service_account.json")
+    # 2. Environment variable containing the full token JSON as a string
+    if not token_data:
+        token_data = os.environ.get("TOKEN_JSON")
+        if token_data:
+            print("🔑 Loaded OAuth token from TOKEN_JSON environment variable")
 
-    if not sa_json:
+    # 3. Local token.json file (useful for local dev)
+    if not token_data:
+        token_path = os.environ.get("TOKEN_PATH", "token.json")
+        if os.path.exists(token_path):
+            with open(token_path, "r") as f:
+                token_data = f.read().strip()
+            print(f"🔑 Loaded OAuth token from local file: {token_path}")
+
+    if not token_data:
         raise EnvironmentError(
-            "Missing required secret 'service_account.json'. "
-            "Add it as a Render Secret File or as an environment variable "
-            "containing the full Google Service Account credentials JSON."
+            "Missing OAuth token. Supply it via one of:\n"
+            "  • Render Secret File named 'token.json'\n"
+            "  • TOKEN_JSON environment variable (full JSON string)\n"
+            "  • Local token.json file (or TOKEN_PATH pointing to one)"
         )
 
-    info = json.loads(sa_json)
-    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+    info = json.loads(token_data)
+    creds = Credentials.from_authorized_user_info(info, SCOPES)
+
+    # Refresh if the access token has expired (refresh token handles this silently)
+    if not creds.valid:
+        if creds.expired and creds.refresh_token:
+            print("🔄 Access token expired — refreshing...")
+            creds.refresh(Request())
+            print("✅ Token refreshed successfully")
+        else:
+            raise EnvironmentError(
+                "OAuth token is invalid and cannot be refreshed. "
+                "Please supply a fresh token.json."
+            )
 
     docs_service = build('docs', 'v1', credentials=creds)
     drive_service = build('drive', 'v3', credentials=creds)
     return docs_service, drive_service
+
 
 def export_doc_as_pdf(drive_service, doc_id):
     """Downloads the Google Doc as a PDF buffer."""
     return drive_service.files().export(
-        fileId=doc_id, 
+        fileId=doc_id,
         mimeType='application/pdf'
     ).execute()
+
 
 def upload_knowledge_base(genai_client, folder_path):
     uploaded_files = []
@@ -67,6 +91,7 @@ def upload_knowledge_base(genai_client, folder_path):
             file = genai_client.files.upload(file=path)
             uploaded_files.append(file)
     return uploaded_files
+
 
 def download_knowledge_from_drive(drive_service, folder_id, local_path):
     if not os.path.exists(local_path):
@@ -86,6 +111,7 @@ def download_knowledge_from_drive(drive_service, folder_id, local_path):
         with open(os.path.join(local_path, filename), 'wb') as f:
             f.write(request.execute())
 
+
 def download_video_from_drive(drive_service, folder_id, video_filename, local_dir):
     """
     Downloads a specific video file from Google Drive folder to local directory.
@@ -96,31 +122,29 @@ def download_video_from_drive(drive_service, folder_id, video_filename, local_di
 
     local_path = os.path.join(local_dir, video_filename)
 
-    # If file already exists locally, skip download
     if os.path.exists(local_path):
-        print(f"✅ Video allerede lastet ned: {local_path}")
+        print(f"✅ Video already downloaded: {local_path}")
         return local_path
 
-    # Search for the video file in the Drive folder
-    print(f"🔍 Søker etter '{video_filename}' i Google Drive folder {folder_id}...")
+    print(f"🔍 Searching for '{video_filename}' in Drive folder {folder_id}...")
     results = drive_service.files().list(
         q=f"'{folder_id}' in parents and name='{video_filename}'",
         fields="files(id, name, mimeType)"
     ).execute()
 
     files = results.get('files', [])
-
     if not files:
-        raise FileNotFoundError(f"Fant ikke filen '{video_filename}' i Google Drive folder {folder_id}")
+        raise FileNotFoundError(
+            f"File '{video_filename}' not found in Drive folder {folder_id}"
+        )
 
     file_id = files[0]['id']
     filename = files[0]['name']
 
-    print(f"📥 Laster ned '{filename}' fra Google Drive...")
+    print(f"📥 Downloading '{filename}' from Google Drive...")
     request = drive_service.files().get_media(fileId=file_id)
-
     with open(local_path, 'wb') as f:
         f.write(request.execute())
 
-    print(f"✅ Video lastet ned til: {local_path}")
+    print(f"✅ Video saved to: {local_path}")
     return local_path
