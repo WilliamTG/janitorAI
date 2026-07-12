@@ -84,6 +84,11 @@ if (fs.existsSync(STATIC_DIR)) {
 const mediaRouter = require("./routes/media");
 app.use("/api/media", mediaRouter);
 
+// ---------- ADMIN (own auth: x-admin-secret header) ----------
+// Mounted before the global tester-token guard so it uses its own middleware.
+const adminRouter = require("./routes/admin");
+app.use("/api/admin", adminRouter);
+
 // ---------- APPLY TESTER TOKEN GUARD ----------
 // All routes after this point require x-tester-token header
 app.use(requireTesterToken);
