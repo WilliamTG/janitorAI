@@ -2,14 +2,105 @@ import os
 import cv2
 import time
 import gc
+import tempfile
+import requests as _requests
+from urllib.parse import urlparse as _urlparse
 from google import genai
 from models import DamageAnalysis
 from google_api import connect_to_google_api_personal, upload_knowledge_base
 from doc_engine import replace_text_in_doc, upload_and_insert_image
-from prompt import system_prompt, main_prompt
+from prompt import system_prompt, main_prompt, build_inspector_context
 from template_replacement import build_replacements
 
-def create_report(video_path, master_id, output_folder, gemini_key, report_meta: dict | None = None):
+TEMP_PHOTO_DIR = "./temp_photos"
+
+
+def _validate_media_url(url: str) -> None:
+    """
+    Validates that a URL is a safe, expected media endpoint before fetching.
+    Mirrors the same checks as _validate_video_url in server.py to prevent SSRF:
+    - Scheme must be http or https
+    - Path must match /api/media/<id>
+    - Host must match API_BASE_URL when configured
+    Raises ValueError with a descriptive message on any violation.
+    """
+    parsed = _urlparse(url)
+
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Invalid URL scheme '{parsed.scheme}' — only http/https allowed")
+
+    path_parts = parsed.path.strip("/").split("/")
+    if len(path_parts) < 3 or path_parts[0] != "api" or path_parts[1] != "media":
+        raise ValueError(
+            f"URL path '{parsed.path}' does not match expected /api/media/<id> pattern"
+        )
+
+    api_base = os.getenv("API_BASE_URL", "").rstrip("/")
+    if api_base:
+        expected = _urlparse(api_base)
+        if parsed.netloc != expected.netloc:
+            raise ValueError(
+                f"URL host '{parsed.netloc}' does not match configured API host '{expected.netloc}'"
+            )
+
+
+def _upload_inspector_photos(genai_client, project: dict) -> list:
+    """
+    Downloads each inspector photo (URL already contains auth token) and
+    uploads it to the Gemini Files API so Gemini can actually see the images.
+
+    Each URL is validated against the same allowlist used for the video URL
+    (scheme, /api/media/<id> path, host pinning) to prevent SSRF.
+
+    Skips individual photos that fail validation or download with a logged
+    warning; other photos in the same request are still attempted.
+    Returns a list of successfully uploaded Gemini file objects.
+    """
+    uploaded = []
+    notes = project.get("notes") or []
+    for note in notes:
+        for photo in (note.get("photos") or []):
+            url = (photo.get("uri") or "").strip()
+            if not url:
+                continue
+
+            # Validate before any network I/O
+            try:
+                _validate_media_url(url)
+            except ValueError as ve:
+                print(f"⛔ Rejected inspector photo URL (SSRF guard): {ve}")
+                continue  # skip this photo; do not fetch
+
+            try:
+                print(f"📸 Downloading inspector photo: {url.split('?')[0]} ...")
+                resp = _requests.get(url, timeout=30)
+                resp.raise_for_status()
+
+                content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
+                suffix = ".jpg" if "jpeg" in content_type else ".png" if "png" in content_type else ".jpg"
+
+                os.makedirs(TEMP_PHOTO_DIR, exist_ok=True)
+                fd, tmp_path = tempfile.mkstemp(dir=TEMP_PHOTO_DIR, suffix=suffix)
+                try:
+                    with os.fdopen(fd, "wb") as f:
+                        f.write(resp.content)
+                    photo_file = genai_client.files.upload(file=tmp_path)
+                    while photo_file.state.name == "PROCESSING":
+                        time.sleep(1)
+                        photo_file = genai_client.files.get(name=photo_file.name)
+                    uploaded.append(photo_file)
+                    print(f"✅ Inspector photo uploaded to Gemini: {photo_file.name}")
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+            except Exception as exc:
+                print(f"⚠️  Skipping inspector photo (fetch/upload failed): {exc}")
+    return uploaded
+
+
+def create_report(video_path, master_id, output_folder, gemini_key, report_meta: dict | None = None, project: dict | None = None):
     # 1. Init Connections
     docs, drive = connect_to_google_api_personal()
     genai_client = genai.Client(api_key=gemini_key)
@@ -20,6 +111,13 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
     while video_file.state.name == "PROCESSING":
         time.sleep(2)
         video_file = genai_client.files.get(name=video_file.name)
+
+    # Upload inspector photos (if any) so Gemini can analyse them alongside the video
+    photo_files = []
+    if project:
+        photo_files = _upload_inspector_photos(genai_client, project)
+        if photo_files:
+            print(f"📸 {len(photo_files)} inspector photo(s) ready for Gemini")
     
     current_dir = os.path.dirname(os.path.abspath(__file__))
     knowledge_path = os.path.join(current_dir, "temp_knowledge")
@@ -30,8 +128,11 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
     print(f"📚 Opplasting av kunnskapsbase fra: {knowledge_path}")
     knowledge_files = upload_knowledge_base(genai_client, knowledge_path)
 
-    # Add them to your content list
-    contents = [video_file] + knowledge_files + [main_prompt()]
+    # Build contents: video → inspector photos → knowledge base → context prompt → analysis prompt
+    context_text = build_inspector_context(project or {})
+    context_parts = [context_text] if context_text else []
+
+    contents = [video_file] + photo_files + knowledge_files + context_parts + [main_prompt()]
 
     print("🧠 Sending content to Gemini for analysis...")
     analysis = genai_client.models.generate_content(
@@ -47,7 +148,7 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
     ).parsed
 
     # Free memory after analysis - contents list can be large
-    del contents, knowledge_files, video_file
+    del contents, knowledge_files, video_file, photo_files
     gc.collect()
     print("🧹 Cleared analysis objects from memory")
 

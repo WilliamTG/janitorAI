@@ -12,6 +12,7 @@ app = FastAPI()
 class ReportRequest(BaseModel):
     video_url: str          # Full URL to the inspector's uploaded video (includes auth token)
     report_meta: dict = {}  # Per-project metadata for template replacements
+    project: dict = {}      # Full project context: description, notes (text/transcription/photos)
 
 TEMP_KNOWLEDGE_DIR = "./temp_knowledge"
 TEMP_VIDEO_DIR = "./videos"
@@ -150,6 +151,7 @@ async def run_analysis(fastapi_req: Request, request: ReportRequest):
             output_folder=os.getenv("OUTPUT_FOLDER") or os.getenv("FOLDER_ID"),
             gemini_key=os.getenv("GEMINI_API_KEY"),
             report_meta=request.report_meta,
+            project=request.project,
         )
         report_url = f"https://docs.google.com/document/d/{doc_id}"
         return {"status": "success", "url": report_url}

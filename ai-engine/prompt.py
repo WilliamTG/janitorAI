@@ -1,3 +1,67 @@
+def build_inspector_context(project: dict) -> str:
+    """
+    Formats the project context (description, notes, photo captions) into a
+    structured text block that is appended to the Gemini contents list so the
+    model has the inspector's observations alongside the video.
+    """
+    if not project:
+        return ""
+
+    lines = ["### INSPECTOR CONTEXT"]
+
+    # Project name and date
+    if project.get("name"):
+        lines.append(f"Project: {project['name']}")
+    if project.get("inspectionDate"):
+        lines.append(f"Inspection date: {project['inspectionDate']}")
+    if project.get("inspector"):
+        lines.append(f"Inspector: {project['inspector']}")
+
+    # Project-level description (typed or voice-transcribed)
+    desc_text = project.get("projectDescriptionText", "").strip()
+    desc_trans = project.get("projectDescriptionTranscription", "").strip()
+    if desc_text or desc_trans:
+        lines.append("\n#### Project Description")
+        if desc_text:
+            lines.append(f"(Written) {desc_text}")
+        if desc_trans and desc_trans != desc_text:
+            lines.append(f"(Voice) {desc_trans}")
+
+    # Per-note observations (text + transcription + photo captions)
+    notes = [n for n in (project.get("notes") or []) if n]
+    if notes:
+        lines.append("\n#### Inspector Notes")
+        for i, note in enumerate(notes, 1):
+            note_text = (note.get("text") or "").strip()
+            note_trans = (note.get("transcription") or "").strip()
+            photos = note.get("photos") or []
+
+            if not note_text and not note_trans and not photos:
+                continue
+
+            lines.append(f"\nNote {i}:")
+            if note_text:
+                lines.append(f"  (Written) {note_text}")
+            if note_trans and note_trans != note_text:
+                lines.append(f"  (Voice) {note_trans}")
+            for j, photo in enumerate(photos, 1):
+                caption = (photo.get("caption") or "").strip()
+                if caption:
+                    lines.append(f"  Photo {j} caption: {caption}")
+
+    if len(lines) == 1:
+        # Only the header — nothing useful was present
+        return ""
+
+    lines.append(
+        "\nUse the above inspector notes and photo captions as additional evidence "
+        "when identifying the damage area, source, and cause. "
+        "Where the inspector's observations confirm or contradict what is visible in "
+        "the video, prioritise the combined evidence over the video alone."
+    )
+    return "\n".join(lines)
+
+
 def system_prompt():
     return """## ROLLE
 Du er en Senior Teknisk Etterforsker innen bygningsfysikk. Din oppgave er å analysere videoopptak av skader for å identifisere den tekniske rotårsaken (Root Cause) og skille mellom akutte hendelser og gradvis utvikling.
