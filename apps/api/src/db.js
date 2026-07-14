@@ -103,6 +103,7 @@ ALTER TABLE deleted_projects ADD COLUMN IF NOT EXISTS tester_token   VARCHAR;
 ALTER TABLE media           ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
 ALTER TABLE media           ADD COLUMN IF NOT EXISTS unreferenced_at TIMESTAMPTZ;
 ALTER TABLE tester_tokens   ADD COLUMN IF NOT EXISTS email           TEXT;
+ALTER TABLE user_actions    ADD COLUMN IF NOT EXISTS device_info    JSONB;
 `;
 
 // ── Default-token seed + data migration ──────────────────────────────────────

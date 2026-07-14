@@ -90,6 +90,14 @@ app.get("/admin-dashboard", (req, res) => {
 const adminRouter = require("./routes/admin");
 app.use("/api/admin", adminRouter);
 
+// ---------- CLIENT LOGS (UNAUTHENTICATED OK) ----------
+// Mounted before the global tester-token guard so log writes succeed even when
+// the device has no valid token yet (e.g. background syncs before first login).
+// optionalTesterToken enriches req.testerToken when a valid token IS present.
+const optionalTesterToken = require("./middleware/optionalTesterToken");
+const logsRouter = require("./routes/logs");
+app.use("/api/logs", optionalTesterToken, logsRouter);
+
 // ---------- APPLY TESTER TOKEN GUARD ----------
 // All routes after this point require x-tester-token header
 app.use(requireTesterToken);
@@ -97,10 +105,6 @@ app.use(requireTesterToken);
 // ---------- PROJECT PERSISTENCE (PROTECTED) ----------
 const projectsRouter = require("./routes/projects");
 app.use("/api/projects", projectsRouter);
-
-// ---------- CLIENT LOGS (PROTECTED) ----------
-const logsRouter = require("./routes/logs");
-app.use("/api/logs", logsRouter);
 
 // ---------- WHOAMI (PROTECTED) ----------
 app.get("/whoami", (req, res) => {

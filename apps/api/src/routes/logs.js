@@ -11,13 +11,21 @@ function sanitizeError(err) {
 }
 
 // ── POST /api/logs/error ──────────────────────────────────────────────────────
-// Body: { error_message, stack_trace?, action_context?, device_info? }
+// Body: { error_message, stack_trace?, action_context?, device_info?, device_id? }
+// No valid tester token is required — anonymous sessions are accepted so that
+// upload errors before login are visible in the admin Logs tab.
 router.post("/error", requireDb, async (req, res) => {
-  const { error_message, stack_trace, action_context, device_info } = req.body || {};
+  const { error_message, stack_trace, action_context, device_info, device_id } = req.body || {};
 
   if (!error_message) {
     return res.status(400).json({ error: "error_message is required" });
   }
+
+  // Merge device_id into device_info so anonymous sessions are attributable.
+  const enrichedDeviceInfo = {
+    ...(device_info && typeof device_info === "object" ? device_info : device_info ? { raw: String(device_info) } : {}),
+    ...(device_id ? { device_id: String(device_id).slice(0, 128) } : {}),
+  };
 
   try {
     const pool = getPool();
@@ -29,7 +37,7 @@ router.post("/error", requireDb, async (req, res) => {
         String(error_message).slice(0, 4000),
         stack_trace ? String(stack_trace).slice(0, 8000) : null,
         action_context ? String(action_context).slice(0, 500) : null,
-        device_info ? (typeof device_info === "object" ? device_info : { raw: String(device_info) }) : null,
+        Object.keys(enrichedDeviceInfo).length > 0 ? enrichedDeviceInfo : null,
       ]
     );
     res.status(201).json({ ok: true });
@@ -40,23 +48,27 @@ router.post("/error", requireDb, async (req, res) => {
 });
 
 // ── POST /api/logs/action ─────────────────────────────────────────────────────
-// Body: { action, duration_ms }
+// Body: { action, duration_ms, device_id? }
+// No valid tester token is required — anonymous sessions are accepted.
 router.post("/action", requireDb, async (req, res) => {
-  const { action, duration_ms } = req.body || {};
+  const { action, duration_ms, device_id } = req.body || {};
 
   if (!action) {
     return res.status(400).json({ error: "action is required" });
   }
 
+  const deviceInfo = device_id ? { device_id: String(device_id).slice(0, 128) } : null;
+
   try {
     const pool = getPool();
     await pool.query(
-      `INSERT INTO user_actions (tester_token, action, duration_ms)
-       VALUES ($1, $2, $3)`,
+      `INSERT INTO user_actions (tester_token, action, duration_ms, device_info)
+       VALUES ($1, $2, $3, $4)`,
       [
         req.testerToken || null,
         String(action).slice(0, 200),
         duration_ms != null ? Math.round(Number(duration_ms)) : null,
+        deviceInfo,
       ]
     );
     res.status(201).json({ ok: true });
