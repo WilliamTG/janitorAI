@@ -85,4 +85,34 @@ router.get("/tokens", async (req, res) => {
   }
 });
 
+// ── GET /api/admin/logs – 200 most recent errors + actions ───────────────────
+router.get("/logs", async (req, res) => {
+  try {
+    const pool = getPool();
+
+    const [errResult, actResult] = await Promise.all([
+      pool.query(
+        `SELECT id, tester_token, error_message, stack_trace, action_context, device_info, created_at
+         FROM error_logs
+         ORDER BY created_at DESC
+         LIMIT 200`
+      ),
+      pool.query(
+        `SELECT id, tester_token, action, duration_ms, created_at
+         FROM user_actions
+         ORDER BY created_at DESC
+         LIMIT 200`
+      ),
+    ]);
+
+    res.json({
+      errors: errResult.rows,
+      actions: actResult.rows,
+    });
+  } catch (err) {
+    console.error("GET /api/admin/logs error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 module.exports = router;

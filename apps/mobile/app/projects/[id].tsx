@@ -14,6 +14,7 @@ import apiFetch, {
   UnauthorizedError,
   validateTesterToken,
 } from '@/src/lib/apiFetch';
+import { logError, logAction } from '@/src/lib/logger';
 import { Note, Project, ReportMeta } from '@/src/features/projects/types';
 import { ReportDetailsSection } from '@/src/features/projects/ReportDetailsSection';
 import { ReportGeneratingOverlay } from '@/src/features/projects/ReportGeneratingOverlay';
@@ -839,6 +840,8 @@ export default function ProjectDetailScreen() {
   const generateGoogleDocReport = async () => {
     if (!project) return;
 
+    const t0 = Date.now();
+
     try {
       setIsGeneratingGoogleDoc(true);
       setGoogleDocUrl(null);
@@ -890,21 +893,27 @@ export default function ProjectDetailScreen() {
       });
 
       if (!response.ok) {
+        const errMsg = 'Failed to generate Google Doc report (HTTP ' + response.status + ')';
+        logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
         Alert.alert('Error', 'Failed to generate Google Doc report.');
         return;
       }
 
       const data = await response.json();
       if (data.status === 'error') {
+        logError(new Error(data.message || 'AI engine error'), 'generate-google-doc').catch(() => {});
         Alert.alert('Error', data.message || 'AI engine returned an error.');
         return;
       }
       if (data.url) {
+        logAction('generate-google-doc', Date.now() - t0).catch(() => {});
         setGoogleDocUrl(data.url);
       } else {
+        logError(new Error('No document URL returned from AI engine'), 'generate-google-doc').catch(() => {});
         Alert.alert('Error', 'No document URL returned.');
       }
     } catch (error) {
+      logError(error, 'generate-google-doc').catch(() => {});
       if (await handleApiError(error)) return;
       Alert.alert('Error', 'Could not reach backend.');
     } finally {

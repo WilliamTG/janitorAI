@@ -17,6 +17,7 @@
       --danger:    #ef4444;
       --danger-h:  #f87171;
       --success:   #22c55e;
+      --warn:      #f59e0b;
       --text:      #e2e8f0;
       --muted:     #94a3b8;
       --radius:    10px;
@@ -53,7 +54,7 @@
     .modal p  { color: var(--muted); font-size: 0.875rem; margin-bottom: 1.25rem; }
 
     /* ── Main layout ── */
-    .container { max-width: 860px; margin: 0 auto; }
+    .container { max-width: 960px; margin: 0 auto; }
 
     header {
       display: flex; align-items: center; justify-content: space-between;
@@ -61,6 +62,24 @@
     }
     header h1 { font-size: 1.5rem; letter-spacing: -0.02em; }
     header h1 span { color: var(--accent); }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex; gap: 0; margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      background: none; border: none; border-bottom: 2px solid transparent;
+      color: var(--muted); font-size: 0.9rem; font-weight: 600;
+      padding: 0.6rem 1.25rem; cursor: pointer; border-radius: 0;
+      margin-bottom: -1px; transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-btn:active { transform: none; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
 
     /* ── Card ── */
     .card {
@@ -133,6 +152,61 @@
     .token-list tr:last-child td { border-bottom: none; }
     .token-list tr:hover td { background: rgba(255,255,255,0.02); }
 
+    /* ── Log tables ── */
+    .log-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; table-layout: fixed; }
+    .log-table th {
+      text-align: left; padding: 0 0.5rem 0.6rem;
+      color: var(--muted); font-weight: 500; font-size: 0.78rem;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .log-table td {
+      padding: 0.6rem 0.5rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      word-break: break-word;
+    }
+    .log-table tr:last-child td { border-bottom: none; }
+    .log-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .col-time   { width: 130px; color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+    .col-token  { width: 110px; }
+    .col-action { width: 160px; }
+    .col-dur    { width: 80px;  text-align: right; }
+    .col-msg    { } /* grows */
+    .col-ctx    { width: 130px; }
+
+    .token-chip {
+      font-family: 'Menlo', 'Consolas', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: block;
+      max-width: 100px;
+    }
+
+    .dur-pill {
+      font-family: 'Menlo', 'Consolas', monospace;
+      font-size: 0.75rem;
+      color: var(--warn);
+    }
+
+    .err-msg { color: var(--danger-h); }
+    .stack-toggle {
+      font-size: 0.72rem; color: var(--muted); cursor: pointer;
+      text-decoration: underline; text-decoration-style: dotted;
+      display: inline-block; margin-top: 3px;
+    }
+    .stack-pre {
+      display: none; font-size: 0.72rem; color: var(--muted);
+      white-space: pre-wrap; word-break: break-all;
+      background: var(--surface2); border-radius: 6px;
+      padding: 0.5rem; margin-top: 0.4rem; max-height: 200px; overflow-y: auto;
+    }
+    .stack-pre.open { display: block; }
+
     .badge {
       display: inline-block;
       font-size: 0.72rem; font-weight: 600;
@@ -169,6 +243,8 @@
 
     .sign-out { font-size: 0.8rem; color: var(--muted); cursor: pointer; }
     .sign-out:hover { color: var(--danger); }
+
+    .section-gap { margin-top: 1.5rem; }
   </style>
 </head>
 <body>
@@ -195,27 +271,56 @@
 
     <div id="status"></div>
 
-    <!-- Provision form -->
-    <div class="card">
-      <div class="card-title">Provision new tester token</div>
-      <div class="form-row">
-        <input id="testerName" type="text" placeholder="Tester name (e.g. Alice)" />
-        <input id="testerEmail" type="email" placeholder="Email (optional — to auto-share reports)" />
-        <button class="btn-primary" onclick="provisionToken()">＋ Provision token</button>
-      </div>
-      <p style="color:var(--muted);font-size:0.8rem;margin-top:0.75rem;">
-        A cryptographically random token will be generated automatically.
-      </p>
+    <!-- ── Tabs ── -->
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-tokens-btn" onclick="switchTab('tokens')">Tokens</button>
+      <button class="tab-btn" id="tab-logs-btn" onclick="switchTab('logs')">Logs</button>
     </div>
 
-    <!-- Token list -->
-    <div class="card">
-      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
-        <span>Tester tokens</span>
-        <button class="btn-ghost" style="font-size:0.78rem;padding:0.3rem 0.75rem;" onclick="loadTokens()">↻ Refresh</button>
+    <!-- ══ TOKENS TAB ══ -->
+    <div class="tab-panel active" id="tab-tokens">
+      <!-- Provision form -->
+      <div class="card">
+        <div class="card-title">Provision new tester token</div>
+        <div class="form-row">
+          <input id="testerName" type="text" placeholder="Tester name (e.g. Alice)" />
+          <input id="testerEmail" type="email" placeholder="Email (optional — to auto-share reports)" />
+          <button class="btn-primary" onclick="provisionToken()">＋ Provision token</button>
+        </div>
+        <p style="color:var(--muted);font-size:0.8rem;margin-top:0.75rem;">
+          A cryptographically random token will be generated automatically.
+        </p>
       </div>
-      <div id="tokenTableWrap">
-        <div class="empty-state">Loading…</div>
+
+      <!-- Token list -->
+      <div class="card">
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>Tester tokens</span>
+          <button class="btn-ghost" style="font-size:0.78rem;padding:0.3rem 0.75rem;" onclick="loadTokens()">↻ Refresh</button>
+        </div>
+        <div id="tokenTableWrap">
+          <div class="empty-state">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ LOGS TAB ══ -->
+    <div class="tab-panel" id="tab-logs">
+      <div class="card">
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>Recent errors</span>
+          <button class="btn-ghost" style="font-size:0.78rem;padding:0.3rem 0.75rem;" onclick="loadLogs()">↻ Refresh</button>
+        </div>
+        <div id="errorTableWrap">
+          <div class="empty-state">Loading…</div>
+        </div>
+      </div>
+
+      <div class="card section-gap">
+        <div class="card-title">Recent actions &amp; timings</div>
+        <div id="actionTableWrap">
+          <div class="empty-state">Loading…</div>
+        </div>
       </div>
     </div>
   </div>
@@ -235,6 +340,15 @@
   function signOut() {
     sessionStorage.removeItem(SESSION_KEY);
     location.reload();
+  }
+
+  // ── Tab switching ─────────────────────────────────────────────────────────────
+  function switchTab(name) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + name + '-btn').classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+    if (name === 'logs') loadLogs();
   }
 
   // ── Auth flow ─────────────────────────────────────────────────────────────────
@@ -414,6 +528,108 @@
       btn.textContent = 'Revoke';
       showStatus('Failed to revoke: ' + err.message, 'error');
     }
+  }
+
+  // ── Logs ──────────────────────────────────────────────────────────────────────
+  async function loadLogs() {
+    document.getElementById('errorTableWrap').innerHTML = '<div class="empty-state">Loading…</div>';
+    document.getElementById('actionTableWrap').innerHTML = '<div class="empty-state">Loading…</div>';
+    try {
+      const res = await apiFetch('/api/admin/logs');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
+      renderErrorTable(data.errors || []);
+      renderActionTable(data.actions || []);
+    } catch (err) {
+      showStatus('Failed to load logs: ' + err.message, 'error');
+      document.getElementById('errorTableWrap').innerHTML = '<div class="empty-state">Failed to load.</div>';
+      document.getElementById('actionTableWrap').innerHTML = '<div class="empty-state">Failed to load.</div>';
+    }
+  }
+
+  function fmtTime(ts) {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    return d.toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+  }
+
+  function renderErrorTable(errors) {
+    const wrap = document.getElementById('errorTableWrap');
+    if (errors.length === 0) {
+      wrap.innerHTML = '<div class="empty-state">No errors logged yet. 🎉</div>';
+      return;
+    }
+
+    const rows = errors.map((e, i) => {
+      const stackId = 'stack-' + i;
+      const stackHtml = e.stack_trace
+        ? `<span class="stack-toggle" onclick="toggleStack('${stackId}')">show stack</span>
+           <pre class="stack-pre" id="${stackId}">${escHtml(e.stack_trace)}</pre>`
+        : '';
+      const tokenShort = e.tester_token ? e.tester_token.slice(0, 10) + '…' : '—';
+
+      return `<tr>
+        <td class="col-time">${fmtTime(e.created_at)}</td>
+        <td class="col-token"><span class="token-chip" title="${escHtml(e.tester_token || '')}">${escHtml(tokenShort)}</span></td>
+        <td class="col-ctx">${escHtml(e.action_context || '—')}</td>
+        <td class="col-msg"><span class="err-msg">${escHtml(e.error_message)}</span>${stackHtml}</td>
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <table class="log-table">
+        <thead>
+          <tr>
+            <th class="col-time">Time</th>
+            <th class="col-token">Token</th>
+            <th class="col-ctx">Context</th>
+            <th class="col-msg">Message</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  function renderActionTable(actions) {
+    const wrap = document.getElementById('actionTableWrap');
+    if (actions.length === 0) {
+      wrap.innerHTML = '<div class="empty-state">No actions logged yet.</div>';
+      return;
+    }
+
+    const rows = actions.map(a => {
+      const tokenShort = a.tester_token ? a.tester_token.slice(0, 10) + '…' : '—';
+      const dur = a.duration_ms != null
+        ? `<span class="dur-pill">${Number(a.duration_ms).toLocaleString()} ms</span>`
+        : '—';
+
+      return `<tr>
+        <td class="col-time">${fmtTime(a.created_at)}</td>
+        <td class="col-token"><span class="token-chip" title="${escHtml(a.tester_token || '')}">${escHtml(tokenShort)}</span></td>
+        <td class="col-action">${escHtml(a.action)}</td>
+        <td class="col-dur">${dur}</td>
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <table class="log-table">
+        <thead>
+          <tr>
+            <th class="col-time">Time</th>
+            <th class="col-token">Token</th>
+            <th class="col-action">Action</th>
+            <th class="col-dur" style="text-align:right">Duration</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  function toggleStack(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('open');
   }
 
   // ── Boot ──────────────────────────────────────────────────────────────────────

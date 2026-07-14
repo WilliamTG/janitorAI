@@ -76,6 +76,27 @@ CREATE TABLE IF NOT EXISTS media (
 
 CREATE INDEX IF NOT EXISTS media_project_id_idx ON media (project_id);
 
+CREATE TABLE IF NOT EXISTS error_logs (
+  id            BIGSERIAL   PRIMARY KEY,
+  tester_token  VARCHAR,
+  error_message TEXT,
+  stack_trace   TEXT,
+  action_context TEXT,
+  device_info   JSONB,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS user_actions (
+  id            BIGSERIAL   PRIMARY KEY,
+  tester_token  VARCHAR,
+  action        TEXT        NOT NULL,
+  duration_ms   INTEGER,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS error_logs_created_at_idx  ON error_logs  (created_at DESC);
+CREATE INDEX IF NOT EXISTS user_actions_created_at_idx ON user_actions (created_at DESC);
+
 -- Incremental migrations for pre-existing deployments
 ALTER TABLE projects        ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
 ALTER TABLE deleted_projects ADD COLUMN IF NOT EXISTS tester_token   VARCHAR;

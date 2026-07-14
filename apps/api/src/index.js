@@ -98,6 +98,10 @@ app.use(requireTesterToken);
 const projectsRouter = require("./routes/projects");
 app.use("/api/projects", projectsRouter);
 
+// ---------- CLIENT LOGS (PROTECTED) ----------
+const logsRouter = require("./routes/logs");
+app.use("/api/logs", logsRouter);
+
 // ---------- WHOAMI (PROTECTED) ----------
 app.get("/whoami", (req, res) => {
   res.json({ authorized: true });
