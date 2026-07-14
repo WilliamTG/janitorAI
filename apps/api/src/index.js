@@ -272,6 +272,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
         video_url: videoUrl,
         report_meta: report_meta || {},
         project: projectContext,
+        tester_email: req.testerEmail || "",
       }),
     });
 
@@ -284,6 +285,67 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error("Backend /report/google-doc error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ---------- REPORT DOWNLOAD PROXY (PDF / DOCX) ----------
+// GET /api/projects/:id/download/pdf?doc_url=<google-doc-url>
+// GET /api/projects/:id/download/docx?doc_url=<google-doc-url>
+//
+// Proxies an export request to the AI engine so the mobile app can receive
+// a PDF or Word file directly without needing a Google account.
+// The :id segment is kept for semantic clarity and future ownership checks;
+// the doc_id is extracted from the ?doc_url query parameter.
+app.get("/api/projects/:id/download/:format", async (req, res) => {
+  const { format } = req.params;
+  if (!["pdf", "docx"].includes(format)) {
+    return res.status(400).json({ error: "format must be 'pdf' or 'docx'" });
+  }
+
+  const docUrl = req.query.doc_url;
+  if (!docUrl) {
+    return res.status(400).json({ error: "doc_url query parameter is required" });
+  }
+
+  // Extract the document ID from the Google Docs URL
+  const match = String(docUrl).match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
+  if (!match) {
+    return res.status(400).json({ error: "Invalid Google Doc URL" });
+  }
+  const docId = match[1];
+
+  const aiEngineUrl = process.env.AI_ENGINE_URL;
+  if (!aiEngineUrl) {
+    return res.status(503).json({ error: "AI engine not configured" });
+  }
+
+  try {
+    const token = req.headers["x-tester-token"] || "";
+    const aiRes = await fetch(
+      `${aiEngineUrl}/api/export/${encodeURIComponent(docId)}?format=${format}`,
+      { headers: { "x-tester-token": token } }
+    );
+
+    if (!aiRes.ok) {
+      const body = await aiRes.text();
+      console.error(`AI engine /api/export error (${aiRes.status}):`, body.slice(0, 200));
+      return res.status(502).json({ error: "Export failed" });
+    }
+
+    const ext = format === "pdf" ? "pdf" : "docx";
+    const contentType =
+      format === "pdf"
+        ? "application/pdf"
+        : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="report.${ext}"`);
+
+    const buffer = await aiRes.arrayBuffer();
+    res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error("Backend /download error:", sanitizeError(err));
     res.status(500).json({ error: "Server error" });
   }
 });

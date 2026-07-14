@@ -74,12 +74,40 @@ def connect_to_google_api_personal():
     return docs_service, drive_service
 
 
-def export_doc_as_pdf(drive_service, doc_id):
+def export_doc_as_pdf(drive_service, doc_id: str) -> bytes:
     """Downloads the Google Doc as a PDF buffer."""
     return drive_service.files().export(
         fileId=doc_id,
         mimeType='application/pdf'
     ).execute()
+
+
+def export_doc_as_docx(drive_service, doc_id: str) -> bytes:
+    """Downloads the Google Doc as a Word (.docx) buffer."""
+    return drive_service.files().export(
+        fileId=doc_id,
+        mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ).execute()
+
+
+def share_doc_with_email(drive_service, doc_id: str, email: str, role: str = 'reader') -> None:
+    """
+    Shares the Google Doc with the given email address.
+
+    role can be 'reader' (view-only) or 'writer' (can edit).
+    An email notification is sent automatically by Google Drive.
+    """
+    permission = {
+        'type': 'user',
+        'role': role,
+        'emailAddress': email,
+    }
+    drive_service.permissions().create(
+        fileId=doc_id,
+        body=permission,
+        sendNotificationEmail=True,
+    ).execute()
+    print(f"✅ Shared doc {doc_id} with {email} as {role}")
 
 
 def upload_knowledge_base(genai_client, folder_path):

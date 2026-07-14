@@ -16,11 +16,12 @@ async function requireTesterToken(req, res, next) {
   // ── DB-backed path ────────────────────────────────────────────────────────
   if (isDbEnabled()) {
     try {
-      const token = await lookupToken(providedToken);
-      if (!token) {
+      const row = await lookupToken(providedToken);
+      if (!row) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      req.testerToken = token;
+      req.testerToken = row.token;
+      req.testerEmail = row.email || null;
       return next();
     } catch (err) {
       console.error("Token lookup error:", err && err.message);
@@ -45,6 +46,7 @@ async function requireTesterToken(req, res, next) {
   }
 
   req.testerToken = providedToken;
+  req.testerEmail = null; // email not available in env-var fallback mode
   next();
 }
 

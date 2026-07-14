@@ -200,6 +200,7 @@
       <div class="card-title">Provision new tester token</div>
       <div class="form-row">
         <input id="testerName" type="text" placeholder="Tester name (e.g. Alice)" />
+        <input id="testerEmail" type="email" placeholder="Email (optional — to auto-share reports)" />
         <button class="btn-primary" onclick="provisionToken()">＋ Provision token</button>
       </div>
       <p style="color:var(--muted);font-size:0.8rem;margin-top:0.75rem;">
@@ -331,6 +332,7 @@
 
       return `<tr>
         <td>${escHtml(t.tester_name || '—')}</td>
+        <td>${escHtml(t.email || '—')}</td>
         <td><div class="token-string" title="${escHtml(t.token)}">${escHtml(t.token)}</div></td>
         <td>${badge}</td>
         <td style="color:var(--muted)">${date}</td>
@@ -343,6 +345,7 @@
         <thead>
           <tr>
             <th>Name</th>
+            <th>Email</th>
             <th>Token</th>
             <th>Status</th>
             <th>Created</th>
@@ -364,7 +367,9 @@
   // ── Provision ─────────────────────────────────────────────────────────────────
   async function provisionToken() {
     const nameEl = document.getElementById('testerName');
+    const emailEl = document.getElementById('testerEmail');
     const name = nameEl.value.trim();
+    const email = emailEl.value.trim();
     if (!name) { nameEl.focus(); showStatus('Please enter a tester name.', 'error'); return; }
 
     const token = generateToken();
@@ -372,13 +377,15 @@
     try {
       const res = await apiFetch('/api/admin/tokens', {
         method: 'POST',
-        body: JSON.stringify({ token, tester_name: name }),
+        body: JSON.stringify({ token, tester_name: name, email: email || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Unknown error');
 
       nameEl.value = '';
-      showStatus(`✓ Token provisioned for ${name}.  Copy it now: ${token}`, 'success');
+      emailEl.value = '';
+      const emailNote = email ? ` (reports will be shared with ${email})` : '';
+      showStatus(`✓ Token provisioned for ${name}${emailNote}.  Copy it now: ${token}`, 'success');
       loadTokens();
     } catch (err) {
       showStatus('Failed to provision: ' + err.message, 'error');

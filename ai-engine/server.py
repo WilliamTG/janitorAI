@@ -3,16 +3,18 @@ import tempfile
 import requests
 from urllib.parse import urlparse
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 from main import create_report
-from google_api import connect_to_google_api_personal, download_knowledge_from_drive
+from google_api import connect_to_google_api_personal, download_knowledge_from_drive, export_doc_as_pdf, export_doc_as_docx
 
 app = FastAPI()
 
 class ReportRequest(BaseModel):
-    video_url: str          # Full URL to the inspector's uploaded video (includes auth token)
-    report_meta: dict = {}  # Per-project metadata for template replacements
-    project: dict = {}      # Full project context: description, notes (text/transcription/photos)
+    video_url: str            # Full URL to the inspector's uploaded video (includes auth token)
+    report_meta: dict = {}    # Per-project metadata for template replacements
+    project: dict = {}        # Full project context: description, notes (text/transcription/photos)
+    tester_email: str = ""    # Email address to share the finished doc with (optional)
 
 TEMP_KNOWLEDGE_DIR = "./temp_knowledge"
 TEMP_VIDEO_DIR = "./videos"
@@ -111,6 +113,50 @@ def download_video_from_url(video_url: str, local_dir: str) -> str:
     return local_path
 
 
+@app.get("/api/export/{doc_id}")
+async def export_document(doc_id: str, format: str, fastapi_req: Request):
+    """
+    Exports a Google Doc as PDF or DOCX and streams the bytes back.
+    Called by the Node.js API when a tester requests a file download.
+
+    Query params:
+      format — 'pdf' or 'docx'
+    """
+    client_token = fastapi_req.headers.get("x-tester-token")
+    server_token = os.getenv("TESTER_TOKEN")
+    if client_token != server_token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    if format not in ("pdf", "docx"):
+        raise HTTPException(status_code=400, detail="format must be 'pdf' or 'docx'")
+
+    try:
+        _, drive_service = connect_to_google_api_personal()
+    except EnvironmentError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Failed to connect to Google API: {str(e)}")
+
+    try:
+        if format == "pdf":
+            content = export_doc_as_pdf(drive_service, doc_id)
+            mime_type = "application/pdf"
+            filename = "report.pdf"
+        else:
+            content = export_doc_as_docx(drive_service, doc_id)
+            mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            filename = "report.docx"
+    except Exception as e:
+        print(f"❌ Export failed for doc {doc_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+
+    return Response(
+        content=bytes(content) if not isinstance(content, bytes) else content,
+        media_type=mime_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.post("/api/report")
 async def run_analysis(fastapi_req: Request, request: ReportRequest):
     client_token = fastapi_req.headers.get("x-tester-token")
@@ -152,6 +198,7 @@ async def run_analysis(fastapi_req: Request, request: ReportRequest):
             gemini_key=os.getenv("GEMINI_API_KEY"),
             report_meta=request.report_meta,
             project=request.project,
+            tester_email=request.tester_email or None,
         )
         report_url = f"https://docs.google.com/document/d/{doc_id}"
         return {"status": "success", "url": report_url}

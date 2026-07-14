@@ -28,7 +28,7 @@ router.use(requireDb);
 
 // ── POST /api/admin/tokens – provision a new tester token ────────────────────
 router.post("/tokens", async (req, res) => {
-  const { token, tester_name } = req.body || {};
+  const { token, tester_name, email } = req.body || {};
 
   if (!token || typeof token !== "string" || !token.trim()) {
     return res.status(400).json({ error: "token is required" });
@@ -37,12 +37,12 @@ router.post("/tokens", async (req, res) => {
   try {
     const pool = getPool();
     const result = await pool.query(
-      `INSERT INTO tester_tokens (token, tester_name, is_active)
-       VALUES ($1, $2, TRUE)
+      `INSERT INTO tester_tokens (token, tester_name, email, is_active)
+       VALUES ($1, $2, $3, TRUE)
        ON CONFLICT (token) DO UPDATE
-         SET tester_name = EXCLUDED.tester_name, is_active = TRUE
-       RETURNING token, tester_name, is_active, created_at`,
-      [token.trim(), tester_name ? String(tester_name).trim() : null]
+         SET tester_name = EXCLUDED.tester_name, email = EXCLUDED.email, is_active = TRUE
+       RETURNING token, tester_name, email, is_active, created_at`,
+      [token.trim(), tester_name ? String(tester_name).trim() : null, email ? String(email).trim() : null]
     );
     res.status(201).json({ token: result.rows[0] });
   } catch (err) {
@@ -76,7 +76,7 @@ router.get("/tokens", async (req, res) => {
   try {
     const pool = getPool();
     const result = await pool.query(
-      "SELECT token, tester_name, is_active, created_at FROM tester_tokens ORDER BY created_at DESC"
+      "SELECT token, tester_name, email, is_active, created_at FROM tester_tokens ORDER BY created_at DESC"
     );
     res.json({ tokens: result.rows });
   } catch (err) {

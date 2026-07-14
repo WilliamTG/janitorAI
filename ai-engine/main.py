@@ -7,7 +7,7 @@ import requests as _requests
 from urllib.parse import urlparse as _urlparse
 from google import genai
 from models import DamageAnalysis
-from google_api import connect_to_google_api_personal, upload_knowledge_base
+from google_api import connect_to_google_api_personal, upload_knowledge_base, share_doc_with_email
 from doc_engine import replace_text_in_doc, upload_and_insert_image
 from prompt import system_prompt, main_prompt, build_inspector_context
 from template_replacement import build_replacements
@@ -100,7 +100,7 @@ def _upload_inspector_photos(genai_client, project: dict) -> list:
     return uploaded
 
 
-def create_report(video_path, master_id, output_folder, gemini_key, report_meta: dict | None = None, project: dict | None = None):
+def create_report(video_path, master_id, output_folder, gemini_key, report_meta: dict | None = None, project: dict | None = None, tester_email: str | None = None):
     # 1. Init Connections
     docs, drive = connect_to_google_api_personal()
     genai_client = genai.Client(api_key=gemini_key)
@@ -213,6 +213,14 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
         "{{damage.repairs_needed.description}}": analysis.repairs_description
     })
     replace_text_in_doc(docs, doc_id, replacements)
+
+    # 6. Share the document with the tester's email (if provided)
+    if tester_email and tester_email.strip():
+        try:
+            share_doc_with_email(drive, doc_id, tester_email.strip(), role='reader')
+        except Exception as e:
+            # Non-fatal: log and continue — report was still generated successfully
+            print(f"⚠️  Could not share doc with {tester_email}: {e}")
 
     print(f"✅ Pipeline Complete: https://docs.google.com/document/d/{doc_id}")
     return doc_id

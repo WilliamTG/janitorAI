@@ -45,6 +45,7 @@ const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS tester_tokens (
   token       VARCHAR   PRIMARY KEY,
   tester_name TEXT,
+  email       TEXT,
   is_active   BOOLEAN   NOT NULL DEFAULT TRUE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -80,6 +81,7 @@ ALTER TABLE projects        ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
 ALTER TABLE deleted_projects ADD COLUMN IF NOT EXISTS tester_token   VARCHAR;
 ALTER TABLE media           ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
 ALTER TABLE media           ADD COLUMN IF NOT EXISTS unreferenced_at TIMESTAMPTZ;
+ALTER TABLE tester_tokens   ADD COLUMN IF NOT EXISTS email           TEXT;
 `;
 
 // ── Default-token seed + data migration ──────────────────────────────────────
@@ -139,14 +141,18 @@ async function initDb() {
  * Look up a token in the DB. Returns the token string if valid+active, else null.
  * Safe to call only when isDbEnabled() === true.
  */
+/**
+ * Look up a token in the DB. Returns { token, email } if valid+active, else null.
+ * Safe to call only when isDbEnabled() === true.
+ */
 async function lookupToken(token) {
   const p = getPool();
   if (!p) return null;
   const result = await p.query(
-    "SELECT token FROM tester_tokens WHERE token = $1 AND is_active = TRUE",
+    "SELECT token, email FROM tester_tokens WHERE token = $1 AND is_active = TRUE",
     [token]
   );
-  return result.rows.length > 0 ? result.rows[0].token : null;
+  return result.rows.length > 0 ? result.rows[0] : null;
 }
 
 /**
