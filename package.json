@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/api",
+    "apps/mobile",
+    "packages/shared"
   ],
   "scripts": {
+    "preinstall": "node scripts/check-workspaces.js",
     "dev:api": "npm --workspace apps/api run start",
     "dev:mobile": "npm --workspace apps/mobile run start",
     "dev": "concurrently -n api,mobile -c blue,magenta \"npm:dev:api\" \"npm:dev:mobile\"",
