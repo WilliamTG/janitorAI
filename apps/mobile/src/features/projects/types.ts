@@ -91,6 +91,12 @@ export type Project = {
   deletedNotes?: Record<string, string>;
   /** Per-project metadata used to populate Google Doc template placeholders. */
   reportMeta?: ReportMeta;
+  /** URL of the generated Google Doc (persisted after successful generation). */
+  reportUrl?: string;
+  /** Lifecycle status of the most recent report generation attempt. */
+  reportStatus?: 'processing' | 'ready' | 'failed';
+  /** Human-readable error from the last failed generation (shown on the project card). */
+  reportError?: string;
 };
 
 export const PROJECT_STORAGE_KEY = '@inspection_projects';

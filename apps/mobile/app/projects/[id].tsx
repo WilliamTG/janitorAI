@@ -210,6 +210,14 @@ export default function ProjectDetailScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id]);
 
+  // Restore the Google Doc URL from the persisted project record when opening/re-entering.
+  useEffect(() => {
+    if (project?.reportUrl && !googleDocUrl) {
+      setGoogleDocUrl(project.reportUrl);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id, project?.reportUrl]);
+
   const updateProjectLocally = async (updated: Project) => {
     // Stamp the change time so sync can do last-write-wins.
     const touched = touchProject(updated);
@@ -837,30 +845,65 @@ export default function ProjectDetailScreen() {
 
 
 
+  const downloadReport = async (format: 'pdf' | 'docx') => {
+    const reportUrl = googleDocUrl || project?.reportUrl;
+    if (!reportUrl || !projectId) return;
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const encodedDocUrl = encodeURIComponent(reportUrl);
+      const downloadUrl = `${apiBase}/api/projects/${projectId}/download/${format}?doc_url=${encodedDocUrl}`;
+
+      if (Platform.OS === 'web') {
+        // apiFetch sends the x-tester-token header automatically
+        const response = await apiFetch(downloadUrl);
+        if (!response.ok) {
+          Alert.alert('Download failed', 'Could not download the report file.');
+          return;
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = `report.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+      } else {
+        await Linking.openURL(downloadUrl);
+      }
+    } catch (err) {
+      console.error('Download error:', err);
+      Alert.alert('Download failed', 'Could not download the report.');
+    }
+  };
+
   const generateGoogleDocReport = async () => {
     if (!project) return;
 
     const t0 = Date.now();
+    // Snapshot to avoid stale-closure bugs across async boundaries
+    const snap = project;
 
     try {
       setIsGeneratingGoogleDoc(true);
       setGoogleDocUrl(null);
+      await updateProjectLocally({ ...snap, reportStatus: 'processing', reportError: undefined });
 
       // Require an uploaded video — no demo fallback
-      const videoNote = (project.notes || []).find(n => n.videoRemoteId);
+      const videoNote = (snap.notes || []).find(n => n.videoRemoteId);
       if (!videoNote) {
-        Alert.alert(
-          'No video found',
-          'Please add a video note to this project before generating a Google Doc report.',
-        );
+        const errMsg = 'No video found on this project.';
+        Alert.alert('No video found', 'Please add a video note to this project before generating a Google Doc report.');
+        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
         setIsGeneratingGoogleDoc(false);
         return;
       }
       const videoFilename = videoNote.videoRemoteId;
 
-      // Build enriched project context: include all notes with content, resolve
-      // photo URIs to their remote IDs so the backend can construct absolute URLs.
-      const enrichedNotes = (project.notes || [])
+      // Build enriched project context
+      const enrichedNotes = (snap.notes || [])
         .filter(n => n.text || n.transcription || (n.photos && n.photos.length > 0))
         .map(n => ({
           ...(n.text ? { text: n.text } : {}),
@@ -874,11 +917,11 @@ export default function ProjectDetailScreen() {
         }));
 
       const projectContext = {
-        name: project.name,
-        inspectionDate: project.inspectionDate,
-        inspector: project.inspector,
-        ...(project.projectDescriptionText ? { projectDescriptionText: project.projectDescriptionText } : {}),
-        ...(project.projectDescriptionTranscription ? { projectDescriptionTranscription: project.projectDescriptionTranscription } : {}),
+        name: snap.name,
+        inspectionDate: snap.inspectionDate,
+        inspector: snap.inspector,
+        ...(snap.projectDescriptionText ? { projectDescriptionText: snap.projectDescriptionText } : {}),
+        ...(snap.projectDescriptionTranscription ? { projectDescriptionTranscription: snap.projectDescriptionTranscription } : {}),
         notes: enrichedNotes,
       };
 
@@ -895,27 +938,35 @@ export default function ProjectDetailScreen() {
       if (!response.ok) {
         const errMsg = 'Failed to generate Google Doc report (HTTP ' + response.status + ')';
         logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
+        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
         Alert.alert('Error', 'Failed to generate Google Doc report.');
         return;
       }
 
       const data = await response.json();
       if (data.status === 'error') {
-        logError(new Error(data.message || 'AI engine error'), 'generate-google-doc').catch(() => {});
-        Alert.alert('Error', data.message || 'AI engine returned an error.');
+        const errMsg = data.message || 'AI engine returned an error.';
+        logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
+        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
+        Alert.alert('Error', errMsg);
         return;
       }
       if (data.url) {
         logAction('generate-google-doc', Date.now() - t0).catch(() => {});
         setGoogleDocUrl(data.url);
+        await updateProjectLocally({ ...snap, reportUrl: data.url, reportStatus: 'ready', reportError: undefined });
       } else {
-        logError(new Error('No document URL returned from AI engine'), 'generate-google-doc').catch(() => {});
-        Alert.alert('Error', 'No document URL returned.');
+        const errMsg = 'No document URL returned from AI engine.';
+        logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
+        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
+        Alert.alert('Error', errMsg);
       }
     } catch (error) {
       logError(error, 'generate-google-doc').catch(() => {});
       if (await handleApiError(error)) return;
-      Alert.alert('Error', 'Could not reach backend.');
+      const errMsg = 'Could not reach backend.';
+      await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
+      Alert.alert('Error', errMsg);
     } finally {
       setIsGeneratingGoogleDoc(false);
     }
@@ -1132,32 +1183,70 @@ export default function ProjectDetailScreen() {
     </Animated.View>
   );
 
-  const renderReport = () => (
-    <View style={{ gap: theme.spacing.md }}>
-      <PrimaryButton
-        onPress={generateGoogleDocReport}
-        loading={isGeneratingGoogleDoc}
-        disabled={!isTokenValid}
-      >
-        {isGeneratingGoogleDoc ? 'Generating…' : 'Generate Google Doc Report'}
-      </PrimaryButton>
+  const renderReport = () => {
+    const displayUrl = googleDocUrl || project?.reportUrl;
+    const reportFailed = project?.reportStatus === 'failed';
 
-      {!isTokenValid && (
-        <Caption muted>Enter a valid tester token to enable report generation.</Caption>
-      )}
+    return (
+      <View style={{ gap: theme.spacing.md }}>
+        <PrimaryButton
+          onPress={generateGoogleDocReport}
+          loading={isGeneratingGoogleDoc}
+          disabled={!isTokenValid || isGeneratingGoogleDoc}
+        >
+          {isGeneratingGoogleDoc ? 'Generating…' : 'Generate Google Doc Report'}
+        </PrimaryButton>
 
-      {googleDocUrl && (
-        <GlassCard style={{ gap: theme.spacing.xs }}>
-          <Caption muted>Google Doc report ready:</Caption>
-          <TouchableOpacity onPress={() => Linking.openURL(googleDocUrl)}>
-            <Body style={{ color: theme.colors.accent, textDecorationLine: 'underline' }}>
-              {googleDocUrl}
-            </Body>
-          </TouchableOpacity>
-        </GlassCard>
-      )}
-    </View>
-  );
+        {!isTokenValid && (
+          <Caption muted>Enter a valid tester token to enable report generation.</Caption>
+        )}
+
+        {reportFailed && !displayUrl && (
+          <GlassCard style={{ gap: theme.spacing.xs, borderColor: theme.colors.danger }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+              <Ionicons name="warning" size={16} color={theme.colors.danger} />
+              <Caption style={{ color: theme.colors.danger, fontWeight: '600' }}>
+                Report generation failed
+              </Caption>
+            </View>
+            {project?.reportError ? (
+              <Caption muted>{project.reportError}</Caption>
+            ) : null}
+          </GlassCard>
+        )}
+
+        {displayUrl && (
+          <GlassCard style={{ gap: theme.spacing.sm }}>
+            <Caption muted>Google Doc report ready:</Caption>
+            <TouchableOpacity onPress={() => Linking.openURL(displayUrl)}>
+              <Body
+                style={{ color: theme.colors.accent, textDecorationLine: 'underline' }}
+                numberOfLines={2}
+              >
+                {displayUrl}
+              </Body>
+            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+              <SecondaryButton
+                style={{ flex: 1 }}
+                onPress={() => downloadReport('pdf')}
+                disabled={isGeneratingGoogleDoc}
+              >
+                ↓ PDF
+              </SecondaryButton>
+              <SecondaryButton
+                style={{ flex: 1 }}
+                onPress={() => downloadReport('docx')}
+                disabled={isGeneratingGoogleDoc}
+              >
+                ↓ Word
+              </SecondaryButton>
+            </View>
+          </GlassCard>
+        )}
+      </View>
+    );
+  };
 
   const renderProjectDescription = () => (
     <GlassCard style={{ gap: theme.spacing.sm }}>

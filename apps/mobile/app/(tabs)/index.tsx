@@ -1,30 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
-import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
-  Image,
   Modal,
-  Platform,
-  ScrollView,
   View,
 } from 'react-native';
-import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import { getApiBaseUrl } from '@/src/config/api';
-import apiFetch, {
+import {
   clearTesterToken,
   loadTesterToken,
   setTesterToken,
-  UnauthorizedError,
   validateTesterToken,
 } from '@/src/lib/apiFetch';
-import { Note, Project } from '@/src/features/projects/types';
+import { Project } from '@/src/features/projects/types';
 import { loadProfile } from '@/src/storage/profileStorage';
-import { applyNoteChanges } from '@/src/features/projects/noteChanges';
 import {
   loadProjects,
   saveProjects,
@@ -37,8 +30,6 @@ import {
   syncNow,
   touchProject,
 } from '@/src/sync/projectSync';
-import { persistMediaLocally } from '@/src/sync/persistMedia';
-import { displayMediaUri } from '@/src/sync/mediaUri';
 import MediaUploadErrorBanner from '@/src/components/MediaUploadErrorBanner';
 import SyncStatusIndicator from '@/src/components/SyncStatusIndicator';
 import {
@@ -56,37 +47,63 @@ import {
   useAppTheme,
 } from '@/src/ui';
 
-type ProjectTab = 'notes' | 'report';
+// ── Status helpers ────────────────────────────────────────────────────────────
+
+type ProjectStatus = 'draft' | 'processing' | 'ready' | 'failed';
+
+function getProjectStatus(project: Project): ProjectStatus {
+  if (project.reportStatus === 'processing') return 'processing';
+  if (project.reportUrl || project.reportStatus === 'ready') return 'ready';
+  if (project.reportStatus === 'failed') return 'failed';
+  return 'draft';
+}
+
+const STATUS_LABEL: Record<ProjectStatus, string> = {
+  draft: 'Draft',
+  processing: 'Processing AI…',
+  ready: 'Ready',
+  failed: 'Failed',
+};
+
+const STATUS_ICON: Record<Exclude<ProjectStatus, 'processing'>, keyof typeof Ionicons.glyphMap> = {
+  draft: 'ellipse-outline',
+  ready: 'checkmark-circle',
+  failed: 'warning',
+};
+
+const STATUS_COLOR: Record<ProjectStatus, string> = {
+  draft: '#94a3b8',
+  processing: '#60a5fa',
+  ready: '#22c55e',
+  failed: '#ef4444',
+};
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function Index() {
   const theme = useAppTheme();
   const router = useRouter();
+
+  // Projects
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-
-  const [isCreatingProject, setIsCreatingProject] = useState(false);
-  const [projectName, setProjectName] = useState('');
-  const [projectDate, setProjectDate] = useState(() => localDateString(new Date()));
-  const [projectInspector, setProjectInspector] = useState('');
-
-  const [noteText, setNoteText] = useState('');
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
-
   const [isLoading, setIsLoading] = useState(true);
-  const [activeProjectTab, setActiveProjectTab] = useState<ProjectTab>('notes');
-  const [describingPhotos, setDescribingPhotos] = useState<Set<string>>(new Set());
-  const [editingPhotos, setEditingPhotos] = useState<Record<string, { editing: boolean; caption: string }>>({});
 
+  // Token
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
   const [tokenStatus, setTokenStatus] = useState<'checking' | 'valid' | 'invalid'>('checking');
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [isValidatingToken, setIsValidatingToken] = useState(false);
 
-  const selectedProject = projects.find((p) => p.id === selectedProjectId);
+  // Creation wizard: 0 = closed, 1/2/3 = active step
+  const [wizardStep, setWizardStep] = useState<0 | 1 | 2 | 3>(0);
+  const [wizardName, setWizardName] = useState('');
+  const [wizardDate, setWizardDate] = useState(() => localDateString(new Date()));
+  const [wizardInspector, setWizardInspector] = useState('');
+  const [wizardDescription, setWizardDescription] = useState('');
 
-  // showModal=true only when an in-flight AI call was rejected; never on cold start.
+  // ── Token management ────────────────────────────────────────────────────────
+
   const handleUnauthorized = async (showModal = true) => {
     await clearTesterToken();
     setTokenStatus('invalid');
@@ -97,20 +114,16 @@ export default function Index() {
   useEffect(() => {
     (async () => {
       const storedToken = await loadTesterToken();
-
       if (!storedToken) {
-        // No token yet — mark invalid but don't pop modal; the banner prompts softly.
         setTokenStatus('invalid');
         return;
       }
-
       const isValid = await validateTesterToken(storedToken);
       if (isValid) {
         setTokenInput(storedToken);
         setTokenStatus('valid');
         setTokenError(null);
       } else {
-        // Stored token no longer valid — clear quietly; modal only on next AI action.
         await handleUnauthorized(false);
       }
     })();
@@ -120,23 +133,19 @@ export default function Index() {
   const saveToken = async () => {
     setTokenError(null);
     const trimmedToken = tokenInput.trim();
-
     if (!trimmedToken) {
       setTokenError('Token required. Please enter the tester token to continue.');
       return;
     }
-
     setIsValidatingToken(true);
     const isValid = await validateTesterToken(trimmedToken);
     setIsValidatingToken(false);
-
     if (isValid) {
       await setTesterToken(trimmedToken);
       setTokenStatus('valid');
       setShowTokenModal(false);
       return;
     }
-
     await handleUnauthorized();
   };
 
@@ -147,6 +156,8 @@ export default function Index() {
     setTokenError(null);
     setShowTokenModal(true);
   };
+
+  // ── Project loading & sync ──────────────────────────────────────────────────
 
   useEffect(() => {
     (async () => {
@@ -159,9 +170,6 @@ export default function Index() {
       } finally {
         setIsLoading(false);
       }
-
-      // Pull the durable copies from the server and merge (needs the token,
-      // which is loaded by the token-validation effect before this resolves).
       try {
         const merged = await pullAndMerge(loaded);
         if (merged) {
@@ -189,12 +197,10 @@ export default function Index() {
   const saveProjectsToStorage = async (newProjects: Project[], changedProject?: Project) => {
     let toSave = newProjects;
     let touched: Project | undefined;
-
     if (changedProject) {
       touched = touchProject(changedProject);
       toSave = newProjects.map((p) => (p.id === touched!.id ? touched! : p));
     }
-
     setProjects(toSave);
     try {
       await saveProjects(toSave);
@@ -202,32 +208,26 @@ export default function Index() {
       console.warn('Failed to save projects');
       Alert.alert('Warning', 'Could not save projects to your device.');
     }
-
     if (touched) {
       schedulePush(touched);
     }
   };
 
-  const resetProjectForm = () => {
-    setProjectName('');
-    setProjectDate(localDateString(new Date()));
-    setProjectInspector('');
-  };
+  // ── Project CRUD ────────────────────────────────────────────────────────────
 
-  const toggleProjectForm = () => {
-    setIsCreatingProject((prev) => {
-      const next = !prev;
-      if (!next) {
-        resetProjectForm();
-      }
-      return next;
-    });
+  const resetWizard = () => {
+    setWizardStep(0);
+    setWizardName('');
+    setWizardDate(localDateString(new Date()));
+    setWizardInspector('');
+    setWizardDescription('');
   };
 
   const createProject = async () => {
-    const name = projectName.trim();
-    const date = projectDate.trim();
-    const inspector = projectInspector.trim();
+    const name = wizardName.trim();
+    const date = wizardDate.trim();
+    const inspector = wizardInspector.trim();
+    const description = wizardDescription.trim();
 
     if (!name) {
       Alert.alert('Missing name', 'Please give the project a name.');
@@ -242,6 +242,7 @@ export default function Index() {
       inspectionDate: date || 'No date set',
       inspector: inspector || 'Unknown inspector',
       notes: [],
+      ...(description ? { projectDescriptionText: description } : {}),
       reportMeta: {
         contributors: [{}],
         buildings: [{}],
@@ -253,388 +254,46 @@ export default function Index() {
 
     const newProjects = [newProject, ...projects];
     await saveProjectsToStorage(newProjects, newProject);
-    resetProjectForm();
-    setIsCreatingProject(false);
+    resetWizard();
   };
 
   const deleteProject = async (id: string) => {
-    if (selectedProjectId === id) {
-      setSelectedProjectId(null);
-      await stopPlayback();
-    }
-    const newProjects = await deleteProjectFromStorage(id);
-    setProjects(newProjects);
-    deleteProjectRemote(id).catch(() => {});
-  };
-
-  const updateProjectNotes = async (projectId: string, notes: Note[]) => {
-    const changed = projects.find((p) => p.id === projectId);
-    const updated = changed ? applyNoteChanges(changed, notes) : undefined;
-    const newProjects = projects.map((p) => (p.id === projectId && updated ? updated : p));
-    await saveProjectsToStorage(newProjects, updated);
-  };
-
-  const addTextNote = async () => {
-    const trimmed = noteText.trim();
-    if (!trimmed) return;
-
-    if (!selectedProject) {
-      Alert.alert('Select project', 'Please select a project first.');
-      return;
-    }
-
-    const newNote: Note = {
-      id: Date.now().toString(),
-      text: trimmed,
-      createdAt: new Date().toISOString(),
-    };
-
-    const newNotes = [newNote, ...(selectedProject.notes || [])];
-    await updateProjectNotes(selectedProject.id, newNotes);
-    setNoteText('');
-  };
-
-  const deleteNote = async (id: string) => {
-    if (!selectedProject) return;
-    const newNotes = (selectedProject.notes || []).filter((n) => n.id !== id);
-    await updateProjectNotes(selectedProject.id, newNotes);
-  };
-
-  const startRecording = async () => {
-    try {
-      if (!selectedProject) {
-        Alert.alert('Select project', 'Please select a project first.');
-        return;
-      }
-
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') {
-        Alert.alert('Permission needed', 'Microphone permission is required.');
-        return;
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording: started } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      setRecording(started);
-    } catch {
-      console.error('Failed to start recording');
-      Alert.alert('Error', 'Could not start recording.');
-    }
-  };
-
-  const stopRecording = async () => {
-    try {
-      if (!recording || !selectedProject) return;
-
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecording(null);
-
-      if (!uri) {
-        Alert.alert('Error', 'No audio file found.');
-        return;
-      }
-
-      const durableUri = await persistMediaLocally(uri);
-
-      const trimmed = noteText.trim();
-      const textForNote = trimmed || 'Voice note (no text added yet – transcription later)';
-
-      const newNote: Note = {
-        id: Date.now().toString(),
-        text: textForNote,
-        createdAt: new Date().toISOString(),
-        audioUri: durableUri,
-      };
-
-      const newNotes = [newNote, ...(selectedProject.notes || [])];
-      await updateProjectNotes(selectedProject.id, newNotes);
-      setNoteText('');
-    } catch {
-      console.error('Failed to stop recording');
-      Alert.alert('Error', 'Could not stop recording.');
-      setRecording(null);
-    }
-  };
-
-  const handleRecordPress = async () => {
-    if (recording) {
-      await stopRecording();
-    } else {
-      await startRecording();
-    }
-  };
-
-  const stopPlayback = async () => {
-    try {
-      if (currentSound) {
-        const status = await currentSound.getStatusAsync();
-        if (status.isLoaded) {
-          await currentSound.stopAsync();
-        }
-        await currentSound.unloadAsync();
-      }
-    } catch {
-      console.error('Failed to stop playback');
-    } finally {
-      setCurrentSound(null);
-    }
-  };
-
-  const playAudio = async (uri?: string) => {
-    if (!uri) return;
-
-    try {
-      await stopPlayback();
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-      });
-
-      const { sound } = await Audio.Sound.createAsync({ uri });
-      setCurrentSound(sound);
-      await sound.playAsync();
-
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (!status.isLoaded) return;
-        if (status.didJustFinish) {
-          sound.unloadAsync();
-          setCurrentSound(null);
-        }
-      });
-    } catch {
-      console.error('Failed to play audio');
-      Alert.alert('Error', 'Could not play this recording.');
-    }
-  };
-
-  const transcribeNote = async (noteId: string) => {
-    if (!selectedProject) return;
-
-    const note = selectedProject.notes.find((n) => n.id === noteId);
-    if (!note || !note.audioUri) {
-      Alert.alert('No audio', 'This note has no audio to transcribe.');
-      return;
-    }
-
-    try {
-      const response = await apiFetch(`${getApiBaseUrl()}/transcribe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    Alert.alert(
+      'Delete project',
+      'This will permanently delete this project and all its notes. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const newProjects = await deleteProjectFromStorage(id);
+            setProjects(newProjects);
+            deleteProjectRemote(id).catch(() => {});
+          },
         },
-        body: JSON.stringify({
-          audioUri: note.audioUri,
-        }),
-      });
-
-      if (!response.ok) {
-        console.error('Backend /transcribe error: non-OK response');
-        Alert.alert('Transcription failed', 'The backend returned an error.');
-        return;
-      }
-
-      const data: any = await response.json();
-      const textFromApi: string | undefined = data.text;
-
-      if (!textFromApi) {
-        Alert.alert('No text', 'The transcription request succeeded but returned no text.');
-        return;
-      }
-
-      const newNotes = (selectedProject.notes || []).map((n) => (n.id === noteId ? { ...n, transcription: textFromApi } : n));
-      await updateProjectNotes(selectedProject.id, newNotes);
-      Alert.alert('Transcribed', 'The transcription has been saved to this note.');
-    } catch (error) {
-      if (await handleApiError(error)) return;
-      console.error('Transcription error');
-      Alert.alert('Transcription error', 'Something went wrong while contacting the backend.');
-    }
+      ]
+    );
   };
 
-  const autoDescribePhoto = async (noteId: string, photoId: string) => {
-    if (!selectedProject) return;
-
-    const note = selectedProject.notes.find((n) => n.id === noteId);
-    if (!note || !note.photos) {
-      Alert.alert('Error', 'Photo not found.');
-      return;
-    }
-
-    const photo = note.photos.find((p) => p.id === photoId);
-    if (!photo) {
-      Alert.alert('Error', 'Photo not found.');
-      return;
-    }
-
-    const photoKey = `${noteId}-${photoId}`;
-    setDescribingPhotos((prev) => new Set(prev).add(photoKey));
-
-    try {
-      const formData = new FormData();
-      const uriParts = photo.uri.split('.');
-      const fileType = uriParts[uriParts.length - 1];
-      
-      formData.append('file', {
-        uri: photo.uri,
-        name: `photo.${fileType}`,
-        type: `image/${fileType}`,
-      } as any);
-
-      const response = await apiFetch(`${getApiBaseUrl()}/describe-image`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        console.error('Backend /describe-image error: non-OK response');
-        Alert.alert('Description failed', 'The backend returned an error.');
-        return;
-      }
-
-      const data: any = await response.json();
-      const description: string | undefined = data.description;
-
-      if (!description) {
-        Alert.alert('No description', 'The description request succeeded but returned no text.');
-        return;
-      }
-
-      const newNotes = selectedProject.notes.map((n) => {
-        if (n.id === noteId && n.photos) {
-          return {
-            ...n,
-            photos: n.photos.map((p) =>
-              p.id === photoId
-                ? { ...p, caption: description, aiGenerated: true }
-                : p
-            ),
-          };
-        }
-        return n;
-      });
-
-      await updateProjectNotes(selectedProject.id, newNotes);
-    } catch (error) {
-      if (await handleApiError(error)) return;
-      console.error('Auto-describe error');
-      Alert.alert('Description error', 'Something went wrong while contacting the backend.');
-    } finally {
-      setDescribingPhotos((prev) => {
-        const next = new Set(prev);
-        next.delete(photoKey);
-        return next;
-      });
-    }
-  };
-
-  const updatePhotoCaption = async (noteId: string, photoId: string, newCaption: string) => {
-    if (!selectedProject) return;
-
-    const newNotes = selectedProject.notes.map((n) => {
-      if (n.id === noteId && n.photos) {
-        return {
-          ...n,
-          photos: n.photos.map((p) =>
-            p.id === photoId ? { ...p, caption: newCaption } : p
-          ),
-        };
-      }
-      return n;
-    });
-
-    await updateProjectNotes(selectedProject.id, newNotes);
-  };
-
-  const addPhotoNote = async () => {
-    if (!selectedProject) {
-      Alert.alert('Select project', 'Please select a project first.');
-      return;
-    }
-
-    let result: ImagePicker.ImagePickerResult;
-    if (Platform.OS === 'web') {
-      // On web, camera access is unreliable — use the file picker instead
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.7,
-      });
-    } else {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Camera permission is required.');
-        return;
-      }
-      result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.7,
-      });
-    }
-
-    if (result.canceled || !result.assets || result.assets.length === 0) {
-      return;
-    }
-
-    const uri = await persistMediaLocally(result.assets[0].uri);
-
-    const trimmed = noteText.trim();
-    const textForNote = trimmed || 'Photo note (no manual text added yet).';
-
-    const newNote: Note = {
-      id: Date.now().toString(),
-      text: textForNote,
-      createdAt: new Date().toISOString(),
-      photos: [{
-        id: Date.now().toString(),
-        uri,
-        caption: '',
-        aiGenerated: false,
-      }],
-    };
-
-    const newNotes = [newNote, ...(selectedProject.notes || [])];
-    await updateProjectNotes(selectedProject.id, newNotes);
-    setNoteText('');
-  };
-
-
-
-  const handleApiError = async (error: unknown) => {
-    if (error instanceof UnauthorizedError || (error as any)?.status === 401) {
-      await handleUnauthorized();
-      return true;
-    }
-
-    return false;
-  };
+  // ── Render: token modal ─────────────────────────────────────────────────────
 
   const renderTokenModal = () => (
     <Modal visible={showTokenModal} transparent animationType="fade" onRequestClose={() => setShowTokenModal(true)}>
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: theme.colors.overlay,
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: theme.spacing.lg,
-        }}
-      >
+      <View style={{
+        flex: 1,
+        backgroundColor: theme.colors.overlay,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: theme.spacing.lg,
+      }}>
         <GlassCard style={{ width: '100%', gap: theme.spacing.sm }}>
           <Title>Enter tester token</Title>
           <Body muted>Access is restricted. Enter your tester token to continue.</Body>
           {tokenError && <Caption style={{ color: theme.colors.danger }}>{tokenError}</Caption>}
           <TextField
             value={tokenInput}
-            onChangeText={(value) => {
-              setTokenInput(value);
-              setTokenError(null);
-            }}
+            onChangeText={(value) => { setTokenInput(value); setTokenError(null); }}
             placeholder="Tester token"
             autoCapitalize="none"
             autoCorrect={false}
@@ -650,19 +309,192 @@ export default function Index() {
     </Modal>
   );
 
+  // ── Render: 3-step creation wizard ─────────────────────────────────────────
+
+  const renderWizardModal = () => (
+    <Modal
+      visible={wizardStep > 0}
+      transparent
+      animationType="slide"
+      onRequestClose={resetWizard}
+    >
+      <View style={{ flex: 1, backgroundColor: theme.colors.overlay, justifyContent: 'flex-end' }}>
+        <View style={{
+          backgroundColor: theme.colors.background,
+          borderTopLeftRadius: theme.radii.lg,
+          borderTopRightRadius: theme.radii.lg,
+          padding: theme.spacing.lg,
+          paddingBottom: theme.spacing.xl * 2,
+          gap: theme.spacing.md,
+        }}>
+          {/* Step label + close */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Caption muted style={{ fontWeight: '600' }}>Step {wizardStep} of 3</Caption>
+            <IconButton onPress={resetWizard}>
+              <Ionicons name="close" size={20} color={theme.colors.muted} />
+            </IconButton>
+          </View>
+
+          {/* Dot progress bar */}
+          <View style={{ flexDirection: 'row', gap: theme.spacing.xs, alignSelf: 'center' }}>
+            {([1, 2, 3] as const).map((s) => (
+              <View
+                key={s}
+                style={{
+                  height: 8,
+                  width: s === wizardStep ? 32 : 8,
+                  borderRadius: 4,
+                  backgroundColor: s <= wizardStep ? theme.colors.accent : theme.colors.border,
+                }}
+              />
+            ))}
+          </View>
+
+          {/* Step 1 — Details */}
+          {wizardStep === 1 && (
+            <>
+              <Title style={{ fontSize: 20 }}>Inspection details</Title>
+              <TextField
+                label="Project name *"
+                value={wizardName}
+                onChangeText={setWizardName}
+                placeholder="e.g. Main lobby walkthrough"
+                autoFocus
+              />
+              <DateField label="Inspection date" value={wizardDate} onChange={setWizardDate} />
+              <TextField
+                label="Inspector name"
+                value={wizardInspector}
+                onChangeText={setWizardInspector}
+                placeholder="Your name"
+              />
+              <PrimaryButton
+                onPress={() => {
+                  if (!wizardName.trim()) {
+                    Alert.alert('Missing name', 'Please enter a project name to continue.');
+                    return;
+                  }
+                  setWizardStep(2);
+                }}
+              >
+                Next →
+              </PrimaryButton>
+            </>
+          )}
+
+          {/* Step 2 — Description */}
+          {wizardStep === 2 && (
+            <>
+              <Title style={{ fontSize: 20 }}>Project description</Title>
+              <Caption muted>
+                Optional — helps the AI generate a more focused report. You can also add this later inside the project.
+              </Caption>
+              <TextField
+                multiline
+                value={wizardDescription}
+                onChangeText={setWizardDescription}
+                placeholder="Describe the damage, location, client context, special considerations…"
+                style={{ minHeight: 120, textAlignVertical: 'top' }}
+              />
+              <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+                <SecondaryButton style={{ flex: 1 }} onPress={() => setWizardStep(1)}>
+                  ← Back
+                </SecondaryButton>
+                <PrimaryButton style={{ flex: 1 }} onPress={() => setWizardStep(3)}>
+                  Next →
+                </PrimaryButton>
+              </View>
+            </>
+          )}
+
+          {/* Step 3 — Review */}
+          {wizardStep === 3 && (
+            <>
+              <Title style={{ fontSize: 20 }}>Review & create</Title>
+              <GlassCard style={{ gap: theme.spacing.sm }}>
+                <View style={{ gap: theme.spacing.xs }}>
+                  <Caption muted>Project name</Caption>
+                  <Body>{wizardName}</Body>
+                </View>
+                <View style={{ gap: theme.spacing.xs }}>
+                  <Caption muted>Inspection date</Caption>
+                  <Body>{wizardDate || 'Not set'}</Body>
+                </View>
+                <View style={{ gap: theme.spacing.xs }}>
+                  <Caption muted>Inspector</Caption>
+                  <Body>{wizardInspector.trim() || 'Unknown inspector'}</Body>
+                </View>
+                {wizardDescription.trim() ? (
+                  <View style={{ gap: theme.spacing.xs }}>
+                    <Caption muted>Description</Caption>
+                    <Body numberOfLines={3}>{wizardDescription}</Body>
+                  </View>
+                ) : null}
+              </GlassCard>
+              <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+                <SecondaryButton style={{ flex: 1 }} onPress={() => setWizardStep(2)}>
+                  ← Back
+                </SecondaryButton>
+                <PrimaryButton style={{ flex: 1 }} onPress={createProject}>
+                  Create project
+                </PrimaryButton>
+              </View>
+            </>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // ── Render: empty state ─────────────────────────────────────────────────────
+
+  const renderEmptyState = () => (
+    <View style={{
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: theme.spacing.xl,
+      gap: theme.spacing.lg,
+      minHeight: 360,
+    }}>
+      <View style={{
+        width: 88,
+        height: 88,
+        borderRadius: 44,
+        backgroundColor: theme.colors.surfaceSecondary,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <Ionicons name="clipboard-outline" size={40} color={theme.colors.accent} />
+      </View>
+      <View style={{ alignItems: 'center', gap: theme.spacing.sm }}>
+        <Title style={{ textAlign: 'center' }}>No reports yet</Title>
+        <Body muted style={{ textAlign: 'center', maxWidth: 280 }}>
+          No inspection reports generated yet. Click below to start your first inspection!
+        </Body>
+      </View>
+      <PrimaryButton onPress={() => setWizardStep(1)} width={240}>
+        + Create first inspection
+      </PrimaryButton>
+    </View>
+  );
+
+  // ── Render: project card ────────────────────────────────────────────────────
+
   const renderProjectCard = ({ item, index }: { item: Project; index: number }) => {
     const notes = item.notes || [];
     const noteCount = notes.length;
     const audioCount = notes.filter((n) => n.audioUri).length;
     const photoCount = notes.reduce((sum, n) => sum + (n.photos?.length || 0), 0);
+    const status = getProjectStatus(item);
 
     return (
       <Animated.View entering={FadeInDown.springify().delay(index * 50)}>
-        <GlassCard style={{ marginBottom: theme.spacing.md }}>
+        <GlassCard style={{ marginBottom: theme.spacing.md, gap: theme.spacing.sm }}>
+          {/* Name + delete */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: theme.spacing.sm }}>
             <View style={{ flex: 1, gap: theme.spacing.xs }}>
               <Title numberOfLines={1}>{item.name}</Title>
-              <Caption muted>Inspection: {item.inspectionDate}</Caption>
+              <Caption muted>{item.inspectionDate}</Caption>
               <Caption muted>Inspector: {item.inspector}</Caption>
             </View>
             <IconButton
@@ -674,44 +506,57 @@ export default function Index() {
             </IconButton>
           </View>
 
-          <View
-            style={{
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              justifyContent: 'space-between',
-              marginTop: theme.spacing.md,
-              gap: theme.spacing.sm,
-            }}
-          >
+          {/* Status badge */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, flexWrap: 'wrap' }}>
+            {status === 'processing' ? (
+              <ActivityIndicator size="small" color={STATUS_COLOR.processing} />
+            ) : (
+              <Ionicons
+                name={STATUS_ICON[status as Exclude<ProjectStatus, 'processing'>]}
+                size={15}
+                color={STATUS_COLOR[status]}
+              />
+            )}
+            <Caption style={{ color: STATUS_COLOR[status], fontWeight: '600' }}>
+              {STATUS_LABEL[status]}
+            </Caption>
+            {status === 'failed' && (
+              <SecondaryButton
+                onPress={() =>
+                  Alert.alert(
+                    'Report error',
+                    item.reportError || 'An error occurred during report generation.'
+                  )
+                }
+                width={96}
+              >
+                View Error
+              </SecondaryButton>
+            )}
+          </View>
+
+          {/* Stats */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
             <StatPill icon="document-text-outline" label={`${noteCount} notes`} />
             <StatPill icon="mic-outline" label={`${audioCount} audio`} />
             <StatPill icon="camera-outline" label={`${photoCount} photos`} />
           </View>
 
-          <View style={{ flexDirection: 'row', marginTop: theme.spacing.md, gap: theme.spacing.sm }}>
-            <PrimaryButton
-              width="100%"
-              onPress={() => {
-                const route = `/projects/${item.id}`;
-
-                console.log('[Projects] Navigating to project detail', {
-                  projectId: item.id,
-                  route,
-                  expectedRouteFile: 'app/projects/[id].tsx',
-                });
-
-                router.push(route);
-              }}
-            >
-              Open
-            </PrimaryButton>
-          </View>
+          {/* CTA */}
+          <PrimaryButton
+            width="100%"
+            onPress={() => router.push(`/projects/${item.id}`)}
+          >
+            Open project →
+          </PrimaryButton>
         </GlassCard>
       </Animated.View>
     );
   };
 
-  const renderProjectListHeader = () => (
+  // ── Render: list header ─────────────────────────────────────────────────────
+
+  const renderListHeader = () => (
     <View style={{ gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View>
@@ -731,314 +576,37 @@ export default function Index() {
         </GlassCard>
       )}
 
-      {isCreatingProject && (
-        <GlassCard style={{ gap: theme.spacing.sm }}>
-          <Title>Create project</Title>
-          <TextField label="Project name" value={projectName} onChangeText={setProjectName} placeholder="Main lobby walkthrough" />
-          <DateField label="Inspection date" value={projectDate} onChange={setProjectDate} />
-          <TextField label="Inspector" value={projectInspector} onChangeText={setProjectInspector} placeholder="Your name" />
-          <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-            <PrimaryButton style={{ flex: 1 }} onPress={createProject}>Create</PrimaryButton>
-            <SecondaryButton style={{ flex: 1 }} onPress={toggleProjectForm}>Cancel</SecondaryButton>
-          </View>
-        </GlassCard>
-      )}
       <MediaUploadErrorBanner />
+
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <SyncStatusIndicator onSyncNow={handleSyncNow} />
-        <SecondaryButton onPress={toggleProjectForm} width={140}>
-          {isCreatingProject ? 'Close form' : 'New project'}
+        <SecondaryButton onPress={() => setWizardStep(1)} width={140}>
+          + New project
         </SecondaryButton>
       </View>
     </View>
   );
 
-  const renderProjectList = () => (
+  // ── Main render ─────────────────────────────────────────────────────────────
+
+  return (
     <Screen scrollable={false} style={{ flex: 1 }}>
       {renderTokenModal()}
+      {renderWizardModal()}
       <FlatList
-        data={projects}
+        data={isLoading ? [] : projects}
         keyExtractor={(item) => item.id}
         renderItem={renderProjectCard}
-        ListHeaderComponent={renderProjectListHeader()}
-        ListEmptyComponent={<Caption muted>No projects yet. Tap “New project” to start.</Caption>}
-        ItemSeparatorComponent={() => <View style={{ height: theme.spacing.sm }} />}
-        contentContainerStyle={{ paddingBottom: theme.spacing.xl * 1.5 }}
+        ListHeaderComponent={renderListHeader()}
+        ListEmptyComponent={isLoading ? null : renderEmptyState()}
+        contentContainerStyle={{ paddingBottom: theme.spacing.xl * 2, flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
       />
     </Screen>
   );
-
-  const renderNoteItem = ({ item, index }: { item: Note; index: number }) => (
-    <Animated.View entering={FadeInDown.duration(300).delay(index * 40)}>
-      <GlassCard style={{ marginBottom: theme.spacing.sm, gap: theme.spacing.xs }}>
-        <Body>{item.text}</Body>
-        <Caption muted>{new Date(item.createdAt).toLocaleString()}</Caption>
-
-        {(item.photos?.length || 0) > 0 && (
-          <View style={{ marginTop: theme.spacing.xs, gap: theme.spacing.sm }}>
-            {item.photos?.map((photo) => {
-              const photoKey = `${item.id}-${photo.id}`;
-              const isDescribing = describingPhotos.has(photoKey);
-              const editState = editingPhotos[photoKey];
-              const isEditingCaption = editState?.editing ?? false;
-              const editedCaption = editState?.caption ?? photo.caption;
-              
-              return (
-                <View key={photo.id} style={{ gap: theme.spacing.xs }}>
-                  <Image
-                    source={{ uri: displayMediaUri(photo.uri, photo.remoteId) }}
-                    style={{ width: 82, height: 82, borderRadius: theme.radii.sm }}
-                  />
-                  
-                  {isEditingCaption ? (
-                    <>
-                      <TextField
-                        value={editedCaption}
-                        onChangeText={(text) => 
-                          setEditingPhotos(prev => ({
-                            ...prev,
-                            [photoKey]: { editing: true, caption: text }
-                          }))
-                        }
-                        placeholder="Describe this photo…"
-                        multiline
-                        style={{ minHeight: 60 }}
-                      />
-                      <View style={{ flexDirection: 'row', gap: theme.spacing.xs }}>
-                        <SecondaryButton
-                          onPress={async () => {
-                            await updatePhotoCaption(item.id, photo.id, editedCaption);
-                            setEditingPhotos(prev => {
-                              const next = { ...prev };
-                              delete next[photoKey];
-                              return next;
-                            });
-                          }}
-                          width={100}
-                        >
-                          Save
-                        </SecondaryButton>
-                        <SecondaryButton
-                          onPress={() => {
-                            setEditingPhotos(prev => {
-                              const next = { ...prev };
-                              delete next[photoKey];
-                              return next;
-                            });
-                          }}
-                          width={100}
-                        >
-                          Cancel
-                        </SecondaryButton>
-                      </View>
-                    </>
-                  ) : (
-                    <>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: theme.spacing.xs }}>
-                        <Body style={{ flex: 1 }}>
-                          {photo.caption || 'No description yet'}
-                        </Body>
-                        <SecondaryButton
-                          onPress={() => {
-                            setEditingPhotos(prev => ({
-                              ...prev,
-                              [photoKey]: { editing: true, caption: photo.caption }
-                            }));
-                          }}
-                          width={80}
-                        >
-                          Edit
-                        </SecondaryButton>
-                      </View>
-                    </>
-                  )}
-                  
-                  <SecondaryButton
-                    onPress={() => autoDescribePhoto(item.id, photo.id)}
-                    loading={isDescribing}
-                    width={160}
-                  >
-                    {isDescribing ? 'Describing...' : 'Auto-describe'}
-                  </SecondaryButton>
-                </View>
-              );
-            })}
-          </View>
-        )}
-
-        {(item.images?.length || 0) > 0 && (
-          <View style={{ marginTop: theme.spacing.xs, gap: theme.spacing.xs }}>
-            <Caption muted>Photos: {item.images?.length}</Caption>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-              {item.images?.map((uri, idx) => (
-                <Image
-                  key={`${uri}-${idx}`}
-                  source={{ uri }}
-                  style={{ width: 82, height: 82, borderRadius: theme.radii.sm }}
-                />
-              ))}
-            </View>
-          </View>
-        )}
-
-        {item.audioUri && (
-          <View style={{ flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
-            <SecondaryButton onPress={() => playAudio(displayMediaUri(item.audioUri, item.audioRemoteId))} width={120}>
-              ▶ Play
-            </SecondaryButton>
-            <SecondaryButton onPress={stopPlayback} width={120}>
-              ⏹ Stop
-            </SecondaryButton>
-            <SecondaryButton onPress={() => transcribeNote(item.id)} width={160}>
-              Transcribe
-            </SecondaryButton>
-          </View>
-        )}
-
-        {item.transcription && (
-          <View style={{ marginTop: theme.spacing.xs }}>
-            <Caption muted>Transcription</Caption>
-            <Body>{item.transcription}</Body>
-          </View>
-        )}
-
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: theme.spacing.sm }}>
-          <SecondaryButton onPress={() => deleteNote(item.id)} width={120}>
-            Delete
-          </SecondaryButton>
-        </View>
-      </GlassCard>
-    </Animated.View>
-  );
-
-  const renderReport = () => (
-    <View style={{ gap: theme.spacing.md }}>
-      <GlassCard style={{ gap: theme.spacing.sm, alignItems: 'center' }}>
-        <Body style={{ textAlign: 'center', fontWeight: '600' }}>Generate Google Doc Report</Body>
-        <Caption muted style={{ textAlign: 'center' }}>
-          Open the project to fill in case details and generate your Google Doc report.
-        </Caption>
-      </GlassCard>
-    </View>
-  );
-
-  const renderProjectDetail = () => {
-    if (!selectedProject) return null;
-    const projectNotes = selectedProject.notes || [];
-    const projectHeader = (
-      <View style={{ gap: theme.spacing.md }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
-            <IconButton
-              onPress={async () => {
-                await stopPlayback();
-                setSelectedProjectId(null);
-              }}
-            >
-              <Ionicons name="chevron-back" size={18} color={theme.colors.foreground} />
-            </IconButton>
-            <View>
-              <Caption muted>Project</Caption>
-              <Title numberOfLines={1}>{selectedProject.name}</Title>
-            </View>
-          </View>
-          <IconButton onPress={() => setShowTokenModal(true)}>
-            <Ionicons name="key-outline" size={18} color={theme.colors.foreground} />
-          </IconButton>
-        </View>
-
-        <GlassCard style={{ gap: theme.spacing.xs }}>
-          <Body muted>Inspection date: {selectedProject.inspectionDate}</Body>
-          <Body muted>Inspector: {selectedProject.inspector}</Body>
-          <View style={{ flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
-            <SecondaryButton
-              style={{ flex: 1, borderColor: activeProjectTab === 'notes' ? theme.colors.accent : theme.colors.border }}
-              onPress={() => setActiveProjectTab('notes')}
-            >
-              Notes
-            </SecondaryButton>
-            <SecondaryButton
-              style={{ flex: 1, borderColor: activeProjectTab === 'report' ? theme.colors.accent : theme.colors.border }}
-              onPress={() => setActiveProjectTab('report')}
-            >
-              Report
-            </SecondaryButton>
-          </View>
-        </GlassCard>
-      </View>
-    );
-
-    const noteComposer = (
-      <GlassCard style={{ gap: theme.spacing.sm }}>
-        <Caption muted>What would you say during the inspection?</Caption>
-        <TextField
-          multiline
-          value={noteText}
-          onChangeText={setNoteText}
-          placeholder="Type your observation here..."
-          style={{ minHeight: 100, textAlignVertical: 'top' }}
-        />
-        <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-          <PrimaryButton style={{ flex: 1 }} onPress={addTextNote}>
-            Save text note
-          </PrimaryButton>
-          <SecondaryButton style={{ flex: 1 }} onPress={handleRecordPress}>
-            {recording ? 'Stop & save voice' : 'Voice note'}
-          </SecondaryButton>
-        </View>
-        <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-          <SecondaryButton style={{ flex: 1 }} onPress={addPhotoNote}>
-            Add photo
-          </SecondaryButton>
-        </View>
-      </GlassCard>
-    );
-
-    if (activeProjectTab === 'notes') {
-      return (
-        <Animated.View entering={FadeInRight.duration(320)}>
-          <Screen scrollable={false} style={{ flex: 1 }}>
-            {renderTokenModal()}
-            <FlatList
-              data={isLoading ? [] : projectNotes}
-              keyExtractor={(item) => item.id}
-              renderItem={renderNoteItem}
-              ListHeaderComponent={
-                <View style={{ gap: theme.spacing.md }}>
-                  {projectHeader}
-                  {noteComposer}
-                  {isLoading && <Caption muted>Loading notes…</Caption>}
-                </View>
-              }
-              ListEmptyComponent={!isLoading ? <Caption muted>No notes yet. Add your first observation.</Caption> : null}
-              contentContainerStyle={{ paddingBottom: theme.spacing.xl * 1.5 }}
-              showsVerticalScrollIndicator={false}
-            />
-          </Screen>
-        </Animated.View>
-      );
-    }
-
-    return (
-      <Animated.View entering={FadeInRight.duration(320)}>
-        <Screen>
-          {renderTokenModal()}
-          <View style={{ gap: theme.spacing.md }}>
-            {projectHeader}
-            {activeProjectTab === 'report' && renderReport()}
-          </View>
-        </Screen>
-      </Animated.View>
-    );
-  };
-
-  if (selectedProject) {
-    return renderProjectDetail();
-  }
-
-  return renderProjectList();
 }
+
+// ── StatPill ──────────────────────────────────────────────────────────────────
 
 type StatPillProps = {
   icon: keyof typeof Ionicons.glyphMap;
