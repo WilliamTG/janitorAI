@@ -1,0 +1,22 @@
+Since our Expo app is running as a Web app live on `janitor-ai.replit.app`, we can simplify our architecture and rely on standard web APIs for error tracking, device info, and file downloads. 
+
+Please implement a lightweight, database-backed logging, analytics, and dynamic PDF/Word export system tailored for our Web deployment:
+
+1. Database Schema Update:
+   - Create an `error_logs` table (fields: `id` SERIAL PRIMARY KEY, `tester_token` VARCHAR, `error_message` TEXT, `stack_trace` TEXT, `action_context` VARCHAR, `device_info` JSONB, `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP).
+   - Create a `user_actions` table (fields: `id` SERIAL PRIMARY KEY, `tester_token` VARCHAR, `action` VARCHAR, `duration_ms` INT, `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP) to track API/AI generation performance.
+
+2. Express Backend API routes (`apps/api/src/`):
+   - Create `POST /api/logs/error` to write web-reported errors to `error_logs`.
+   - Create `POST /api/logs/action` to log actions/performance metrics to `user_actions`.
+   - Create `GET /api/admin/logs` (secured by our `x-admin-secret` guard) to fetch all logs for the dashboard.
+   - Create endpoints `GET /api/projects/:id/download/pdf` and `GET /api/projects/:id/download/docx`. These should trigger `drive_service.files().export()` in the AI engine, download the file, and stream/send it directly as an attachment response so the browser downloads it instantly.
+
+3. Web-Compatible Logging in Expo Front-end (`apps/mobile/`):
+   - Create a utility `src/lib/logger.ts` with `logError(error, context)` and `logAction(action, durationMs)`.
+   - Instead of native mobile device libraries, use standard web APIs (`navigator.userAgent`) to capture device/browser info (e.g., "Safari on iPhone (iOS)") and package it into `device_info`.
+   - Wrap our major web events (video sync, report submission, doc generation) in try-catch blocks using this `logError` utility.
+
+4. Admin Dashboard Web UI Update:
+   - Update our static `/admin-dashboard` HTML page to include a "Logs" tab.
+   - This tab should display a clean, real-time table of recent errors and action durations, so I can easily monitor tester activity and debug issues from my browser.
