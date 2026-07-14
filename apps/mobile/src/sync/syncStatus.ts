@@ -28,3 +28,44 @@ export function useSyncStatus(): SyncState {
 
   return state;
 }
+
+// ---------- MEDIA UPLOAD FAILURE TRACKING ----------
+
+export interface MediaFailureInfo {
+  projectId: string;
+  consecutiveFailures: number;
+}
+
+let mediaFailureInfo: MediaFailureInfo | null = null;
+const mediaFailureListeners = new Set<(info: MediaFailureInfo | null) => void>();
+
+export function setMediaUploadFailures(projectId: string, consecutiveFailures: number): void {
+  mediaFailureInfo = { projectId, consecutiveFailures };
+  mediaFailureListeners.forEach((l) => l(mediaFailureInfo));
+}
+
+export function clearMediaUploadFailures(projectId: string): void {
+  if (mediaFailureInfo?.projectId === projectId) {
+    mediaFailureInfo = null;
+    mediaFailureListeners.forEach((l) => l(null));
+  }
+}
+
+export function getMediaFailureInfo(): MediaFailureInfo | null {
+  return mediaFailureInfo;
+}
+
+export function useMediaUploadError(): MediaFailureInfo | null {
+  const [info, setInfo] = useState<MediaFailureInfo | null>(mediaFailureInfo);
+
+  useEffect(() => {
+    const listener = (next: MediaFailureInfo | null) => setInfo(next);
+    mediaFailureListeners.add(listener);
+    setInfo(mediaFailureInfo);
+    return () => {
+      mediaFailureListeners.delete(listener);
+    };
+  }, []);
+
+  return info;
+}

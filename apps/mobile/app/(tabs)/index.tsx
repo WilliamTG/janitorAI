@@ -39,6 +39,7 @@ import {
 } from '@/src/sync/projectSync';
 import { persistMediaLocally } from '@/src/sync/persistMedia';
 import { displayMediaUri } from '@/src/sync/mediaUri';
+import MediaUploadErrorBanner from '@/src/components/MediaUploadErrorBanner';
 import SyncStatusIndicator from '@/src/components/SyncStatusIndicator';
 import {
   Body,
@@ -742,6 +743,7 @@ export default function Index() {
           </View>
         </GlassCard>
       )}
+      <MediaUploadErrorBanner />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <SyncStatusIndicator onSyncNow={handleSyncNow} />
         <SecondaryButton onPress={toggleProjectForm} width={140}>

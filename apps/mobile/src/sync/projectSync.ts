@@ -5,8 +5,16 @@ import { getApiBaseUrl } from '@/src/config/api';
 import apiFetch, { UnauthorizedError } from '@/src/lib/apiFetch';
 import { Note, Photo, Project } from '@/src/features/projects/types';
 import { updateProject as updateProjectInStorage } from '@/src/storage/projectsStorage';
-import { setSyncState } from './syncStatus';
+import { setSyncState, setMediaUploadFailures, clearMediaUploadFailures } from './syncStatus';
 import { logError, logAction } from '@/src/lib/logger';
+
+// Number of consecutive push cycles with at least one media upload failure
+// before we surface a warning to the inspector.
+const MEDIA_FAILURE_THRESHOLD = 3;
+
+// Tracks consecutive push cycles that contained at least one media failure,
+// keyed by project ID. Reset to 0 on a fully-clean push.
+const consecutiveMediaFailures = new Map<string, number>();
 
 const PUSH_DEBOUNCE_MS = 2000;
 
@@ -175,10 +183,14 @@ async function doUploadMedia(
 
 /**
  * Upload any media that has no durable server copy yet.
- * Returns an updated project (with remote IDs) and whether anything changed.
+ * Returns an updated project (with remote IDs), whether anything changed,
+ * and the count of items that still failed to upload.
  */
-async function uploadPendingMedia(project: Project): Promise<{ project: Project; changed: boolean }> {
+async function uploadPendingMedia(
+  project: Project,
+): Promise<{ project: Project; changed: boolean; failedCount: number }> {
   let changed = false;
+  let failedCount = 0;
 
   const notes: Note[] = await Promise.all(
     (project.notes || []).map(async (note) => {
@@ -189,6 +201,8 @@ async function uploadPendingMedia(project: Project): Promise<{ project: Project;
         if (remoteId) {
           nextNote = { ...nextNote, audioRemoteId: remoteId };
           changed = true;
+        } else {
+          failedCount += 1;
         }
       }
 
@@ -201,6 +215,7 @@ async function uploadPendingMedia(project: Project): Promise<{ project: Project;
               changed = true;
               return { ...photo, remoteId };
             }
+            failedCount += 1;
             return photo;
           }),
         );
@@ -212,6 +227,8 @@ async function uploadPendingMedia(project: Project): Promise<{ project: Project;
         if (remoteId) {
           nextNote = { ...nextNote, videoRemoteId: remoteId };
           changed = true;
+        } else {
+          failedCount += 1;
         }
       }
 
@@ -226,10 +243,12 @@ async function uploadPendingMedia(project: Project): Promise<{ project: Project;
     if (remoteId) {
       next = { ...next, projectDescriptionAudioRemoteId: remoteId };
       changed = true;
+    } else {
+      failedCount += 1;
     }
   }
 
-  return { project: next, changed };
+  return { project: next, changed, failedCount };
 }
 
 // ---------- PUSH ----------
@@ -286,8 +305,22 @@ export async function pushProject(project: Project): Promise<Project> {
   setSyncState('syncing');
 
   try {
-    const { project: withMedia, changed } = await uploadPendingMedia(project);
+    const { project: withMedia, changed, failedCount } = await uploadPendingMedia(project);
     let toPush = withMedia;
+
+    // Track consecutive push cycles that had media upload failures so we can
+    // surface a non-blocking warning to the inspector after the threshold.
+    if (failedCount > 0) {
+      const prev = consecutiveMediaFailures.get(project.id) ?? 0;
+      const next = prev + 1;
+      consecutiveMediaFailures.set(project.id, next);
+      if (next >= MEDIA_FAILURE_THRESHOLD) {
+        setMediaUploadFailures(project.id, next);
+      }
+    } else {
+      consecutiveMediaFailures.delete(project.id);
+      clearMediaUploadFailures(project.id);
+    }
 
     if (changed) {
       // Persist the remote IDs locally so we don't re-upload next time.
