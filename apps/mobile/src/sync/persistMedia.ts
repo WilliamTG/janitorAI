@@ -1,6 +1,8 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
+import { logError } from '@/src/lib/logger';
+
 /**
  * Move a freshly captured media file (photo/recording) out of temp/cache
  * storage into the app's permanent document directory, so the OS cannot
@@ -33,6 +35,7 @@ export async function persistMediaLocally(uri: string): Promise<string> {
     return destination;
   } catch (error) {
     console.warn('[persistMedia] Failed to move media to permanent storage', error);
+    logError(error, 'persist-media-local');
     return uri;
   }
 }

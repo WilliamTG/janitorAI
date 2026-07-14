@@ -6,6 +6,7 @@ import apiFetch, { UnauthorizedError } from '@/src/lib/apiFetch';
 import { Note, Photo, Project } from '@/src/features/projects/types';
 import { updateProject as updateProjectInStorage } from '@/src/storage/projectsStorage';
 import { setSyncState } from './syncStatus';
+import { logError, logAction } from '@/src/lib/logger';
 
 const PUSH_DEBOUNCE_MS = 2000;
 
@@ -120,6 +121,7 @@ async function doUploadMedia(
   kind: 'photo' | 'audio' | 'video',
   projectId: string,
 ): Promise<string | null> {
+  const startMs = Date.now();
   try {
     const formData = new FormData();
     formData.append('projectId', projectId);
@@ -129,7 +131,11 @@ async function doUploadMedia(
 
     if (Platform.OS === 'web') {
       const response = await fetch(uri);
-      if (!response.ok) return null;
+      if (!response.ok) {
+        const err = new Error(`fetch blob failed: HTTP ${response.status}`);
+        logError(err, `upload-${kind}`);
+        return null;
+      }
       const blob = await response.blob();
       const type = blob.type || meta.type;
       const ext = type.split('/')[1] || 'bin';
@@ -146,13 +152,23 @@ async function doUploadMedia(
 
     if (!response.ok) {
       console.warn('[sync] Media upload failed', response.status);
+      logError(new Error(`Media upload HTTP ${response.status}`), `upload-${kind}`);
       return null;
     }
 
     const data: any = await response.json();
-    return typeof data.id === 'string' ? data.id : null;
+    const remoteId = typeof data.id === 'string' ? data.id : null;
+
+    if (remoteId) {
+      logAction(`upload-${kind}`, Date.now() - startMs);
+    } else {
+      logError(new Error('Media upload response missing id'), `upload-${kind}`);
+    }
+
+    return remoteId;
   } catch (error) {
     console.warn('[sync] Media upload error', error);
+    logError(error, `upload-${kind}`);
     return null;
   }
 }
