@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Modal,
+  Pressable,
   View,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -101,6 +102,8 @@ export default function Index() {
   const [wizardDate, setWizardDate] = useState(() => localDateString(new Date()));
   const [wizardInspector, setWizardInspector] = useState('');
   const [wizardDescription, setWizardDescription] = useState('');
+  const [wizardMediaFiles, setWizardMediaFiles] = useState<{ name: string; size: number; type: string }[]>([]);
+  const fileInputRef = useRef<any>(null);
 
   // ── Token management ────────────────────────────────────────────────────────
 
@@ -221,6 +224,7 @@ export default function Index() {
     setWizardDate(localDateString(new Date()));
     setWizardInspector('');
     setWizardDescription('');
+    setWizardMediaFiles([]);
   };
 
   const createProject = async () => {
@@ -382,20 +386,76 @@ export default function Index() {
             </>
           )}
 
-          {/* Step 2 — Description */}
+          {/* Step 2 — Media Upload */}
           {wizardStep === 2 && (
             <>
-              <Title style={{ fontSize: 20 }}>Project description</Title>
+              <Title style={{ fontSize: 20 }}>Add media</Title>
               <Caption muted>
-                Optional — helps the AI generate a more focused report. You can also add this later inside the project.
+                Select photos and videos for this inspection. You can also add more after the project is created.
               </Caption>
-              <TextField
-                multiline
-                value={wizardDescription}
-                onChangeText={setWizardDescription}
-                placeholder="Describe the damage, location, client context, special considerations…"
-                style={{ minHeight: 120, textAlignVertical: 'top' }}
+
+              {/* Drop zone — triggers the hidden file input */}
+              <Pressable
+                onPress={() => fileInputRef.current?.click()}
+                style={{
+                  borderWidth: 2,
+                  borderStyle: 'dashed',
+                  borderColor: wizardMediaFiles.length > 0 ? theme.colors.accent : theme.colors.border,
+                  borderRadius: theme.radii.md,
+                  paddingVertical: theme.spacing.xl,
+                  paddingHorizontal: theme.spacing.lg,
+                  alignItems: 'center',
+                  gap: theme.spacing.sm,
+                  backgroundColor: wizardMediaFiles.length > 0
+                    ? `${theme.colors.accent}10`
+                    : theme.colors.surfaceSecondary,
+                }}
+              >
+                <Ionicons
+                  name="cloud-upload-outline"
+                  size={40}
+                  color={wizardMediaFiles.length > 0 ? theme.colors.accent : theme.colors.muted}
+                />
+                <Body style={{ color: wizardMediaFiles.length > 0 ? theme.colors.accent : theme.colors.muted, fontWeight: '600' }}>
+                  {wizardMediaFiles.length > 0 ? 'Tap to change selection' : 'Tap to select files'}
+                </Body>
+                <Caption muted>Photos & videos · Optional</Caption>
+              </Pressable>
+
+              {/* Hidden file input (web only) */}
+              {/* @ts-ignore */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,video/*"
+                style={{ display: 'none' }}
+                onChange={(e: any) => {
+                  const files = Array.from((e.target as HTMLInputElement).files || []) as File[];
+                  setWizardMediaFiles(files.map((f) => ({ name: f.name, size: f.size, type: f.type })));
+                }}
               />
+
+              {/* Selected file list */}
+              {wizardMediaFiles.length > 0 && (
+                <GlassCard style={{ gap: theme.spacing.xs }}>
+                  <Caption muted style={{ fontWeight: '600' }}>
+                    {wizardMediaFiles.length} file{wizardMediaFiles.length !== 1 ? 's' : ''} selected
+                  </Caption>
+                  {wizardMediaFiles.map((f, i) => (
+                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+                      <Ionicons
+                        name={f.type.startsWith('video') ? 'videocam-outline' : 'image-outline'}
+                        size={15}
+                        color={theme.colors.accent}
+                      />
+                      <Caption numberOfLines={1} style={{ flex: 1 }}>{f.name}</Caption>
+                      <Caption muted>{(f.size / 1024 / 1024).toFixed(1)} MB</Caption>
+                    </View>
+                  ))}
+                </GlassCard>
+              )}
+
               <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
                 <SecondaryButton style={{ flex: 1 }} onPress={() => setWizardStep(1)}>
                   ← Back
@@ -407,10 +467,22 @@ export default function Index() {
             </>
           )}
 
-          {/* Step 3 — Review */}
+          {/* Step 3 — Notes & Review */}
           {wizardStep === 3 && (
             <>
-              <Title style={{ fontSize: 20 }}>Review & create</Title>
+              <Title style={{ fontSize: 20 }}>Notes & review</Title>
+
+              {/* Initial notes / description */}
+              <TextField
+                label="Initial notes (optional)"
+                multiline
+                value={wizardDescription}
+                onChangeText={setWizardDescription}
+                placeholder="Describe the damage, location, client context, special considerations…"
+                style={{ minHeight: 90, textAlignVertical: 'top' }}
+              />
+
+              {/* Review summary */}
               <GlassCard style={{ gap: theme.spacing.sm }}>
                 <View style={{ gap: theme.spacing.xs }}>
                   <Caption muted>Project name</Caption>
@@ -424,13 +496,14 @@ export default function Index() {
                   <Caption muted>Inspector</Caption>
                   <Body>{wizardInspector.trim() || 'Unknown inspector'}</Body>
                 </View>
-                {wizardDescription.trim() ? (
+                {wizardMediaFiles.length > 0 && (
                   <View style={{ gap: theme.spacing.xs }}>
-                    <Caption muted>Description</Caption>
-                    <Body numberOfLines={3}>{wizardDescription}</Body>
+                    <Caption muted>Media selected</Caption>
+                    <Body>{wizardMediaFiles.length} file{wizardMediaFiles.length !== 1 ? 's' : ''}</Body>
                   </View>
-                ) : null}
+                )}
               </GlassCard>
+
               <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
                 <SecondaryButton style={{ flex: 1 }} onPress={() => setWizardStep(2)}>
                   ← Back
@@ -578,9 +651,9 @@ export default function Index() {
 
       <MediaUploadErrorBanner />
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.sm }}>
         <SyncStatusIndicator onSyncNow={handleSyncNow} />
-        <SecondaryButton onPress={() => setWizardStep(1)} width={140}>
+        <SecondaryButton onPress={() => setWizardStep(1)}>
           + New project
         </SecondaryButton>
       </View>

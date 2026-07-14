@@ -55,9 +55,14 @@ export const DateField = ({ value, onChange, label }: DateFieldProps) => {
               padding: theme.spacing.sm,
               fontSize: 16,
               boxSizing: 'border-box',
-              fontFamily: 'inherit',
+              // Use the system-ui font stack to match the rest of the app
+              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
               cursor: 'pointer',
               outline: 'none',
+              // Force the calendar popup to match the app's color scheme so it's
+              // always readable regardless of the OS-level dark/light preference
+              colorScheme: theme.mode === 'dark' ? 'dark' : 'light',
+              accentColor: theme.colors.accent,
             } as React.CSSProperties}
           />
         </View>

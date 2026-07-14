@@ -90,7 +90,7 @@ export const PrimaryButton = ({ children, style, loading, disabled, icon, width,
       ) : (
         <>
           {icon}
-          <Body style={{ color: '#fff', fontWeight: '600' }}>{children}</Body>
+          <Body style={{ color: '#fff', fontWeight: '600' }} numberOfLines={1}>{children}</Body>
         </>
       )}
     </PressableScale>
@@ -123,7 +123,7 @@ export const SecondaryButton = ({ children, style, disabled, icon, width, ...pro
       foreground={theme.colors.foreground}
     >
       {icon}
-      <Body style={{ color: theme.colors.foreground, fontWeight: '600' }}>{children}</Body>
+      <Body style={{ color: theme.colors.foreground, fontWeight: '600' }} numberOfLines={1}>{children}</Body>
     </PressableScale>
   );
 };
