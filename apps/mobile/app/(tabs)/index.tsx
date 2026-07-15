@@ -567,6 +567,22 @@ export default function Index() {
     </Modal>
   );
 
+  // ── Derived: per-status counts (used by filter chips) ───────────────────────
+
+  const statusCounts = React.useMemo<Record<FilterStatus, number>>(() => {
+    const counts: Record<FilterStatus, number> = {
+      all: projects.length,
+      draft: 0,
+      processing: 0,
+      ready: 0,
+      failed: 0,
+    };
+    for (const p of projects) {
+      counts[getProjectStatus(p)] += 1;
+    }
+    return counts;
+  }, [projects]);
+
   // ── Derived: filtered project list ──────────────────────────────────────────
 
   const filteredProjects = projects.filter((p) => {
@@ -730,6 +746,8 @@ export default function Index() {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
         {FILTER_CHIPS.map((chip) => {
           const active = filterStatus === chip.value;
+          const count = statusCounts[chip.value];
+          const empty = count === 0;
           const chipColor = chip.value === 'all'
             ? theme.colors.accent
             : STATUS_COLOR[chip.value as ProjectStatus];
@@ -744,6 +762,7 @@ export default function Index() {
                 borderWidth: 1.5,
                 borderColor: active ? chipColor : theme.colors.border,
                 backgroundColor: active ? `${chipColor}22` : theme.colors.surfaceSecondary,
+                opacity: empty && !active ? 0.45 : 1,
               }}
             >
               <Caption
@@ -752,7 +771,15 @@ export default function Index() {
                   fontWeight: active ? '700' : '400',
                 }}
               >
-                {chip.label}
+                {chip.label}{' '}
+                <Caption
+                  style={{
+                    color: active ? chipColor : theme.colors.muted,
+                    fontWeight: active ? '700' : '400',
+                  }}
+                >
+                  ({count})
+                </Caption>
               </Caption>
             </Pressable>
           );
