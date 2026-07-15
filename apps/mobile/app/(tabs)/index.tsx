@@ -79,6 +79,18 @@ const STATUS_COLOR: Record<ProjectStatus, string> = {
   failed: '#ef4444',
 };
 
+// ── Filter helpers ────────────────────────────────────────────────────────────
+
+type FilterStatus = 'all' | ProjectStatus;
+
+const FILTER_CHIPS: { value: FilterStatus; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'processing', label: 'Processing' },
+  { value: 'ready', label: 'Ready' },
+  { value: 'failed', label: 'Failed' },
+];
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function Index() {
@@ -88,6 +100,10 @@ export default function Index() {
   // Projects
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Filter & search (ephemeral — resets on navigation)
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Token
   const [showTokenModal, setShowTokenModal] = useState(false);
@@ -519,6 +535,16 @@ export default function Index() {
     </Modal>
   );
 
+  // ── Derived: filtered project list ──────────────────────────────────────────
+
+  const filteredProjects = projects.filter((p) => {
+    if (filterStatus !== 'all' && getProjectStatus(p) !== filterStatus) return false;
+    if (searchQuery.trim()) {
+      return p.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
+    }
+    return true;
+  });
+
   // ── Render: empty state ─────────────────────────────────────────────────────
 
   const renderEmptyState = () => (
@@ -657,6 +683,49 @@ export default function Index() {
           + New project
         </SecondaryButton>
       </View>
+
+      {/* Search input */}
+      <TextField
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Search projects…"
+        autoCapitalize="none"
+        autoCorrect={false}
+        clearButtonMode="while-editing"
+      />
+
+      {/* Filter chips */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
+        {FILTER_CHIPS.map((chip) => {
+          const active = filterStatus === chip.value;
+          const chipColor = chip.value === 'all'
+            ? theme.colors.accent
+            : STATUS_COLOR[chip.value as ProjectStatus];
+          return (
+            <Pressable
+              key={chip.value}
+              onPress={() => setFilterStatus(chip.value)}
+              style={{
+                paddingHorizontal: theme.spacing.md,
+                paddingVertical: theme.spacing.xs,
+                borderRadius: theme.radii.pill,
+                borderWidth: 1.5,
+                borderColor: active ? chipColor : theme.colors.border,
+                backgroundColor: active ? `${chipColor}22` : theme.colors.surfaceSecondary,
+              }}
+            >
+              <Caption
+                style={{
+                  color: active ? chipColor : theme.colors.muted,
+                  fontWeight: active ? '700' : '400',
+                }}
+              >
+                {chip.label}
+              </Caption>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 
@@ -667,11 +736,33 @@ export default function Index() {
       {renderTokenModal()}
       {renderWizardModal()}
       <FlatList
-        data={isLoading ? [] : projects}
+        data={isLoading ? [] : filteredProjects}
         keyExtractor={(item) => item.id}
         renderItem={renderProjectCard}
         ListHeaderComponent={renderListHeader()}
-        ListEmptyComponent={isLoading ? null : renderEmptyState()}
+        ListEmptyComponent={
+          isLoading ? null : (
+            projects.length === 0
+              ? renderEmptyState()
+              : (
+                <View style={{
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: theme.spacing.xl,
+                  gap: theme.spacing.md,
+                  minHeight: 200,
+                }}>
+                  <Ionicons name="search-outline" size={40} color={theme.colors.muted} />
+                  <Body muted style={{ textAlign: 'center' }}>
+                    No projects match your filter.
+                  </Body>
+                  <SecondaryButton onPress={() => { setFilterStatus('all'); setSearchQuery(''); }}>
+                    Clear filters
+                  </SecondaryButton>
+                </View>
+              )
+          )
+        }
         contentContainerStyle={{ paddingBottom: theme.spacing.xl * 2, flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
       />
