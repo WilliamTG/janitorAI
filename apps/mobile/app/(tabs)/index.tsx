@@ -189,11 +189,43 @@ export default function Index() {
       } finally {
         setIsLoading(false);
       }
+      // Pull server state before resetting any stuck 'processing' projects.
+      // We only reset after a *successful* merge so we never clobber a report
+      // the server already completed while the app was closed. If the pull
+      // fails (offline / transient error), we leave local state untouched and
+      // defer the reset until the next successful sync.
       try {
         const merged = await pullAndMerge(loaded);
         if (merged) {
           setProjects(merged);
           await saveProjects(merged);
+          // After reconciliation with the server, reset projects that are
+          // still 'processing'. At this point we have authoritative server
+          // state: any project the server already finished will show as
+          // 'ready' in `merged` and won't be touched. Use touchProject to
+          // advance updatedAt so the reset wins future LWW merges against a
+          // server copy that is also still stuck 'processing'.
+          const hasStuck = merged.some((p) => p.reportStatus === 'processing');
+          if (hasStuck) {
+            const reset = merged.map((p) =>
+              p.reportStatus === 'processing'
+                ? touchProject({
+                    ...p,
+                    reportStatus: 'failed' as const,
+                    reportError: 'Generation was interrupted — please try again.',
+                  })
+                : p
+            );
+            setProjects(reset);
+            await saveProjects(reset);
+            // Push each reset project so the server copy is also corrected.
+            for (const p of reset) {
+              if (p.reportStatus === 'failed' &&
+                  p.reportError === 'Generation was interrupted — please try again.') {
+                schedulePush(p);
+              }
+            }
+          }
         }
       } catch {
         console.warn('Initial sync failed');
