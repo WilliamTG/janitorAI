@@ -154,6 +154,23 @@ router.post("/", rejectWhenDiskFull, upload.single("file"), async (req, res) => 
   }
 });
 
+// ── Multer error handler ─────────────────────────────────────────────────────
+// Must be a 4-arg Express error handler. Catches multer's LIMIT_FILE_SIZE error
+// (thrown when the uploaded file exceeds the 50 MB cap) and returns a structured
+// 413 response so the client can show a specific "file too large" banner instead
+// of treating it as a generic upload failure.
+router.use((err, req, res, next) => {
+  if (err && err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({
+      error:
+        "File is too large. The maximum upload size is 50 MB. Please trim your video or export at a lower resolution.",
+      code: "FILE_TOO_LARGE",
+      maxBytes: 50 * 1024 * 1024,
+    });
+  }
+  next(err);
+});
+
 // ── Download / stream ─────────────────────────────────────────────────────────
 // The media ID is a UUID (unguessable); the route is already auth-gated above.
 // We intentionally do not scope by tester_token here so the AI engine can

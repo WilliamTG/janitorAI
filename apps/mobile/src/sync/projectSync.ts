@@ -5,7 +5,12 @@ import { getApiBaseUrl } from '@/src/config/api';
 import apiFetch, { UnauthorizedError } from '@/src/lib/apiFetch';
 import { Note, Photo, Project } from '@/src/features/projects/types';
 import { updateProject as updateProjectInStorage } from '@/src/storage/projectsStorage';
-import { setSyncState, setMediaUploadFailures, clearMediaUploadFailures } from './syncStatus';
+import {
+  setSyncState,
+  setMediaUploadFailures,
+  clearMediaUploadFailures,
+  recordOversizedFile,
+} from './syncStatus';
 import { logError, logAction } from '@/src/lib/logger';
 
 // Number of consecutive push cycles with at least one media upload failure
@@ -103,12 +108,17 @@ function guessFileMeta(uri: string, kind: 'photo' | 'audio' | 'video'): { name: 
 // the remoteId that was already persisted) is pushed again.
 const uploadedByUri = new Map<string, string>();
 const uploadsInFlight = new Map<string, Promise<string | null>>();
+// URIs permanently rejected by the server (FILE_TOO_LARGE). Never retried.
+const oversizedUris = new Set<string>();
 
 async function uploadMedia(
   uri: string,
   kind: 'photo' | 'audio' | 'video',
   projectId: string,
 ): Promise<string | null> {
+  // Permanently quarantined — server already rejected this file as too large.
+  if (oversizedUris.has(uri)) return null;
+
   const cached = uploadedByUri.get(uri);
   if (cached) return cached;
 
@@ -159,6 +169,24 @@ async function doUploadMedia(
     });
 
     if (!response.ok) {
+      // Try to read a structured error body to detect a permanent rejection.
+      let errorCode: string | undefined;
+      try {
+        const errBody: any = await response.json();
+        errorCode = errBody?.code;
+      } catch {
+        // ignore — body may not be JSON
+      }
+
+      if (errorCode === 'FILE_TOO_LARGE') {
+        // Permanent failure: quarantine so this URI is never retried, and
+        // surface the specific banner rather than the generic failure counter.
+        oversizedUris.add(uri);
+        recordOversizedFile();
+        console.warn('[sync] Media upload rejected: file too large', uri);
+        return null;
+      }
+
       console.warn('[sync] Media upload failed', response.status);
       logError(new Error(`Media upload HTTP ${response.status}`), `upload-${kind}`);
       return null;

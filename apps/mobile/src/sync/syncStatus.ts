@@ -69,3 +69,41 @@ export function useMediaUploadError(): MediaFailureInfo | null {
 
   return info;
 }
+
+// ---------- OVERSIZED FILE TRACKING ----------
+// Separate from the generic upload failure counter so that a permanently-rejected
+// file doesn't increment the retry counter and trigger the wrong banner.
+
+let oversizedFileDetected = false;
+const oversizedFileListeners = new Set<(detected: boolean) => void>();
+
+/** Call once when a FILE_TOO_LARGE response is received. Idempotent. */
+export function recordOversizedFile(): void {
+  if (!oversizedFileDetected) {
+    oversizedFileDetected = true;
+    oversizedFileListeners.forEach((l) => l(true));
+  }
+}
+
+/** Reset the flag (e.g. when the project list is fully reloaded). */
+export function clearOversizedFiles(): void {
+  if (oversizedFileDetected) {
+    oversizedFileDetected = false;
+    oversizedFileListeners.forEach((l) => l(false));
+  }
+}
+
+export function useOversizedFileError(): boolean {
+  const [detected, setDetected] = useState(oversizedFileDetected);
+
+  useEffect(() => {
+    const listener = (next: boolean) => setDetected(next);
+    oversizedFileListeners.add(listener);
+    setDetected(oversizedFileDetected);
+    return () => {
+      oversizedFileListeners.delete(listener);
+    };
+  }, []);
+
+  return detected;
+}
