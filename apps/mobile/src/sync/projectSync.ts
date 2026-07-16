@@ -155,6 +155,21 @@ async function doUploadMedia(
         return null;
       }
       const blob = await response.blob();
+
+      // Pre-flight size check: catch oversized files here rather than relying on
+      // a clean 413 from the server. When multer hits the 50 MB cap it aborts the
+      // stream, which causes the browser fetch() to throw a TypeError (connection
+      // reset) instead of returning a well-formed HTTP response — so the
+      // FILE_TOO_LARGE code in the response body is never parsed. Checking the
+      // blob size before we POST avoids the round-trip entirely.
+      const FILE_SIZE_LIMIT = 50 * 1024 * 1024; // must match multer cap in apps/api/src/routes/media.js
+      if (blob.size > FILE_SIZE_LIMIT) {
+        oversizedUris.add(uri);
+        recordOversizedFile();
+        console.warn('[sync] Media upload aborted: blob exceeds 50 MB limit', blob.size, 'bytes');
+        return null;
+      }
+
       const type = blob.type || meta.type;
       const ext = type.split('/')[1] || 'bin';
       formData.append('file', blob, `${kind}.${ext}`);

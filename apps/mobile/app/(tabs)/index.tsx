@@ -32,6 +32,7 @@ import {
   touchProject,
 } from '@/src/sync/projectSync';
 import MediaUploadErrorBanner from '@/src/components/MediaUploadErrorBanner';
+import { recordOversizedFile } from '@/src/sync/syncStatus';
 import SyncStatusIndicator from '@/src/components/SyncStatusIndicator';
 import {
   Body,
@@ -481,6 +482,11 @@ export default function Index() {
                 onChange={(e: any) => {
                   const files = Array.from((e.target as HTMLInputElement).files || []) as File[];
                   setWizardMediaFiles(files.map((f) => ({ name: f.name, size: f.size, type: f.type })));
+                  // Warn immediately if any selected file already exceeds the 50 MB server cap
+                  const FILE_SIZE_LIMIT = 50 * 1024 * 1024;
+                  if (files.some((f) => f.size > FILE_SIZE_LIMIT)) {
+                    recordOversizedFile();
+                  }
                 }}
               />
 
