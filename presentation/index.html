@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JanitorAI: How the System Works</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue: #3D5A80;
+      --blue-light: #98C1D9;
+      --blue-pale: #E8F0F7;
+      --grid: #F0F0F0;
+      --black: #111111;
+      --gray-mid: #666666;
+      --gray-muted: #999999;
+      --border: #E0E0E0;
+      --white: #FFFFFF;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #1a1a1a;
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* ── Slide container ── */
+    #deck {
+      width: 100vw; height: 100vh;
+      position: relative;
+    }
+
+    .slide {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      background: var(--white);
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s ease;
+    }
+    .slide.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    /* ── Grid background ── */
+    .grid-bg {
+      position: absolute; inset: 0; z-index: 0;
+    }
+    .grid-line-h {
+      position: absolute; left: 0; width: 100%; height: 1px;
+      background: var(--grid);
+    }
+    .grid-line-v {
+      position: absolute; top: 0; height: 100%; width: 1px;
+      background: var(--grid);
+    }
+
+    /* ── Chrome (shared header/footer) ── */
+    .chrome-sq {
+      position: absolute; top: 5vh; left: 5vw;
+      width: 3vw; height: 3vw; min-width: 28px; min-height: 28px;
+      background: var(--blue); z-index: 2;
+    }
+    .chrome-label {
+      position: absolute; top: 5vh; right: 5vw;
+      z-index: 2; text-align: right;
+    }
+    .chrome-label .company {
+      color: var(--blue); font-size: clamp(9px, 0.9vw, 13px);
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;
+      margin-bottom: 0.4vh;
+    }
+    .chrome-label .conf {
+      color: var(--gray-muted); font-size: clamp(8px, 0.8vw, 12px);
+      text-transform: uppercase; letter-spacing: 0.1em;
+    }
+    .slide-num {
+      position: absolute; bottom: 5vh; left: 5vw;
+      color: var(--gray-muted); font-size: clamp(9px, 0.9vw, 13px);
+      font-weight: 600; z-index: 2;
+    }
+
+    /* ── Navigation ── */
+    #nav {
+      position: fixed; bottom: 24px; right: 24px;
+      display: flex; align-items: center; gap: 12px;
+      z-index: 1000;
+    }
+    .nav-btn {
+      width: 40px; height: 40px;
+      background: var(--blue); color: #fff;
+      border: none; cursor: pointer;
+      font-size: 18px; display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    .nav-btn:hover { background: #2d4460; }
+    .nav-btn:disabled { background: var(--border); color: var(--gray-muted); cursor: default; }
+    #counter {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px; font-weight: 600;
+      color: var(--gray-muted); min-width: 48px; text-align: center;
+      background: rgba(255,255,255,0.9);
+      padding: 4px 8px;
+    }
+
+    /* ══════════════════════════════════════
+       SLIDE-SPECIFIC LAYOUTS
+    ══════════════════════════════════════ */
+
+    /* ── S1: Title ── */
+    .s1-body {
+      position: absolute; bottom: 10vh; left: 10vw;
+      z-index: 1; max-width: 65vw;
+    }
+    .s1-eyebrow {
+      color: var(--blue); font-size: clamp(11px, 1.2vw, 16px);
+      font-weight: 600; letter-spacing: -0.01em; margin-bottom: 2vh;
+    }
+    .s1-title {
+      color: var(--black); font-size: clamp(36px, 6.5vw, 88px);
+      font-weight: 700; line-height: 1.05; letter-spacing: -0.03em;
+      margin-bottom: 2.5vh;
+    }
+    .s1-sub {
+      color: var(--gray-mid); font-size: clamp(14px, 1.7vw, 22px);
+      font-weight: 400; line-height: 1.4; max-width: 50vw; margin-bottom: 1.5vh;
+    }
+    .s1-date {
+      color: var(--gray-muted); font-size: clamp(11px, 1vw, 14px);
+      font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em;
+    }
+
+    /* ── Content slides: shared heading area ── */
+    .content-area {
+      position: absolute; top: 18vh; left: 10vw;
+      z-index: 1; width: 82vw;
+    }
+    .slide-heading {
+      color: var(--black); font-size: clamp(24px, 4vw, 52px);
+      font-weight: 700; line-height: 1.1; letter-spacing: -0.02em;
+      margin-bottom: 3vh;
+    }
+    .slide-sub {
+      color: var(--gray-mid); font-size: clamp(12px, 1.2vw, 16px);
+      margin-bottom: 4vh; max-width: 55vw; line-height: 1.5;
+    }
+
+    /* ── Bullet list ── */
+    .bullet-list {
+      list-style: none; display: flex; flex-direction: column; gap: 1.4vh;
+    }
+    .bullet-list li {
+      color: var(--gray-mid); font-size: clamp(12px, 1.2vw, 17px);
+      line-height: 1.5; padding-left: 1.4em; position: relative;
+    }
+    .bullet-list li::before {
+      content: '—'; position: absolute; left: 0;
+      color: var(--blue); font-weight: 700;
+    }
+    .bullet-list li.emoji-bullet::before { content: none; }
+    .bullet-list li.emoji-bullet { padding-left: 0; }
+
+    /* ── Step list ── */
+    .step-list {
+      list-style: none; display: flex; flex-direction: column; gap: 1.4vh;
+    }
+    .step-list li {
+      display: flex; gap: 1.2vw; align-items: flex-start;
+      color: var(--gray-mid); font-size: clamp(12px, 1.15vw, 16px); line-height: 1.5;
+    }
+    .step-num {
+      width: clamp(22px, 2vw, 28px); height: clamp(22px, 2vw, 28px);
+      min-width: 22px;
+      background: var(--blue); color: #fff;
+      font-size: clamp(10px, 0.85vw, 12px); font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 2px;
+    }
+
+    /* ── Card grid ── */
+    .card-grid {
+      display: flex; gap: 2vw; flex-wrap: wrap;
+    }
+    .card {
+      flex: 1; min-width: 160px;
+      background: var(--white); padding: clamp(16px, 2.5vw, 36px);
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .card-dot {
+      width: clamp(14px, 1.8vw, 24px); height: clamp(14px, 1.8vw, 24px);
+      background: var(--blue); margin-bottom: 1.5vh;
+    }
+    .card-dot.light { background: var(--blue-light); }
+    .card-dot.accent { background: #EE6C4D; }
+    .card-title {
+      color: var(--black); font-size: clamp(12px, 1.3vw, 17px);
+      font-weight: 600; margin-bottom: 1vh;
+    }
+    .card-body {
+      color: var(--gray-mid); font-size: clamp(11px, 1vw, 14px);
+      line-height: 1.6;
+    }
+
+    /* ── Architecture diagram (S2) ── */
+    .arch-diagram {
+      display: flex; align-items: center; gap: 0;
+      margin-top: 1vh;
+    }
+    .arch-box {
+      flex: 1; border: 2px solid var(--blue);
+      padding: clamp(12px, 1.5vw, 22px);
+      text-align: center; position: relative;
+      background: var(--white);
+    }
+    .arch-box.offline { border-color: var(--blue-light); }
+    .arch-icon { font-size: clamp(20px, 2.5vw, 32px); margin-bottom: 0.8vh; }
+    .arch-title {
+      color: var(--blue); font-size: clamp(10px, 1vw, 14px);
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 0.5vh;
+    }
+    .arch-desc {
+      color: var(--gray-mid); font-size: clamp(9px, 0.85vw, 12px); line-height: 1.4;
+    }
+    .arch-arrow {
+      width: clamp(20px, 3vw, 48px); text-align: center;
+      color: var(--blue); font-size: clamp(16px, 2vw, 28px);
+      font-weight: 700; flex-shrink: 0;
+    }
+    .offline-note {
+      margin-top: 2vh; padding: 1.5vh 2vw;
+      background: var(--blue-pale); border-left: 4px solid var(--blue-light);
+      color: var(--gray-mid); font-size: clamp(11px, 1vw, 14px); line-height: 1.5;
+    }
+
+    /* ── Cost table (S9) ── */
+    .cost-table {
+      width: 100%; border-collapse: collapse;
+      font-size: clamp(11px, 1.1vw, 15px);
+    }
+    .cost-table th {
+      text-align: left; padding: 1.2vh 1.5vw;
+      background: var(--blue); color: #fff;
+      font-size: clamp(10px, 0.9vw, 13px); font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .cost-table td {
+      padding: 1.2vh 1.5vw; color: var(--gray-mid);
+      border-bottom: 1px solid var(--border);
+    }
+    .cost-table tr:last-child td {
+      background: var(--blue-pale); color: var(--black);
+      font-weight: 700; border-bottom: none;
+    }
+    .cost-table tr:nth-child(even) td { background: #FAFAFA; }
+    .cost-table tr:last-child td:first-child { color: var(--blue); }
+
+    /* ── Server cards (S8) ── */
+    .server-grid {
+      display: flex; gap: 2vw;
+    }
+    .server-card {
+      flex: 1; border: 2px solid var(--border);
+      padding: clamp(16px, 2vw, 28px);
+      position: relative; background: var(--white);
+    }
+    .server-card.primary { border-color: var(--blue); }
+    .server-card-header {
+      display: flex; align-items: center; gap: 1vw;
+      margin-bottom: 1.5vh;
+      padding-bottom: 1.5vh; border-bottom: 1px solid var(--border);
+    }
+    .server-emoji { font-size: clamp(20px, 2.2vw, 30px); }
+    .server-name {
+      color: var(--black); font-size: clamp(12px, 1.2vw, 17px);
+      font-weight: 700;
+    }
+    .server-tech {
+      color: var(--gray-muted); font-size: clamp(10px, 0.85vw, 12px);
+      font-weight: 500;
+    }
+    .server-bullets { list-style: none; display: flex; flex-direction: column; gap: 0.8vh; }
+    .server-bullets li {
+      color: var(--gray-mid); font-size: clamp(10px, 0.95vw, 14px);
+      line-height: 1.5; padding-left: 1.2em; position: relative;
+    }
+    .server-bullets li::before {
+      content: '—'; position: absolute; left: 0;
+      color: var(--blue-light); font-weight: 700;
+    }
+    .server-badge {
+      position: absolute; top: -1px; right: -1px;
+      background: var(--blue); color: #fff;
+      font-size: clamp(8px, 0.75vw, 11px); font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      padding: 3px 10px;
+    }
+
+    /* ── Journey (S11) ── */
+    .journey-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 1.5vw;
+    }
+    .journey-step {
+      background: var(--white); border: 1px solid var(--border);
+      padding: clamp(12px, 1.5vw, 20px);
+    }
+    .journey-num {
+      width: clamp(24px, 2.2vw, 32px); height: clamp(24px, 2.2vw, 32px);
+      background: var(--blue); color: #fff;
+      font-size: clamp(11px, 1vw, 14px); font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 1vh;
+    }
+    .journey-step h4 {
+      color: var(--black); font-size: clamp(11px, 1vw, 14px);
+      font-weight: 600; margin-bottom: 0.5vh;
+    }
+    .journey-step p {
+      color: var(--gray-mid); font-size: clamp(10px, 0.85vw, 12px);
+      line-height: 1.5;
+    }
+
+    /* ── Security cards (S10) ── */
+    .sec-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr);
+      gap: 1.5vh 3vw;
+    }
+    .sec-item {
+      display: flex; gap: 1vw; align-items: flex-start;
+    }
+    .sec-icon {
+      width: clamp(30px, 2.5vw, 36px); height: clamp(30px, 2.5vw, 36px);
+      background: var(--blue-pale); color: var(--blue);
+      font-size: clamp(14px, 1.2vw, 18px);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .sec-text h4 {
+      color: var(--black); font-size: clamp(11px, 1.05vw, 15px);
+      font-weight: 600; margin-bottom: 0.3vh;
+    }
+    .sec-text p {
+      color: var(--gray-mid); font-size: clamp(10px, 0.9vw, 13px);
+      line-height: 1.4;
+    }
+
+    /* ── Gemini diagram (S6) ── */
+    .gemini-wrap {
+      display: flex; gap: 3vw; align-items: flex-start;
+    }
+    .gemini-inputs {
+      flex: 1; display: flex; flex-direction: column; gap: 1.2vh;
+    }
+    .gemini-arrow-col {
+      display: flex; align-items: center; justify-content: center;
+      font-size: clamp(22px, 2.5vw, 36px); color: var(--blue);
+      padding-top: 8vh; flex-shrink: 0;
+    }
+    .gemini-output {
+      flex: 1; border: 2px solid var(--blue);
+      padding: clamp(14px, 1.8vw, 24px);
+    }
+    .input-pill {
+      display: flex; align-items: center; gap: 1vw;
+      padding: clamp(10px, 1.2vh, 16px) clamp(12px, 1.2vw, 18px);
+      background: var(--blue-pale); border-left: 4px solid var(--blue);
+    }
+    .input-pill .pill-icon { font-size: clamp(16px, 1.5vw, 22px); flex-shrink: 0; }
+    .input-pill .pill-text {
+      color: var(--black); font-size: clamp(10px, 1vw, 14px);
+      font-weight: 500;
+    }
+    .gemini-output-title {
+      color: var(--blue); font-size: clamp(10px, 0.95vw, 14px);
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 1.5vh;
+    }
+    .output-field {
+      margin-bottom: 1vh;
+    }
+    .output-field .field-label {
+      color: var(--gray-muted); font-size: clamp(9px, 0.8vw, 12px);
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .output-field .field-val {
+      color: var(--black); font-size: clamp(11px, 1vw, 14px);
+      font-weight: 500;
+    }
+    .key-insight {
+      margin-top: 1.5vh; padding: clamp(10px, 1.2vh, 16px) clamp(12px, 1.2vw, 18px);
+      background: var(--blue); color: #fff;
+      font-size: clamp(10px, 0.95vw, 14px); font-weight: 500; line-height: 1.5;
+    }
+
+    /* ── Pipeline steps (S7) ── */
+    .pipeline {
+      display: flex; gap: 1.2vw; align-items: stretch;
+    }
+    .pipeline-step {
+      flex: 1; display: flex; flex-direction: column;
+      border-top: 3px solid var(--blue);
+      padding: clamp(12px, 1.5vw, 20px) clamp(10px, 1vw, 16px);
+      background: var(--white);
+    }
+    .pipeline-step:nth-child(even) { border-top-color: var(--blue-light); }
+    .pipeline-step .p-num {
+      color: var(--blue); font-size: clamp(20px, 2.2vw, 30px);
+      font-weight: 700; line-height: 1; margin-bottom: 0.8vh;
+    }
+    .pipeline-step:nth-child(even) .p-num { color: var(--blue-light); }
+    .pipeline-step h4 {
+      color: var(--black); font-size: clamp(10px, 1vw, 14px);
+      font-weight: 600; margin-bottom: 0.6vh; line-height: 1.3;
+    }
+    .pipeline-step p {
+      color: var(--gray-mid); font-size: clamp(9px, 0.85vw, 12px);
+      line-height: 1.5; flex: 1;
+    }
+  </style>
+</head>
+<body>
+
+<div id="deck">
+
+  <!-- ════════════ SLIDE 1: TITLE ════════════ -->
+  <div class="slide active" id="s1">
+    <div class="grid-bg" id="grid1"></div>
+    <div class="chrome-sq"></div>
+    <div class="chrome-label">
+      <div class="company">JanitorAI</div>
+      <div class="conf">Confidential / 2026</div>
+    </div>
+    <div class="s1-body">
+      <div class="s1-eyebrow">janitorai.replit.app</div>
+      <h1 class="s1-title">JanitorAI:<br>How the System<br>Works</h1>
+      <p class="s1-sub">From field inspection to finished report — powered by Gemini AI</p>
+      <div class="s1-date">July 2026</div>
+    </div>
+  </div>
+
+  <!-- ════════════ SLIDE 2: BIG PICTURE ════════════ -->
+  <div class="slide" id="s2">
+    <div class="grid-bg" id="grid2"></div>
+    <div class="chrome-sq"></div>
+    <div class="chrome-label">
+      <div class="company">JanitorAI</div>
+      <div class="conf">Confidential / 2026</div>
+    </div>
+    <div class="content-area">
+      <h2 class="slide-heading">The Big Picture</h2>
+      <div class="arch-diagram">
+        <div class="arch-box">
+          <div class="arch-icon">📱</div>
+          <div class="arch-title">Mobile App</div>
+          <div class="arch-desc">Inspector captures notes, photos, voice & video on-site</div>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box">
+          <div class="arch-icon">⚙️</div>
+          <div class="arch-title">Express API</div>
+          <div class="arch-desc">Stores projects & media; handles auth, rate-limiting & sync</div>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box primary" style="border-color:var(--blue);">
+          <div class="arch-icon">🤖</div>
+          <div class="arch-title">AI Engine</div>
+          <div class="arch-desc">Gemini analyses video, photos & notes; produces structured findings</div>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box">
+          <div class="arch-icon">📄</div>
+          <div class="arch-title">Google Doc</div>
+          <div class="arch-desc">Finished report — shareable URL, PDF or DOCX download</div>
+        </div>
+      </div>
+      <div class="offline-note">
+        📶 <strong>Offline path:</strong> Data is written to local device storage first and synced automatically when connectivity returns. No data is ever lost.
+      </div>
+    </div>
+    <div class="slide-num">02</div>
+  </div>
+
+  <!-- ════════════ SLIDE 3: WHAT DATA GOES IN ════════════ -->
+  <div class="slide" id="s3">
+    <div class="grid-bg" id="grid3"></div>
+    <div class="chrome-sq"></div>
+    <div class="chrome-label">
+      <div class="company">JanitorAI</div>
+      <div class="conf">Confidential / 2026</div>
+    </div>
+    <div class="content-area">
+      <h2 class="slide-heading">What Data Goes In</h2>
+      <p class="slide-sub">Five input types an inspector can capture during a site visit</p>
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-dot"></div>
+          <div class="card-title">✍️ Typed Text Notes</div>
+          <div class="card-body">Free-form observations per location — written directly in the app. Each note attaches to a specific area of the inspection.</div>
+        </div>
+        <div class="card">
+          <div class="card-dot light"></div>
+          <div class="card-title">🎙️ Voice Memos</div>
+          <div class="card-body">Recorded on-site and auto-transcribed by Gemini via the <code style="font-size:0.9em;background:#f5f5f5;padding:1px 4px">/transcribe</code> endpoint. Hands-free note-taking while walking the property.</div>
+        </div>
+        <div class="card">
+          <div class="card-dot"></div>
+          <div class="card-title">📷 Photos</div>
+          <div class="card-body">Up to 8 MB each, compressed at quality 0.6 (EXIF stripped). AI can auto-describe each photo to generate a caption for the report.</div>
+        </div>
+        <div class="card">
+          <div class="card-dot accent"></div>
+          <div class="card-title">🎥 Video Clips</div>
+          <div class="card-body">Up to 2 minutes / 40 MB. The <strong>primary evidence source</strong> — Gemini watches the full clip and identifies the best evidence frames.</div>
+        </div>
+        <div class="card">
+          <div class="card-dot light"></div>
+          <div class="card-title">🗂️ Project Metadata</div>
+          <div class="card-body">Project name, inspection date, inspector name, case number, insurance company, address — all flow directly into the report template.</div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">03</div>
+  </div>
+
+  <!-- ════════════ SLIDE 4: OFFLINE SYNC ════════════ -->
+  <div class="slide" id="s4">
+    <div class="grid-bg" id="grid4"></div>
+    <div class="chrome-sq"></div>
+    <div class="chrome-label">
+      <div class="company">JanitorAI</div>
+      <div class="conf">Confidential / 2026</div>
+    </div>
+    <div class="content-area">
+      <h2 class="slide-heading">Offline-First Sync Pipeline</h2>
+      <p class="slide-sub">Data is never lost, even without connectivity</p>
+      <div style="display:flex;gap:4vw;">
+        <div style="flex:1;">
+          <ul class="bullet-list">
+            <li>All writes go to <strong>local device storage first</strong> (AsyncStorage) — the app works fully offline</li>
+            <li>A background sync loop pushes changes to the <strong>Express API</strong> when connectivity returns</li>
+            <li><strong>Last-write-wins</strong> merge resolves conflicts when the same project is edited on multiple devices</li>
+            <li><strong>Pending-delete queue</strong> prevents a deleted project from coming back after a pull from the server</li>
+            <li>Media is <strong>deduplicated by URI</strong> — the same photo or video is never uploaded twice</li>
+            <li><strong>50 MB pre-flight check</strong> rejects oversized files client-side before any network call is made</li>
+          </ul>
+        </div>
+        <div style="flex:0 0 26vw;">
+          <div style="border:2px solid var(--blue);padding:2vw;">
+            <div style="color:var(--blue);font-size:clamp(10px,0.9vw,13px);font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:1.5vh;">Sync States</div>
+            <div style="display:flex;flex-direction:column;gap:1vh;">
+              <div style="display:flex;align-items:center;gap:1vw;">
+                <div style="width:10px;height:10px;background:#22c55e;border-radius:50%;flex-shrink:0;"></div>
+                <span style="color:var(--black);font-size:clamp(10px,1vw,14px);font-weight:600;">Synced</span>
+                <span style="color:var(--gray-muted);font-size:clamp(9px,0.85vw,12px);">— all data on server</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:1vw;">
+                <div style="width:10px;height:10px;background:#3b82f6;border-radius:50%;flex-shrink:0;"></div>
+                <span style="color:var(--black);font-size:clamp(10px,1vw,14px);font-weight:600;">Syncing</span>
+                <span style="color:var(--gray-muted);font-size:clamp(9px,0.85vw,12px);">— push in progress</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:1vw;">
+                <div style="width:10px;height:10px;background:#f97316;border-radius:50%;flex-shrink:0;"></div>
+                <span style="color:var(--black);font-size:clamp(10px,1vw,14px);font-weight:600;">Offline</span>
+                <span style="color:var(--gray-muted);font-size:clamp(9px,0.85vw,12px);">— queued locally</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:1vw;">
+                <div style="width:10px;height:10px;background:var(--grid);border:1px solid var(--border);border-radius:50%;flex-shrink:0;"></div>
+                <span style="color:var(--black);font-size:clamp(10px,1vw,14px);font-weight:600;">Disabled</span>
+                <span style="color:var(--gray-muted);font-size:clamp(9px,0.85vw,12px);">— no DB / no token</span>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:2vh;padding:1.5vh 1.5vw;background:var(--blue-pale);border-left:4px solid var(--blue);">
+            <div style="color:var(--black);font-size:clamp(10px,0.95vw,13px);font-weight:600;margin-bottom:0.5vh;">Debounced push</div>
+            <div style="color:var(--gray-mid);font-size:clamp(9px,0.85vw,12px);line-height:1.4;">Changes are batched with a 2-second debounce to avoid flooding the API on rapid edits.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">04</div>
+  </div>
+
+  <!-- ════════════ SLIDE 5: MEDIA PROCESSING ════════════ -->
+  <div class="slide" id="s5">
+    <div class="grid-bg" id="grid5"></div>
+    <div class="chrome-sq"></div>
+    <div class="chrome-label">
+      <div class="company">JanitorAI</div>
+      <div class="conf">Confidential / 2026</div>
+    </div>
+    <div class="content-area">
+      <h2 class="slide-heading">Media Processing — Getting to Gemini</h2>
+      <p class="slide-sub">Step-by-step journey from device to AI engine</p>
+      <ol class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div><strong style="color:var(--black);">Inspector records video / takes photo on device</strong> — stored locally as a blob URI or file path.</div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div><strong style="color:var(--black);">App fetches the local blob and pre-flight checks size</strong> — files over 50 MB are quarantined immediately with an amber warning banner. No network round-trip needed.</div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div><strong style="color:var(--black);">Blob is POSTed to Express API → <code style="background:#f5f5f5;padding:1px 6px;font-size:0.9em;">/api/media</code></strong> — multer enforces a 50 MB server-side cap; disk-full guard rejects at 90% capacity.</div>
+        </li>
+        <li>
+          <div class="step-num">4</div>
+          <div><strong style="color:var(--black);">Server saves file to persistent disk and records metadata in Postgres</strong> — returns a UUID media ID (<code style="background:#f5f5f5;padding:1px 6px;font-size:0.9em;">{ id }</code>). ID is stored back into the project locally.</div>
+        </li>
+        <li>
+          <div class="step-num">5</div>
+          <div><strong style="color:var(--black);">Express API builds a signed URL for the AI Engine</strong> — <code style="background:#f5f5f5;padding:1px 6px;font-size:0.9em;">/api/media/&lt;id&gt;?token=…</code>  The token is embedded in the query string because media players cannot set custom headers.</div>
+        </li>
+        <li>
+          <div class="step-num">6</div>
+          <div><strong style="color:var(--black);">URL is handed to the AI Engine</strong> — the engine validates it (SSRF guard: scheme, path pattern, host pinning), downloads the file, then uploads it to the Gemini Files API for analysis.</div>
+        </li>
+      </ol>
+    </div>
+    <div class="slide-num">05</div>
+  </div>
+
+  <!-- ════════════ SLIDE 6: HOW AI COMBINES ════════════ -->
+  <div class="slide" id="s6">
+    <div class="grid-bg" id="grid6"></div>
+    <div class="chrome-sq"></div>
+    <div class="chrome-label">
+      <div class="company">JanitorAI</div>
+      <div class="conf">Confidential / 2026</div>
+    </div>
+    <div class="content-area">
+      <h2 class="slide-heading">How AI Combines Everything</h2>
+      <p class="slide-sub">Gemini receives a single, rich multimodal context in one API call</p>
+      <div class="gemini-wrap">
+        <div class="gemini-inputs">
+          <div style="color:var(--blue);font-size:clamp(9px,0.85vw,12px);font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.8vh;">Inputs to Gemini 2.5 Flash</div>
+          <div class="input-pill"><div class="pill-icon">🎥</div><div class="pill-text">Full video — uploaded via Gemini Files API; Gemini watches every frame</div></div>
+          <div class="input-pill"><div class="pill-icon">📷</div><div class="pill-text">Every inspector photo — uploaded alongside the video for cross-reference</div></div>
+          <div class="input-pill"><div class="pill-icon">📚</div><div class="pill-text">Knowledge base PDFs (Byggforsk 700.115 / 700.117) — uploaded for technical reference</div></div>
+          <div class="input-pill"><div class="pill-icon">📝</div><div class="pill-text">Inspector context block — written notes, voice transcriptions, AI photo captions, project metadata</div></div>
+          <div class="key-insight">
+            💡 <strong>Key insight:</strong> the video alone is not the report. Notes and photos fill in what the camera missed — and Gemini prioritises the combined evidence over the video alone.
+          </div>
+        </div>
+        <div class="gemini-arrow-col">→</div>
+        <div class="gemini-output">
+          <div class="gemini-output-title">Gemini Output (structured JSON)</div>
+          <div class="output-field">
+            <div class="field-label">Damage area</div>
+            <div class="field-val">Location within the property</div>
+          </div>
+          <div class="output-field">
+            <div class="field-label">Source / Root cause</div>
+            <div class="field-val">Technical failure point identified</div>
+          </div>
+          <div class="output-field">
+            <div class="field-label">Description</div>
+            <div class="field-val">Full narrative explanation</div>
+          </div>
+          <div class="output-field">
+            <div class="field-label">Evidence timestamps</div>
+            <div class="field-val">Best frame(s) ms offset in video</div>
+          </div>
+          <div class="output-field">
+            <div class="field-label">Time perspective</div>
+            <div class="field-val">Acute (sudden) vs. gradual (long-term)</div>
+          </div>
+          <div class="output-field">
+            <div class="field-label">Habitability</div>
+            <div class="field-val">Boolean — safe to occupy?</div>
+          </div>
+          <div class="output-field" style="margin-bottom:0;">
+            <div class="field-label">Repairs needed</div>
+            <div class="field-val">Recommended remediation steps</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">06</div>
+  </div>
+
+  <!-- ════════════ SLIDE 7: ANALYSIS TO DOC ════════════ -->
+  <div class="slide" id="s7">
+    <div class="grid-bg" id="grid7"></div>
+    <div class="chrome-sq"></div>
+    <div class="chrome-label">
+      <div class="company">JanitorAI</div>
+      <div class="conf">Confidential / 2026</div>
+    </div>
+    <div class="content-area">
+      <h2 class="slide-heading">From Analysis to Finished Document</h2>
+      <p class="slide-sub">Six steps from Gemini JSON to a shareable Google Doc</p>
+      <div class="pipeline">
+        <div class="pipeline-step">
+          <div class="p-num">01</div>
+          <h4>Gemini returns structured JSON</h4>
+          <p>Area, source, cause, description, evidence timestamps, habitability, and repair recommendations — all validated against a typed schema.</p>
+        </div>
+        <div class="pipeline-step">
+          <div class="p-num">02</div>
+          <h4>Template placeholders filled</h4>
+          <p><code style="font-size:0.9em;">template_replacement.py</code> replaces <code style="font-size:0.9em;">{{placeholders}}</code> in the master Google Doc with Gemini's findings and the project's metadata.</p>
+        </div>
+        <div class="pipeline-step">
+          <div class="p-num">03</div>
+          <h4>Evidence frame extracted</h4>
+          <p>OpenCV (<code style="font-size:0.9em;">cv2</code>) seeks to Gemini's identified timestamp (ms) and reads the frame — the single best visual of the damage source.</p>
+        </div>
+        <div class="pipeline-step">
+          <div class="p-num">04</div>
+          <h4>Frame embedded in document</h4>
+          <p>The evidence image is uploaded to Google Drive and inserted at <code style="font-size:0.9em;">{{damage.cause.picture}}</code> in the report template.</p>
+        </div>
+        <div class="pipeline-step">
+          <div class="p-num">05</div>
+          <h4>Google Doc published</h4>
+          <p>Google Docs API publishes the completed report to the output Google Drive folder. The doc is optionally shared directly with the inspector's email.</p>
+        </div>
+        <div class="pipeline-step">
+          <div class="p-num">06</div>
+          <h4>URL returned to app</h4>
+          <p>The app receives a <code style="font-size:0.9em;">docs.google.com</code> link. Inspector taps to open, or downloads as PDF / DOCX via the report proxy endpoint.</p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">07</div>
+  </div>
+
+  <!-- ════════════ SLIDE 8: SERVERS ════════════ -->
+  <div class="slide" id="s8">
+    <div class="grid-bg" id="grid8"></div>
+    <div class="chrome-sq"></div>
+    <div class="chrome-label">
+      <div class="company">JanitorAI</div>
+      <div class="conf">Confidential / 2026</div>
+    </div>
+    <div class="content-area">
+      <h2 class="slide-heading">What Servers We Run</h2>
+      <p class="slide-sub">Three services, one Replit deployment</p>
+      <div class="server-grid">
+        <div class="server-card">
+          <div class="server-card-header">
+            <div class="server-emoji">📱</div>
+            <div>
+              <div class="server-name">Mobile App</div>
+              <div class="server-tech">Expo / React Native Web · Port 5000</div>
+            </div>
+          </div>
+          <ul class="server-bullets">
+            <li>Served as a progressive web app from the Expo dev server</li>
+            <li>TypeScript / React Native components — same code runs on iOS, Android & web</li>
+            <li>Zero extra hosting cost on Replit — runs on the same container</li>
+            <li>Offline-first local storage via AsyncStorage</li>
+          </ul>
+        </div>
+        <div class="server-card primary">
+          <div class="server-badge">Core</div>
+          <div class="server-card-header">
+            <div class="server-emoji">⚙️</div>
+            <div>
+              <div class="server-name">Express API</div>
+              <div class="server-tech">Node.js · Port 3000</div>
+            </div>
+          </div>
+          <ul class="server-bullets">
+            <li>Project CRUD — <code style="font-size:0.9em;">/api/projects</code> with PostgreSQL persistence</li>
+            <li>Media upload / download — <code style="font-size:0.9em;">/api/media</code> with multer (50 MB cap)</li>
+            <li>Transcription &amp; image description proxy → Gemini 2.0 Flash</li>
+            <li>Rate limiting: 300 req / 15 min general; 30 req / 15 min heavy endpoints</li>
+            <li>Admin dashboard, logs endpoint, disk-space guard</li>
+          </ul>
+        </div>
+        <div class="server-card">
+          <div class="server-card-header">
+            <div class="server-emoji">🤖</div>
+            <div>
+              <div class="server-name">AI Engine</div>
+              <div class="server-tech">Python / FastAPI</div>
+            </div>
+          </div>
+          <ul class="server-bullets">
+            <li>Calls Gemini Files API — uploads video &amp; photos for multimodal analysis</li>
+            <li>Calls Google Docs &amp; Drive API — creates report, inserts evidence frame</li>
+            <li>Runs OpenCV (cv2) to extract evidence frames at Gemini timestamps</li>
+            <li>The only <strong>compute-heavy service</strong> — the main cost driver per inspection</li>
+            <li>SSRF guard on all inbound media URLs</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">08</div>
+  </div>
+
+  <!-- ════════════ SLIDE 9: COST ════════════ -->
+  <div class="slide" id="s9">
+    <div class="grid-bg" id="grid9"></div>
+    <div class="chrome-sq"></div>
+    <div class="chrome-label">
+      <div class="company">JanitorAI</div>
+      <div class="conf">Confidential / 2026</div>
+    </div>
+    <div class="content-area">
+      <h2 class="slide-heading">Infrastructure &amp; Cost Estimate</h2>
+      <p class="slide-sub">Approximate cost per inspection (one ~2-minute video)</p>
+      <div style="display:flex;gap:4vw;align-items:flex-start;">
+        <div style="flex:1;">
+          <table class="cost-table">
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th style="text-align:right;">Estimated Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Replit hosting (Hacker plan)</td>
+                <td style="text-align:right;color:var(--black);font-weight:500;">~$20 / month flat</td>
+              </tr>
+              <tr>
+                <td>Gemini 2.5 Flash — video analysis (~1–3M tokens)</td>
+                <td style="text-align:right;color:var(--black);font-weight:500;">~$0.10 – $0.30 / report</td>
+              </tr>
+              <tr>
+                <td>Gemini 2.5 Flash — photos &amp; transcription</td>
+                <td style="text-align:right;color:var(--black);font-weight:500;">~$0.01 – $0.05 / report</td>
+              </tr>
+              <tr>
+                <td>Google Docs API</td>
+                <td style="text-align:right;color:var(--black);font-weight:500;">Free (within quota)</td>
+              </tr>
+              <tr>
+                <td>Disk storage for media uploads</td>
+                <td style="text-align:right;color:var(--black);font-weight:500;">Included in Replit plan</td>
+              </tr>
+              <tr>
+                <td><strong>Total per inspection</strong></td>
+                <td style="text-align:right;"><strong>~$0.11 – $0.35</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="flex:0 0 26vw;display:flex;flex-direction:column;gap:1.5vh;">
+          <div style="padding:1.5vh 1.5vw;background:var(--blue);color:#fff;">
+            <div style="font-size:clamp(10px,0.9vw,13px);font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.8vh;">Main cost driver</div>
+            <div style="font-size:clamp(11px,1vw,14px);line-height:1.5;">Video analysis is the largest token consumer. Gemini 2.5 Flash processes roughly 1–3M tokens per ~2-minute video clip depending on resolution and frame complexity.</div>
+          </div>
+          <div style="padding:1.5vh 1.5vw;border:1px solid var(--border);">
+            <div style="color:var(--blue);font-size:clamp(10px,0.9vw,13px);font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.8vh;">⚠️ Scaling constraint</div>
+            <div style="color:var(--gray-mid);font-size:clamp(11px,1vw,14px);line-height:1.5;">Media uploads are stored on the Replit container's local disk. <strong>Moving to cloud object storage (AWS S3 / Google Cloud Storage)</strong> is the primary infrastructure next step for production scale.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">09</div>
+  </div>
+
+  <!-- ════════════ SLIDE 10: SECURITY ════════════ -->
+  <div class="slide" id="s10">
+    <div class="grid-bg" id="grid10"></div>
+    <div class="chrome-sq"></div>
+    <div class="chrome-label">
+      <div class="company">JanitorAI</div>
+      <div class="conf">Confidential / 2026</div>
+    </div>
+    <div class="content-area">
+      <h2 class="slide-heading">Security &amp; Reliability</h2>
+      <p class="slide-sub">Built-in safeguards across the full stack</p>
+      <div class="sec-grid">
+        <div class="sec-item">
+          <div class="sec-icon">🔑</div>
+          <div class="sec-text">
+            <h4>Token authentication</h4>
+            <p><code style="font-size:0.9em;">x-tester-token</code> required on all project and AI endpoints. Validated against the database (or env-var fallback) using constant-time comparison to prevent timing attacks.</p>
+          </div>
+        </div>
+        <div class="sec-item">
+          <div class="sec-icon">🚦</div>
+          <div class="sec-text">
+            <h4>Rate limiting</h4>
+            <p>Two tiers: <strong>300 req / 15 min</strong> globally; <strong>30 req / 15 min</strong> on heavy endpoints (transcription, image description, report generation). Returns HTTP 429 on breach.</p>
+          </div>
+        </div>
+        <div class="sec-item">
+          <div class="sec-icon">🛡️</div>
+          <div class="sec-text">
+            <h4>SSRF protection</h4>
+            <p>The AI Engine validates every inbound media URL: scheme must be http/https, path must match <code style="font-size:0.9em;">/api/media/&lt;id&gt;</code>, and host must match <code style="font-size:0.9em;">API_BASE_URL</code> when configured.</p>
+          </div>
+        </div>
+        <div class="sec-item">
+          <div class="sec-icon">📦</div>
+          <div class="sec-text">
+            <h4>Upload size enforcement</h4>
+            <p><strong>Client-side pre-flight</strong> rejects blobs over 50 MB before any network call. <strong>Server-side</strong> multer enforces the same cap and returns a structured <code style="font-size:0.9em;">FILE_TOO_LARGE</code> error code.</p>
+          </div>
+        </div>
+        <div class="sec-item">
+          <div class="sec-icon">💾</div>
+          <div class="sec-text">
+            <h4>Disk-full guard</h4>
+            <p>The media route checks disk usage before accepting any upload. At ≥90% capacity it rejects with HTTP 507 and a user-friendly message telling the inspector their data is safe on-device.</p>
+          </div>
+        </div>
+        <div class="sec-item">
+          <div class="sec-icon">📶</div>
+          <div class="sec-text">
+            <h4>Offline resilience</h4>
+            <p>Pending deletes are persisted to AsyncStorage so a deleted project can never be resurrected by a pull from the server, even after a long offline period.</p>
+          </div>
+        </div>
+        <div class="sec-item">
+          <div class="sec-icon">📋</div>
+          <div class="sec-text">
+            <h4>Anonymous log writes</h4>
+            <p>Client-side errors and actions are logged to <code style="font-size:0.9em;">/api/logs</code> without requiring a valid token — enabling debugging of auth failures without exposing inspector PII.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">10</div>
+  </div>
+
+  <!-- ════════════ SLIDE 11: FINISH LINE ════════════ -->
+  <div class="slide" id="s11">
+    <div class="grid-bg" id="grid11"></div>
+    <div class="chrome-sq"></div>
+    <div class="chrome-label">
+      <div class="company">JanitorAI</div>
+      <div class="conf">Confidential / 2026</div>
+    </div>
+    <div class="content-area">
+      <h2 class="slide-heading">The Finish Line</h2>
+      <p class="slide-sub">The full inspector journey — from first tap to final report</p>
+      <div class="journey-grid">
+        <div class="journey-step">
+          <div class="journey-num">①</div>
+          <h4>Create project</h4>
+          <p>Opens app → enters project name, inspection date, inspector name, case number.</p>
+        </div>
+        <div class="journey-step">
+          <div class="journey-num">②</div>
+          <h4>Capture on-site</h4>
+          <p>Walks the property → records video, takes photos, dictates voice notes per location.</p>
+        </div>
+        <div class="journey-step">
+          <div class="journey-num">③</div>
+          <h4>Works offline</h4>
+          <p>Loses signal → app saves everything locally. No data lost. Sync indicator shows "Offline".</p>
+        </div>
+        <div class="journey-step">
+          <div class="journey-num">④</div>
+          <h4>Auto-sync resumes</h4>
+          <p>Back online → sync loop pushes all data and media to the server automatically.</p>
+        </div>
+        <div class="journey-step">
+          <div class="journey-num">⑤</div>
+          <h4>Generate report</h4>
+          <p>Taps "Generate Report" → Express API forwards media URL + full project context to the AI Engine.</p>
+        </div>
+        <div class="journey-step">
+          <div class="journey-num">⑥</div>
+          <h4>Gemini analyses</h4>
+          <p>AI Engine uploads video + photos to Gemini. Gemini watches the footage, reads the inspector notes, and returns structured findings.</p>
+        </div>
+        <div class="journey-step">
+          <div class="journey-num">⑦</div>
+          <h4>Report assembled</h4>
+          <p>Template placeholders filled, evidence frame extracted from video and embedded in the Google Doc.</p>
+        </div>
+        <div class="journey-step" style="border-color:var(--blue);background:var(--blue-pale);">
+          <div class="journey-num" style="background:var(--blue);">⑧</div>
+          <h4 style="color:var(--blue);">Client receives report</h4>
+          <p>Inspector receives a Google Doc link — opens it, shares it, or downloads as PDF / DOCX.</p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">11</div>
+  </div>
+
+</div><!-- /deck -->
+
+<!-- Navigation -->
+<div id="nav">
+  <button class="nav-btn" id="prev" onclick="go(-1)">←</button>
+  <div id="counter">1 / 11</div>
+  <button class="nav-btn" id="next" onclick="go(1)">→</button>
+</div>
+
+<script>
+  const TOTAL = 11;
+  let current = 1;
+
+  function buildGrid(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    for (let i = 0; i < 20; i++) {
+      const h = document.createElement('div');
+      h.className = 'grid-line-h';
+      h.style.top = (i * 5) + 'vh';
+      el.appendChild(h);
+      const v = document.createElement('div');
+      v.className = 'grid-line-v';
+      v.style.left = (i * 5) + 'vw';
+      el.appendChild(v);
+    }
+  }
+
+  for (let i = 1; i <= TOTAL; i++) buildGrid('grid' + i);
+
+  function go(dir) {
+    const next = current + dir;
+    if (next < 1 || next > TOTAL) return;
+    document.getElementById('s' + current).classList.remove('active');
+    current = next;
+    document.getElementById('s' + current).classList.add('active');
+    document.getElementById('counter').textContent = current + ' / ' + TOTAL;
+    document.getElementById('prev').disabled = current === 1;
+    document.getElementById('next').disabled = current === TOTAL;
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') go(1);
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') go(-1);
+  });
+
+  // Initial state
+  document.getElementById('prev').disabled = true;
+</script>
+</body>
+</html>
