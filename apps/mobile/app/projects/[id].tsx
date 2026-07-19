@@ -81,6 +81,7 @@ export default function ProjectDetailScreen() {
   const [tokenStatus, setTokenStatus] = useState<'checking' | 'valid' | 'invalid'>('checking');
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [isValidatingToken, setIsValidatingToken] = useState(false);
+  const [isAddingVideo, setIsAddingVideo] = useState(false);
 
   const project = state.project;
   const isTokenValid = tokenStatus === 'valid';
@@ -767,67 +768,87 @@ export default function ProjectDetailScreen() {
     }
 
     const pickVideo = async (fromLibrary: boolean) => {
-      if (fromLibrary) {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Photo library access is required to pick videos.');
+      try {
+        if (fromLibrary) {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission needed', 'Photo library access is required to pick videos.');
+            return;
+          }
+        } else {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission needed', 'Camera permission is required to record video.');
+            return;
+          }
+        }
+
+        setIsAddingVideo(true);
+
+        const result = fromLibrary
+          ? await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+              videoMaxDuration: MAX_VIDEO_DURATION_SECONDS,
+            })
+          : await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+              videoMaxDuration: MAX_VIDEO_DURATION_SECONDS,
+            });
+
+        if (result.canceled || !result.assets || result.assets.length === 0) {
+          // On iOS Safari the browser silently returns "canceled" when it can't
+          // load a video (e.g. the file is too large or stored in iCloud and
+          // the download fails). Give the user a hint so they know what happened.
+          if (Platform.OS === 'web') {
+            Alert.alert(
+              'No video loaded',
+              'The video could not be loaded. If you selected a video but nothing happened, it may be stored in iCloud — download it to your device first, or try a shorter clip (under 30 seconds).',
+            );
+          }
           return;
         }
-      } else {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Camera permission is required to record video.');
+
+        const asset = result.assets[0];
+
+        // Guard: check duration (expo-image-picker reports duration in ms on all platforms)
+        if (asset.duration && asset.duration > MAX_VIDEO_DURATION_SECONDS * 1000) {
+          Alert.alert(
+            'Video too long',
+            `Please select a video shorter than ${MAX_VIDEO_DURATION_SECONDS} seconds (2 minutes) to keep uploads within server limits.`,
+          );
           return;
         }
+
+        // Guard: check file size (must fit within server's 50 MB cap with headroom)
+        const MAX_VIDEO_BYTES = 40 * 1024 * 1024; // 40 MB
+        if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
+          Alert.alert(
+            'Video too large',
+            `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 40 MB to keep uploads reliable.`,
+          );
+          return;
+        }
+
+        const uri = await persistMediaLocally(asset.uri);
+        const trimmed = noteText.trim();
+        const textForNote = trimmed || 'Video note (no text added yet).';
+
+        const newNote: Note = {
+          id: Date.now().toString(),
+          text: textForNote,
+          createdAt: new Date().toISOString(),
+          videoUri: uri,
+        };
+
+        const newNotes = [newNote, ...(project.notes || [])];
+        await updateProjectNotes(newNotes);
+        setNoteText('');
+      } catch (error) {
+        console.error('[addVideoNote] Unexpected error', error);
+        Alert.alert('Could not add video', 'Something went wrong while adding the video. Please try again.');
+      } finally {
+        setIsAddingVideo(false);
       }
-
-      const result = fromLibrary
-        ? await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-            videoMaxDuration: MAX_VIDEO_DURATION_SECONDS,
-          })
-        : await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-            videoMaxDuration: MAX_VIDEO_DURATION_SECONDS,
-          });
-
-      if (result.canceled || !result.assets || result.assets.length === 0) return;
-
-      const asset = result.assets[0];
-
-      // Guard: check duration
-      if (asset.duration && asset.duration > MAX_VIDEO_DURATION_SECONDS * 1000) {
-        Alert.alert(
-          'Video too long',
-          `Please select a video shorter than ${MAX_VIDEO_DURATION_SECONDS} seconds (2 minutes) to keep uploads within server limits.`,
-        );
-        return;
-      }
-
-      // Guard: check file size (must fit within server's 50 MB cap with headroom)
-      const MAX_VIDEO_BYTES = 40 * 1024 * 1024; // 40 MB
-      if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
-        Alert.alert(
-          'Video too large',
-          `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 40 MB to keep uploads reliable.`,
-        );
-        return;
-      }
-
-      const uri = await persistMediaLocally(asset.uri);
-      const trimmed = noteText.trim();
-      const textForNote = trimmed || 'Video note (no text added yet).';
-
-      const newNote: Note = {
-        id: Date.now().toString(),
-        text: textForNote,
-        createdAt: new Date().toISOString(),
-        videoUri: uri,
-      };
-
-      const newNotes = [newNote, ...(project.notes || [])];
-      await updateProjectNotes(newNotes);
-      setNoteText('');
     };
 
     // Alert.alert is a no-op on web — go straight to the library picker
@@ -1395,8 +1416,8 @@ export default function ProjectDetailScreen() {
         <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addPhotoNote}>
           📷 Add photo
         </SecondaryButton>
-        <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addVideoNote}>
-          🎬 Add video
+        <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addVideoNote} disabled={isAddingVideo}>
+          {isAddingVideo ? '⏳ Loading video…' : '🎬 Add video'}
         </SecondaryButton>
       </View>
     </GlassCard>
