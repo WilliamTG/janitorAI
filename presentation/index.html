@@ -514,11 +514,13 @@
         <div class="card">
           <div class="card-dot"></div>
           <div class="card-title">📷 Photos</div>
+          <!-- LIMIT: 8 MB photo cap — source: apps/mobile (ImagePicker quality:0.6) — last verified: July 2026 -->
           <div class="card-body">Up to 8 MB each, compressed at quality 0.6 (EXIF stripped). AI can auto-describe each photo to generate a caption for the report.</div>
         </div>
         <div class="card">
           <div class="card-dot accent"></div>
           <div class="card-title">🎥 Video Clips</div>
+          <!-- LIMIT: 2-min duration / 40 MB size — source: apps/mobile (video picker config) — last verified: July 2026 -->
           <div class="card-body">Up to 2 minutes / 40 MB. The <strong>primary evidence source</strong> — Gemini watches the full clip and identifies the best evidence frames.</div>
         </div>
         <div class="card">
@@ -550,6 +552,7 @@
             <li><strong>Last-write-wins</strong> merge resolves conflicts when the same project is edited on multiple devices</li>
             <li><strong>Pending-delete queue</strong> prevents a deleted project from coming back after a pull from the server</li>
             <li>Media is <strong>deduplicated by URI</strong> — the same photo or video is never uploaded twice</li>
+            <!-- LIMIT: 50 MB client pre-flight — source: apps/api/src/routes/media.js (limits.fileSize: 50*1024*1024) — last verified: July 2026 -->
             <li><strong>50 MB pre-flight check</strong> rejects oversized files client-side before any network call is made</li>
           </ul>
         </div>
@@ -607,10 +610,13 @@
         </li>
         <li>
           <div class="step-num">2</div>
+          <!-- LIMIT: 50 MB client pre-flight — source: apps/api/src/routes/media.js (limits.fileSize: 50*1024*1024) — last verified: July 2026 -->
           <div><strong style="color:var(--black);">App fetches the local blob and pre-flight checks size</strong> — files over 50 MB are quarantined immediately with an amber warning banner. No network round-trip needed.</div>
         </li>
         <li>
           <div class="step-num">3</div>
+          <!-- LIMIT: 50 MB server cap — source: apps/api/src/routes/media.js (limits.fileSize: 50*1024*1024) — last verified: July 2026 -->
+          <!-- LIMIT: 90% disk threshold — source: apps/api/src/diskSpace.js (CRITICAL_PERCENT) — last verified: July 2026 -->
           <div><strong style="color:var(--black);">Blob is POSTed to Express API → <code style="background:#f5f5f5;padding:1px 6px;font-size:0.9em;">/api/media</code></strong> — multer enforces a 50 MB server-side cap; disk-full guard rejects at 90% capacity.</div>
         </li>
         <li>
@@ -774,8 +780,10 @@
           </div>
           <ul class="server-bullets">
             <li>Project CRUD — <code style="font-size:0.9em;">/api/projects</code> with PostgreSQL persistence</li>
+            <!-- LIMIT: 50 MB server cap — source: apps/api/src/routes/media.js (limits.fileSize: 50*1024*1024) — last verified: July 2026 -->
             <li>Media upload / download — <code style="font-size:0.9em;">/api/media</code> with multer (50 MB cap)</li>
             <li>Transcription &amp; image description proxy → Gemini 2.0 Flash</li>
+            <!-- LIMIT: rate limits — source: apps/api/src/middleware/rateLimiters.js (generalLimiter max:300, heavyLimiter max:30, windowMs:15min) — last verified: July 2026 -->
             <li>Rate limiting: 300 req / 15 min general; 30 req / 15 min heavy endpoints</li>
             <li>Admin dashboard, logs endpoint, disk-space guard</li>
           </ul>
@@ -887,6 +895,7 @@
           <div class="sec-icon">🚦</div>
           <div class="sec-text">
             <h4>Rate limiting</h4>
+            <!-- LIMIT: rate limits — source: apps/api/src/middleware/rateLimiters.js (generalLimiter max:300, heavyLimiter max:30, windowMs:15min) — last verified: July 2026 -->
             <p>Two tiers: <strong>300 req / 15 min</strong> globally; <strong>30 req / 15 min</strong> on heavy endpoints (transcription, image description, report generation). Returns HTTP 429 on breach.</p>
           </div>
         </div>
@@ -901,6 +910,7 @@
           <div class="sec-icon">📦</div>
           <div class="sec-text">
             <h4>Upload size enforcement</h4>
+            <!-- LIMIT: 50 MB cap — source: apps/api/src/routes/media.js (limits.fileSize: 50*1024*1024) — last verified: July 2026 -->
             <p><strong>Client-side pre-flight</strong> rejects blobs over 50 MB before any network call. <strong>Server-side</strong> multer enforces the same cap and returns a structured <code style="font-size:0.9em;">FILE_TOO_LARGE</code> error code.</p>
           </div>
         </div>
@@ -908,6 +918,7 @@
           <div class="sec-icon">💾</div>
           <div class="sec-text">
             <h4>Disk-full guard</h4>
+            <!-- LIMIT: 90% disk threshold — source: apps/api/src/diskSpace.js (CRITICAL_PERCENT) — last verified: July 2026 -->
             <p>The media route checks disk usage before accepting any upload. At ≥90% capacity it rejects with HTTP 507 and a user-friendly message telling the inspector their data is safe on-device.</p>
           </div>
         </div>

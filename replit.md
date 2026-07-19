@@ -48,6 +48,22 @@ All AI/report endpoints are protected by `x-tester-token` header. Demo users ent
 - Videos: max 2 minutes duration, max 40 MB file size
 - Server upload cap: 50 MB per file (media route), 20 MB (transcribe/describe-image)
 
+## Presentation Maintenance
+
+The slide deck lives in `presentation/index.html`. Hardcoded limits in the slides are annotated with
+`<!-- LIMIT: ... — source: <file> — last verified: <month year> -->` comments so they are easy to locate.
+
+When you change any of the values below, search the presentation for the corresponding `LIMIT:` comment
+and update both the visible text **and** the `last verified` date:
+
+| What changed | Source file | Slides to update |
+|---|---|---|
+| 50 MB server upload cap | `apps/api/src/routes/media.js` (`limits.fileSize`) | 04, 05, 08, 10 |
+| 2-min / 40 MB video limits | `apps/mobile` (video picker config) | 03 |
+| General rate limit (300 req / 15 min) | `apps/api/src/middleware/rateLimiters.js` (`generalLimiter`) | 08, 10 |
+| Heavy rate limit (30 req / 15 min) | `apps/api/src/middleware/rateLimiters.js` (`heavyLimiter`) | 08, 10 |
+| Disk-full threshold (90%) | `apps/api/src/diskSpace.js` (`CRITICAL_PERCENT`) | 05, 10 |
+
 ## User Preferences
 
 - Keep the project's existing monorepo structure (npm workspaces)
