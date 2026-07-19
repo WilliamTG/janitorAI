@@ -819,12 +819,12 @@ export default function ProjectDetailScreen() {
           return;
         }
 
-        // Guard: check file size (must fit within server's 50 MB cap with headroom)
-        const MAX_VIDEO_BYTES = 40 * 1024 * 1024; // 40 MB
+        // Guard: check file size (must fit within server's 200 MB cap)
+        const MAX_VIDEO_BYTES = 200 * 1024 * 1024; // 200 MB
         if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
           Alert.alert(
             'Video too large',
-            `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 40 MB to keep uploads reliable.`,
+            `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 200 MB to keep uploads reliable.`,
           );
           return;
         }

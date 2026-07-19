@@ -96,7 +96,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB cap
+  limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB cap
 });
 
 async function rejectWhenDiskFull(req, res, next) {
