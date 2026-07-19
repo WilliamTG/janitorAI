@@ -6,6 +6,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   View,
 } from 'react-native';
@@ -311,20 +312,26 @@ export default function Index() {
   };
 
   const deleteProject = async (id: string) => {
+    const doDelete = async () => {
+      const newProjects = await deleteProjectFromStorage(id);
+      setProjects(newProjects);
+      deleteProjectRemote(id).catch(() => {});
+    };
+
+    // Alert.alert is a silent no-op on web — use window.confirm instead.
+    if (Platform.OS === 'web') {
+      if (window.confirm('Delete this project and all its notes? This cannot be undone.')) {
+        await doDelete();
+      }
+      return;
+    }
+
     Alert.alert(
       'Delete project',
       'This will permanently delete this project and all its notes. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const newProjects = await deleteProjectFromStorage(id);
-            setProjects(newProjects);
-            deleteProjectRemote(id).catch(() => {});
-          },
-        },
+        { text: 'Delete', style: 'destructive', onPress: doDelete },
       ]
     );
   };
