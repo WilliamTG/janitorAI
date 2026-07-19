@@ -57,6 +57,15 @@ const API_PATHS = new Set([
   "/transcribe",
   "/describe-image",
 ]);
+// ---------- ADMIN DASHBOARD (public HTML shell, API calls carry the secret) --
+app.get("/admin-dashboard", (req, res) => {
+  res.sendFile(path.join(__dirname, "admin-dashboard.html"));
+});
+
+app.get("/presentation", (req, res) => {
+  res.sendFile(path.join(__dirname, "../../../presentation/index.html"));
+});
+
 if (fs.existsSync(STATIC_DIR)) {
   app.use(express.static(STATIC_DIR, { extensions: ["html"] }));
   app.use((req, res, next) => {
@@ -79,11 +88,6 @@ if (fs.existsSync(STATIC_DIR)) {
 // <Image>/audio players, which cannot set custom headers.
 const mediaRouter = require("./routes/media");
 app.use("/api/media", mediaRouter);
-
-// ---------- ADMIN DASHBOARD (public HTML shell, API calls carry the secret) --
-app.get("/admin-dashboard", (req, res) => {
-  res.sendFile(path.join(__dirname, "admin-dashboard.html"));
-});
 
 // ---------- ADMIN (own auth: x-admin-secret header) ----------
 // Mounted before the global tester-token guard so it uses its own middleware.
