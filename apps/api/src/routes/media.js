@@ -30,24 +30,42 @@ function sanitizeError(err) {
   return err && err.message ? err.message : String(err);
 }
 
-// ── Auth: header or ?token= query ────────────────────────────────────────────
+// ── Auth: x-tester-token header, Authorization: Bearer, or ?token= query ─────
+// Media URLs are embedded directly in <Image> / <audio> tags which cannot set
+// custom headers, so the ?token= query param is the fallback for those cases.
+function extractToken(req) {
+  const custom = req.get("x-tester-token");
+  if (custom) return custom;
+  const auth = req.get("authorization") || "";
+  if (auth.startsWith("Bearer ")) return auth.slice(7).trim() || null;
+  if (typeof req.query.token === "string" && req.query.token) return req.query.token;
+  return null;
+}
+
 async function requireTokenHeaderOrQuery(req, res, next) {
-  const providedToken =
-    req.get("x-tester-token") ||
-    (typeof req.query.token === "string" ? req.query.token : "");
+  const providedToken = extractToken(req);
 
   if (!providedToken) {
-    return res.status(401).json({ error: "Unauthorized" });
+    return res.status(401).json({
+      error: "Unauthorized",
+      message: "A tester token is required via x-tester-token, Authorization: Bearer, or ?token=.",
+    });
   }
 
-  // DB-backed validation
+  // ── DB-backed validation (production) ────────────────────────────────────
   if (isDbEnabled()) {
     try {
-      const token = await lookupToken(providedToken);
-      if (!token) {
-        return res.status(401).json({ error: "Unauthorized" });
+      const row = await lookupToken(providedToken);
+      if (!row) {
+        return res.status(401).json({
+          error: "Unauthorized",
+          message: "Token not recognised or has been deactivated.",
+        });
       }
-      req.testerToken = token;
+      // Store the token string (not the full row object) so downstream
+      // handlers can use req.testerToken as a plain string in SQL queries.
+      req.testerToken = row.token;
+      req.testerEmail = row.email || null;
       return next();
     } catch (err) {
       console.error("Media token lookup error:", err && err.message);
@@ -55,23 +73,27 @@ async function requireTokenHeaderOrQuery(req, res, next) {
     }
   }
 
-  // Env-var fallback (no DB)
+  // ── Env-var fallback (local dev / no DATABASE_URL) ────────────────────────
   const expectedToken = process.env.TESTER_TOKEN;
   if (!expectedToken) {
-    return res.status(503).json({ error: "TESTER_TOKEN not configured" });
+    return res.status(503).json({
+      error: "Server misconfiguration",
+      message: "No DATABASE_URL and no TESTER_TOKEN env var — cannot validate token.",
+    });
   }
 
   try {
     const a = Buffer.from(expectedToken);
     const b = Buffer.from(providedToken);
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-      return res.status(401).json({ error: "Unauthorized" });
+      return res.status(401).json({ error: "Unauthorized", message: "Invalid token." });
     }
   } catch {
-    return res.status(401).json({ error: "Unauthorized" });
+    return res.status(401).json({ error: "Unauthorized", message: "Invalid token." });
   }
 
   req.testerToken = providedToken;
+  req.testerEmail = null;
   next();
 }
 

@@ -225,7 +225,9 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
 
   try {
     const { report_meta, video_filename, project } = req.body;
-    const token = req.headers["x-tester-token"];
+    // Use the token already validated and set by the requireTesterToken middleware.
+    // Reading the raw header again would miss Authorization: Bearer tokens.
+    const token = req.testerToken;
 
     // Require a real media ID — no demo fallback
     if (!video_filename || video_filename === "demo") {
@@ -333,7 +335,8 @@ app.get("/api/projects/:id/download/:format", async (req, res) => {
   }
 
   try {
-    const token = req.headers["x-tester-token"] || "";
+    // Use the validated token set by middleware — not the raw header.
+    const token = req.testerToken || "";
     const aiRes = await fetch(
       `${aiEngineUrl}/api/export/${encodeURIComponent(docId)}?format=${format}`,
       { headers: { "x-tester-token": token } }

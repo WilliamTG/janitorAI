@@ -1,13 +1,26 @@
 // optionalTesterToken.js
 // Like requireTesterToken, but never blocks the request.
-// Sets req.testerToken if a valid token is present; otherwise leaves it null.
-// Used for log endpoints so unauthenticated sessions still reach the DB.
+// Sets req.testerToken / req.testerEmail if a valid token is present;
+// otherwise leaves them null. Used for log endpoints so unauthenticated
+// sessions still reach the DB.
+//
+// Token extraction order (first non-empty wins):
+//   1. x-tester-token header
+//   2. Authorization: Bearer <token>
 
 const { isDbEnabled, lookupToken } = require("../db");
 const crypto = require("crypto");
 
+function extractToken(req) {
+  const custom = req.get("x-tester-token");
+  if (custom) return custom;
+  const auth = req.get("authorization") || "";
+  if (auth.startsWith("Bearer ")) return auth.slice(7).trim() || null;
+  return null;
+}
+
 async function optionalTesterToken(req, res, next) {
-  const providedToken = req.get("x-tester-token");
+  const providedToken = extractToken(req);
 
   // No token at all — proceed anonymously.
   if (!providedToken) {
@@ -35,7 +48,7 @@ async function optionalTesterToken(req, res, next) {
     return next();
   }
 
-  // ── Env-var fallback (no DB) ──────────────────────────────────────────────
+  // ── Env-var fallback (local dev / no DATABASE_URL) ────────────────────────
   const expectedToken = process.env.TESTER_TOKEN;
   if (expectedToken) {
     try {
