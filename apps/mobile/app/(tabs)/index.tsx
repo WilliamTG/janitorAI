@@ -339,7 +339,7 @@ export default function Index() {
   // ── Render: token modal ─────────────────────────────────────────────────────
 
   const renderTokenModal = () => (
-    <Modal visible={showTokenModal} transparent animationType="fade" onRequestClose={() => setShowTokenModal(true)}>
+    <Modal visible={showTokenModal} transparent animationType="fade" onRequestClose={() => setShowTokenModal(false)}>
       <View style={{
         flex: 1,
         backgroundColor: theme.colors.overlay,
@@ -348,7 +348,17 @@ export default function Index() {
         padding: theme.spacing.lg,
       }}>
         <GlassCard style={{ width: '100%', gap: theme.spacing.sm }}>
-          <Title>Enter tester token</Title>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Title>Enter tester token</Title>
+            <TouchableOpacity
+              onPress={() => setShowTokenModal(false)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              disabled={isValidatingToken}
+              accessibilityLabel="Close"
+            >
+              <Ionicons name="close" size={22} color={theme.colors.muted} />
+            </TouchableOpacity>
+          </View>
           <Body muted>Access is restricted. Enter your tester token to continue.</Body>
           {tokenError && <Caption style={{ color: theme.colors.danger }}>{tokenError}</Caption>}
           <TextField
