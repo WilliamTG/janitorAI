@@ -3,7 +3,7 @@ import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, Image, Linking, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Linking, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 
 import { getApiBaseUrl } from '@/src/config/api';
@@ -200,13 +200,22 @@ export default function ProjectDetailScreen() {
   }, [isEditingDescription, state.project]);
 
   // Initialise reportMeta draft whenever a (different) project loads.
+  // Auto-expand the section when the key inspection fields are all empty so the
+  // user immediately knows they need to fill them in.
   useEffect(() => {
     if (project) {
+      const meta = project.reportMeta;
       setReportMetaDraft({
         contributors: [{}],
         buildings: [{}],
-        ...project.reportMeta,
+        ...meta,
       });
+      const isEmpty =
+        !meta?.caseNumber &&
+        !meta?.inspectionDoneByName &&
+        !meta?.customerName &&
+        !meta?.addressStreet;
+      if (isEmpty) setReportMetaOpen(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id]);
@@ -1003,7 +1012,7 @@ export default function ProjectDetailScreen() {
   };
 
   const renderTokenModal = () => (
-    <Modal visible={showTokenModal} transparent animationType="fade" onRequestClose={() => setShowTokenModal(true)}>
+    <Modal visible={showTokenModal} transparent animationType="fade" onRequestClose={() => setShowTokenModal(false)}>
       <View
         style={{
           flex: 1,
@@ -1014,7 +1023,16 @@ export default function ProjectDetailScreen() {
         }}
       >
         <GlassCard style={{ width: '100%', gap: theme.spacing.sm }}>
-          <Title>Enter tester token</Title>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Title>Enter tester token</Title>
+            <TouchableOpacity
+              onPress={() => setShowTokenModal(false)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Close"
+            >
+              <Ionicons name="close" size={22} color={theme.colors.muted} />
+            </TouchableOpacity>
+          </View>
           <Body muted>Access is restricted. Enter your tester token to continue.</Body>
           {tokenError && <Caption style={{ color: theme.colors.danger }}>{tokenError}</Caption>}
           <TextField
@@ -1062,7 +1080,12 @@ export default function ProjectDetailScreen() {
               <Caption>Video clip attached</Caption>
               {item.videoRemoteId
                 ? <Caption muted>✓ Uploaded to server</Caption>
-                : <Caption muted>Pending upload…</Caption>}
+                : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <ActivityIndicator size="small" color={theme.colors.accent} />
+                    <Caption muted>Uploading video…</Caption>
+                  </View>
+                )}
             </View>
           </View>
         )}
@@ -1397,30 +1420,51 @@ export default function ProjectDetailScreen() {
   );
 
   const noteComposer = (
-    <GlassCard style={{ gap: theme.spacing.sm, marginBottom: theme.spacing.lg }}>
-      <Caption muted>What would you say during the inspection?</Caption>
-      <TextField
-        multiline
-        value={noteText}
-        onChangeText={setNoteText}
-        placeholder="Type your observation here..."
-        style={{ minHeight: 100, textAlignVertical: 'top' }}
-      />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: theme.spacing.sm }}>
-        <PrimaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addTextNote}>
-          Save note
-        </PrimaryButton>
-        <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={handleRecordPress}>
-          {recording ? 'Stop & save voice' : 'Voice note'}
-        </SecondaryButton>
-        <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addPhotoNote}>
-          📷 Add photo
-        </SecondaryButton>
-        <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addVideoNote} disabled={isAddingVideo}>
-          {isAddingVideo ? '⏳ Loading video…' : '🎬 Add video'}
-        </SecondaryButton>
-      </View>
-    </GlassCard>
+    <>
+      <GlassCard style={{ gap: theme.spacing.sm, marginBottom: theme.spacing.xs }}>
+        <Caption muted>What would you say during the inspection?</Caption>
+        <TextField
+          multiline
+          value={noteText}
+          onChangeText={setNoteText}
+          placeholder="Type your observation here..."
+          style={{ minHeight: 100, textAlignVertical: 'top' }}
+        />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: theme.spacing.sm }}>
+          <PrimaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addTextNote}>
+            Save note
+          </PrimaryButton>
+          <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={handleRecordPress}>
+            {recording ? 'Stop & save voice' : 'Voice note'}
+          </SecondaryButton>
+          <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addPhotoNote}>
+            📷 Add photo
+          </SecondaryButton>
+          <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addVideoNote} disabled={isAddingVideo}>
+            {isAddingVideo ? '⏳ Loading video…' : '🎬 Add video'}
+          </SecondaryButton>
+        </View>
+      </GlassCard>
+      <TouchableOpacity
+        onPress={() => setActiveTab('report')}
+        activeOpacity={0.75}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: theme.spacing.sm,
+          paddingVertical: theme.spacing.md,
+          paddingHorizontal: theme.spacing.lg,
+          backgroundColor: theme.colors.accent,
+          borderRadius: theme.radii.md,
+          marginTop: theme.spacing.xs,
+          marginBottom: theme.spacing.lg,
+        }}
+      >
+        <Body style={{ color: '#fff', fontWeight: '600' }}>View Report</Body>
+        <Ionicons name="arrow-forward" size={18} color="#fff" />
+      </TouchableOpacity>
+    </>
   );
 
   const renderNotesTab = () => {
