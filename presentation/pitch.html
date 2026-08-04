@@ -31,7 +31,7 @@
     font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
     font-size: 15px; line-height: 1.55;
   }
-  .page { max-width: 980px; margin: 0 auto; padding: 40px 20px 72px; display: flex; flex-direction: column; gap: 44px; }
+  .page { max-width: 1020px; margin: 0 auto; padding: 28px 16px 40px; display: flex; flex-direction: column; justify-content: center; min-height: 100vh; }
 
   header .brand-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
   .brand-sq { width: 22px; height: 22px; background: var(--accent-fill); flex: none; }
@@ -171,53 +171,37 @@
   .seg .fill { position: absolute; inset: 0; width: 0%; background: #5B84B4; }
   .seg.done .fill { width: 100%; }
 
-  /* ═══════════ UI-GREP-SEKSJON ═══════════ */
-  section { display: flex; flex-direction: column; gap: 16px; }
-  .sec-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
-  .sec-head .eyebrow { color: var(--muted); }
-  h2 { margin: 0; font-size: 20px; font-weight: 700; }
-  section > p { margin: 0; max-width: 68ch; color: var(--muted); }
-  section > p strong { color: var(--ink); font-weight: 600; }
-
-  .grep { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
-  .g-card { background: var(--paper); border: 1px solid var(--border); padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
-  .g-top { display: flex; align-items: center; gap: 8px; }
-  .g-id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; color: var(--accent); border: 1px solid var(--accent); padding: 1px 7px; }
-  .g-st { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-left: auto; }
-  .g-st.miss { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
-  .g-st.part { color: var(--amber); background: var(--amber-pale); }
-  .g-st.wip  { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
-  .g-card h3 { margin: 0; font-size: 15px; font-weight: 700; }
-  .g-card .now { font-size: 13px; color: var(--muted); }
-  .g-card .now code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; background: var(--surface); border: 1px solid var(--border); padding: 0 4px; }
-  .g-card .rec { font-size: 13.5px; }
-  .g-card .rec b { font-weight: 600; }
-
-  footer { border-top: 1px solid var(--border); padding-top: 16px; font-size: 12.5px; color: var(--muted); max-width: 70ch; }
 </style>
 
 <div class="page">
 
-  <header>
-    <div class="brand-row">
-      <div class="brand-sq"></div>
-      <span class="eyebrow">DocrAI · Presentasjon · Kundereisen</span>
-    </div>
-    <h1>Én vannskade, syv minutter, null tvil</h1>
-    <p class="lede">
-      En autospillende presentasjon som følger takstperson Kari gjennom en ekte
-      vannskadesak. Grepene som vises er ikke skisser: <strong>de er bygget og verifisert i
-      prototypen</strong>. Styr med fremdriftslinjen, pilene eller mellomrom.
-    </p>
-  </header>
 
   <!-- ═══════════ VIDEO-PITCH ═══════════ -->
   <div class="player" aria-label="DocrAI pitch-video">
     <div class="stage" id="stage">
 
+      <!-- SCENE 7 · Outro -->
+      <div class="scene s-outro" data-dur="15000">
+        <span class="sc-label">Scene 1 · Derfor DocrAI</span>
+        <div class="center">
+          <div class="loop rise">
+            <span class="n">Takstpersonens rettelser</span><span class="a">→</span>
+            <span class="n">Evalsett · 30–50 ekte saker</span><span class="a">→</span>
+            <span class="n">Målt siteringsscore</span><span class="a">→</span>
+            <span class="n">Bedre forslag</span>
+          </div>
+          <div class="tagline rise d2">Hver sak gjør den neste bedre — og datafortrinnet er vårt.</div>
+          <div class="sub rise d3">
+            Forsikringsverdig dokumentasjon av komplekse bygningsskader: video inn, verifisert
+            Byggforsk-forankret rapport ut. Ingen andre i Norden gjør akkurat dette.
+          </div>
+          <div class="brandline rise d4" style="position: static;"><span class="sq"></span>DocrAI — fra befaring til bevis</div>
+        </div>
+      </div>
+
       <!-- SCENE 1 · Krok -->
       <div class="scene s-intro" data-dur="14000">
-        <span class="sc-label">Scene 1 · Oppdraget</span>
+        <span class="sc-label">Scene 2 · Oppdraget</span>
         <span class="sc-kicker">Rykkinn, en tirsdag i november</span>
         <div class="clock rise">07:42</div>
         <div class="big rise d1">Vannskade i kjeller. Forsikringen trenger svar: akutt — eller gradvis?</div>
@@ -231,7 +215,7 @@
 
       <!-- SCENE 2 · Prosjektet -->
       <div class="scene" data-dur="17000">
-        <span class="sc-label">Scene 2 · Før hun kjører</span>
+        <span class="sc-label">Scene 3 · Før hun kjører</span>
         <div class="phone pop" style="left: 12%; top: 10%;">
           <div class="p-screen">
             <div class="p-head">
@@ -271,7 +255,7 @@
 
       <!-- SCENE 3 · I felt -->
       <div class="scene" data-dur="19000">
-        <span class="sc-label">Scene 3 · I kjelleren — med hansker på</span>
+        <span class="sc-label">Scene 4 · I kjelleren — med hansker på</span>
         <div class="phone pop" style="left: 12%; top: 10%;">
           <div class="p-screen">
             <div class="p-head">
@@ -318,7 +302,7 @@
 
       <!-- SCENE 4 · AI-en jobber -->
       <div class="scene" data-dur="19000">
-        <span class="sc-label">Scene 4 · På vei til neste befaring</span>
+        <span class="sc-label">Scene 5 · På vei til neste befaring</span>
         <div class="phone pop" style="left: 12%; top: 10%;">
           <div class="p-screen">
             <div class="p-head">
@@ -356,7 +340,7 @@
 
       <!-- SCENE 5 · Godkjenning -->
       <div class="scene" data-dur="17000">
-        <span class="sc-label">Scene 5 · Takstmannen bestemmer</span>
+        <span class="sc-label">Scene 6 · Takstpersonen bestemmer</span>
         <div class="phone pop" style="left: 12%; top: 10%;">
           <div class="p-screen">
             <div class="p-head">
@@ -395,7 +379,7 @@
 
       <!-- SCENE 6 · Deling -->
       <div class="scene" data-dur="19000">
-        <span class="sc-label">Scene 6 · Hos forsikringsselskapet</span>
+        <span class="sc-label">Scene 7 · Hos forsikringsselskapet</span>
         <div class="browser pop" style="left: 8%; top: 12%;">
           <div class="b-bar"><span class="dots"><i></i><i></i><i></i></span><span class="b-url">docrai.no/r/solbergveien-14</span></div>
           <div class="b-body">
@@ -423,24 +407,6 @@
         </div>
       </div>
 
-      <!-- SCENE 7 · Outro -->
-      <div class="scene s-outro" data-dur="15000">
-        <span class="sc-label">Scene 7 · Og neste sak?</span>
-        <div class="center">
-          <div class="loop rise">
-            <span class="n">Karis rettelser</span><span class="a">→</span>
-            <span class="n">Evalsett · 30–50 ekte saker</span><span class="a">→</span>
-            <span class="n">Målt siteringsscore</span><span class="a">→</span>
-            <span class="n">Bedre forslag</span>
-          </div>
-          <div class="tagline rise d2">Hver sak gjør den neste bedre — og datafortrinnet er vårt.</div>
-          <div class="sub rise d3">
-            Forsikringsverdig dokumentasjon av komplekse bygningsskader: video inn, verifisert
-            Byggforsk-forankret rapport ut. Ingen andre i Norden gjør akkurat dette.
-          </div>
-          <div class="brandline rise d4" style="position: static;"><span class="sq"></span>DocrAI — fra befaring til bevis</div>
-        </div>
-      </div>
     </div>
 
     <div class="caption"><span class="cnum" id="cnum">1/7</span><span id="cap"></span></div>
@@ -452,74 +418,6 @@
     </div>
   </div>
 
-  <!-- ═══════════ UI-GREPENE ═══════════ -->
-  <section>
-    <div class="sec-head"><span class="eyebrow">Grunnlaget</span><h2>Grepene — bygget inn i prototypen</h2></div>
-    <p>
-      Hvert grep er sjekket mot kodebasen. <strong>Status</strong> viser hvor det står nå:
-      <em>bygget</em> = implementert og verifisert i prototypen, <em>delvis</em> = påbegynt,
-      <em>gjenstår</em> = neste steg.
-    </p>
-    <div class="grep">
-      <div class="g-card">
-        <div class="g-top"><span class="g-id">B13</span><h3>Store fangst-knapper + fast «Se rapport»</h3><span class="g-st wip">bygget</span></div>
-        <p class="now">Var: fire knapper à 42 px i rutenett som scrollet bort med resten av siden.</p>
-        <p class="rec"><b>Bygget:</b> tre fulle rader på 56 px (Lydnotat · Bilde · Video) øverst, og «Se rapport» forankret i bunnen av skjermen.</p>
-      </div>
-      <div class="g-card">
-        <div class="g-top"><span class="g-id">B7</span><h3>Delt lenke åpner forensisk rapport</h3><span class="g-st wip">bygget</span></div>
-        <p class="now">Var: rå dokumentlenke med offentlig delte bevisbilder.</p>
-        <p class="rec"><b>Bygget:</b> egen mottakerside uten konto — saksfakta, skade og årsak, bevisgalleri og notater. Delingen <em>er</em> produktet i forsikringens øyne.</p>
-      </div>
-      <div class="g-card">
-        <div class="g-top"><span class="g-id">B10</span><h3>PIN + utløpsdato som standard</h3><span class="g-st wip">bygget</span></div>
-        <p class="now">Var: ingen delingsfunksjon i det hele tatt.</p>
-        <p class="rec"><b>Bygget:</b> hver lenke får sekssifret PIN og utløpsdato; mottakeren ser «PIN-beskyttet · utløper om 30 dager». Fem feilforsøk gir kvarters pause. Wenn deler kontoløst uten PIN — dette er differensieringen.</p>
-      </div>
-      <div class="g-card">
-        <div class="g-top"><span class="g-id">B16</span><h3>Synkstatus alltid synlig</h3><span class="g-st wip">bygget</span></div>
-        <p class="now">Var: indikator gjemt i scrollende listetopp, fraværende på detaljskjermen.</p>
-        <p class="rec"><b>Bygget:</b> fast topprad på begge skjermer: «Lagret i skyen» / «Venter på nett — lagret lokalt».</p>
-      </div>
-      <div class="g-card">
-        <div class="g-top"><span class="g-id">B14</span><h3>Kompakt, klikkbart prosjektkort</h3><span class="g-st wip">bygget</span></div>
-        <p class="now">Var: kun en egen knapp åpnet prosjektet, og innholdet ble strukket i full bredde på store skjermer.</p>
-        <p class="rec"><b>Bygget:</b> hele kortet er én trykkflate, innholdet holder 840 px maksbredde, og tellerne står som stille metadata.</p>
-      </div>
-      <div class="g-card">
-        <div class="g-top"><span class="g-id">B18</span><h3>Stille kvitteringer og ikoner</h3><span class="g-st wip">bygget</span></div>
-        <p class="now">Var: 57 avbrytende systemvarsler og emoji i knapper og prosessvisning.</p>
-        <p class="rec"><b>Bygget:</b> kvitteringer i forbifarten med AA-kontrast; dialog kun ved sletting; gjennomgående ikonsett.</p>
-      </div>
-      <div class="g-card">
-        <div class="g-top"><span class="g-id">B20</span><h3>Statuschip med AA-kontrast og «Prøv igjen»</h3><span class="g-st wip">bygget</span></div>
-        <p class="now">Var: lav-kontrast fargetekst, og feil ga bare en feilmelding uten handling.</p>
-        <p class="rec"><b>Bygget:</b> chip som består WCAG AA i begge temaer — og «Prøv igjen» starter faktisk genereringen på nytt, også fra prosjektlisten.</p>
-      </div>
-      <div class="g-card">
-        <div class="g-top"><span class="g-id">B9+B11</span><h3>Bevis med posisjon, tid og sjekksum</h3><span class="g-st wip">bygget</span></div>
-        <p class="now">Var: bevis uten verifiserbar opprinnelse.</p>
-        <p class="rec"><b>Bygget:</b> foto og video stemples med tid og posisjon i felt, og serveren setter SHA-256 ved mottak — synlig i appen og fullt ut på delingssiden.</p>
-      </div>
-      <div class="g-card">
-        <div class="g-top"><span class="g-id">B15+B17</span><h3>Trygg sletting · adresse som navn</h3><span class="g-st part">delvis</span></div>
-        <p class="now">Sletting ligger nå bak meny med navnebekreftelse, og duplikatnavn varsles ved opprettelse.</p>
-        <p class="rec"><b>Gjenstår:</b> automatisk forslag om adressen som prosjektnavn når rapportskjemaet har adresse.</p>
-      </div>
-      <div class="g-card">
-        <div class="g-top"><span class="g-id">B2+B19</span><h3>Norsk språk · DocrAI-navnet</h3><span class="g-st wip">bygget</span></div>
-        <p class="now">Var: engelsk fra topp til bunn under navnet «Inspections».</p>
-        <p class="rec"><b>Bygget:</b> norsk strengkatalog med dd.mm.åååå-datoer i hele appen, og DocrAI-navnet i header og app-konfigurasjon.</p>
-      </div>
-    </div>
-  </section>
-
-  <footer>
-    Manuset følger kundereisen fra løsningsskissen: felt → AI-arbeid → godkjenning → rapport →
-    deling → læring. Alle grep merket «bygget» er implementert i prototypen og verifisert med
-    typesjekk, enhetstester og en ende-til-ende-test av delingskjeden mot ekte database —
-    inkludert PIN-port, utestengelse ved feilforsøk og sjekksum på hvert bevis.
-  </footer>
 </div>
 
 <script>
@@ -527,13 +425,13 @@
     var stage = document.getElementById('stage');
     var scenes = Array.prototype.slice.call(stage.querySelectorAll('.scene'));
     var caps = [
+      'DocrAI gjør befaringsvideo til forsikringsverdig skaderapport — og hver rettelse fra takstpersonen gjør verktøyet bedre. Bli med Kari gjennom en ekte vannskadesak.',
       'Kl. 07:42 ringer telefonen: vannskade i kjeller. Spørsmålet som avgjør oppgjøret er om den er akutt eller gradvis — og svaret må dokumenteres.',
-      'Kari oppretter saken før hun kjører. Adressen blir prosjektnavnet, kortet er én trykkflate, og sync-status står fast i headeren.',
+      'Kari oppretter saken før hun kjører. Adressen blir prosjektnavnet, kortet er én trykkflate, og synkstatus står fast i headeren.',
       'I kjelleren er det mørkt og hanskene er våte. Tre store knapper — Lydnotat, Bilde, Video — og hvert opptak fødes med geo, tid og sjekksum.',
       'Mens Kari kjører videre, transkriberer AI-en på norsk, foreslår skadetype, trekker bevisbilder og henter Byggforsk-anvisningen — med verifisert punktnummer.',
       'AI foreslår, Kari avgjør: hun korrigerer «akutt» til «gradvis» og godkjenner. Rettelsen blir treningsdata; godkjenningen stemples i rapporten.',
-      'Forsikringsselskapet åpner en PIN-beskyttet lenke og møter en forensisk rapport — årsak, klassifisering, verifisert sitat og hash-sikret bevis. Ikke råfiler.',
-      'Hver rettelse mates inn i evalsettet og måles. Verktøyet blir bedre for hver sak — og datafortrinnet kan ingen kopiere. DocrAI: fra befaring til bevis.'
+      'Forsikringsselskapet åpner en PIN-beskyttet lenke og møter en forensisk rapport — årsak, klassifisering, verifisert sitat og hash-sikret bevis. Ikke råfiler.'
     ];
     var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var idx = 0, playing = !reduced, raf = null, sceneStart = 0, acc = 0;
