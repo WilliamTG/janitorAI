@@ -180,37 +180,37 @@
   <div class="player" aria-label="DocrAI pitch-video">
     <div class="stage" id="stage">
 
-      <!-- SCENE 7 · Outro -->
-      <div class="scene s-outro" data-dur="15000">
-        <span class="sc-label">Scene 1 · Derfor DocrAI</span>
-        <div class="center">
-          <div class="loop rise">
-            <span class="n">Takstpersonens rettelser</span><span class="a">→</span>
-            <span class="n">Evalsett · 30–50 ekte saker</span><span class="a">→</span>
-            <span class="n">Målt siteringsscore</span><span class="a">→</span>
-            <span class="n">Bedre forslag</span>
-          </div>
-          <div class="tagline rise d2">Hver sak gjør den neste bedre — og datafortrinnet er vårt.</div>
-          <div class="sub rise d3">
-            Forsikringsverdig dokumentasjon av komplekse bygningsskader: video inn, verifisert
-            Byggforsk-forankret rapport ut. Ingen andre i Norden gjør akkurat dette.
-          </div>
-          <div class="brandline rise d4" style="position: static;"><span class="sq"></span>DocrAI — fra befaring til bevis</div>
-        </div>
-      </div>
-
       <!-- SCENE 1 · Krok -->
       <div class="scene s-intro" data-dur="14000">
-        <span class="sc-label">Scene 2 · Oppdraget</span>
+        <span class="sc-label">Scene 1 · Problemet</span>
         <span class="sc-kicker">Rykkinn, en tirsdag i november</span>
         <div class="clock rise">07:42</div>
         <div class="big rise d1">Vannskade i kjeller. Forsikringen trenger svar: akutt — eller gradvis?</div>
         <div class="pain">
-          <div class="p-item rise d2">Før: to timer rapportskriving i bilen etterpå</div>
-          <div class="p-item rise d3">Notater på mobil — med våte hansker på små knapper</div>
+          <div class="p-item rise d2">To timer rapportskriving i bilen etterpå</div>
+          <div class="p-item rise d3">Notater på små knapper — med våte hansker</div>
           <div class="p-item rise d4">Dokumentasjon som ikke holder i oppgjøret</div>
         </div>
-        <div class="brandline rise d5"><span class="sq"></span>DocrAI — fra befaring til bevis</div>
+      </div>
+
+      <!-- SCENE 7 · Outro -->
+      <div class="scene s-outro" data-dur="15000">
+        <span class="sc-label">Scene 2 · Løsningen</span>
+        <div class="center">
+          <div class="tagline rise">Video inn. Forsikringsverdig rapport ut. På minutter — ikke timer.</div>
+          <div class="loop rise d2">
+            <span class="n">Video og lyd i felt</span><span class="a">→</span>
+            <span class="n">AI skriver utkast</span><span class="a">→</span>
+            <span class="n">Takstperson godkjenner</span><span class="a">→</span>
+            <span class="n">PIN-delt rapport</span>
+          </div>
+          <div class="sub rise d3">
+            AI-en gjør grovarbeidet, fagpersonen tar avgjørelsen — og hver rettelse gjør neste
+            sak bedre. Forsikringsverdig dokumentasjon med Byggforsk-forankring: ingen andre i
+            Norden gjør akkurat dette.
+          </div>
+          <div class="brandline rise d4" style="position: static;"><span class="sq"></span>DocrAI — fra befaring til bevis</div>
+        </div>
       </div>
 
       <!-- SCENE 2 · Prosjektet -->
@@ -425,9 +425,9 @@
     var stage = document.getElementById('stage');
     var scenes = Array.prototype.slice.call(stage.querySelectorAll('.scene'));
     var caps = [
-      'DocrAI gjør befaringsvideo til forsikringsverdig skaderapport — og hver rettelse fra takstpersonen gjør verktøyet bedre. Bli med Kari gjennom en ekte vannskadesak.',
-      'Kl. 07:42 ringer telefonen: vannskade i kjeller. Spørsmålet som avgjør oppgjøret er om den er akutt eller gradvis — og svaret må dokumenteres.',
-      'Kari oppretter saken før hun kjører. Adressen blir prosjektnavnet, kortet er én trykkflate, og synkstatus står fast i headeren.',
+      'Kl. 07:42: vannskade i kjeller. Takstpersonen vet hva som venter — timevis med rapportskriving, og et oppgjør som står og faller på dokumentasjonen. Var skaden akutt eller gradvis?',
+      'Dette er løsningen: DocrAI gjør opptakene fra befaringen til en forsikringsverdig skaderapport. AI-en skriver utkastet, takstpersonen godkjenner, og mottakeren får en PIN-beskyttet rapport med verifiserbart bevis.',
+      'Slik ser det ut i praksis. Kari oppretter saken før hun kjører: adressen blir prosjektnavnet, kortet er én trykkflate, og synkstatus står fast i headeren.',
       'I kjelleren er det mørkt og hanskene er våte. Tre store knapper — Lydnotat, Bilde, Video — og hvert opptak fødes med geo, tid og sjekksum.',
       'Mens Kari kjører videre, transkriberer AI-en på norsk, foreslår skadetype, trekker bevisbilder og henter Byggforsk-anvisningen — med verifisert punktnummer.',
       'AI foreslår, Kari avgjør: hun korrigerer «akutt» til «gradvis» og godkjenner. Rettelsen blir treningsdata; godkjenningen stemples i rapporten.',
