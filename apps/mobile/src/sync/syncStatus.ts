@@ -107,3 +107,44 @@ export function useOversizedFileError(): boolean {
 
   return detected;
 }
+
+// ---------- VIDEO UPLOAD PROGRESS ----------
+// Per-URI upload progress (0–100). Stored in a plain Map; React components
+// subscribe via useVideoUploadProgress() and re-render on each progress tick.
+
+const videoUploadProgress = new Map<string, number>();
+const videoProgressListeners = new Map<string, Set<(pct: number | null) => void>>();
+
+export function setVideoUploadProgress(uri: string, pct: number): void {
+  videoUploadProgress.set(uri, pct);
+  videoProgressListeners.get(uri)?.forEach((l) => l(pct));
+}
+
+export function clearVideoUploadProgress(uri: string): void {
+  videoUploadProgress.delete(uri);
+  videoProgressListeners.get(uri)?.forEach((l) => l(null));
+  videoProgressListeners.delete(uri);
+}
+
+export function useVideoUploadProgress(uri: string | undefined): number | null {
+  const [pct, setPct] = useState<number | null>(
+    uri != null ? (videoUploadProgress.get(uri) ?? null) : null,
+  );
+
+  useEffect(() => {
+    if (uri == null) return;
+    // Sync immediately with whatever the store has right now.
+    setPct(videoUploadProgress.get(uri) ?? null);
+
+    const listener = (next: number | null) => setPct(next);
+    if (!videoProgressListeners.has(uri)) {
+      videoProgressListeners.set(uri, new Set());
+    }
+    videoProgressListeners.get(uri)!.add(listener);
+    return () => {
+      videoProgressListeners.get(uri)?.delete(listener);
+    };
+  }, [uri]);
+
+  return pct;
+}
