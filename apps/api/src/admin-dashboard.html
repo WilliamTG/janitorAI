@@ -47,7 +47,7 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 2rem;
-      width: min(400px, 92vw);
+      width: min(440px, 92vw);
       box-shadow: var(--shadow);
     }
     .modal h2 { font-size: 1.25rem; margin-bottom: 0.5rem; }
@@ -57,11 +57,49 @@
     .container { max-width: 960px; margin: 0 auto; }
 
     header {
-      display: flex; align-items: center; justify-content: space-between;
+      display: flex; align-items: flex-start; justify-content: space-between;
       margin-bottom: 2rem; gap: 1rem; flex-wrap: wrap;
     }
     header h1 { font-size: 1.5rem; letter-spacing: -0.02em; }
     header h1 span { color: var(--accent); }
+
+    /* ── Backend target badge ── */
+    #backend-badge {
+      display: flex; align-items: center; gap: 0.5rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.4rem 0.75rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      max-width: 100%;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    #backend-badge:hover { border-color: var(--accent); color: var(--text); }
+    #backend-badge .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--success); flex-shrink: 0;
+    }
+    #backend-url-text {
+      font-family: 'Menlo','Consolas',monospace;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 260px;
+    }
+
+    /* ── Backend config panel ── */
+    #backend-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+      display: none;
+    }
+    #backend-panel.open { display: block; }
+    #backend-panel label { font-size: 0.8rem; color: var(--muted); display: block; margin-bottom: 0.4rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+    #backend-panel .row { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+    #backend-panel .hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.5rem; }
 
     /* ── Tabs ── */
     .tabs {
@@ -103,7 +141,7 @@
     .form-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
     .form-row input { flex: 1; min-width: 160px; }
 
-    input[type="text"], input[type="password"] {
+    input[type="text"], input[type="password"], input[type="email"], input[type="url"] {
       background: var(--surface2);
       border: 1px solid var(--border);
       border-radius: var(--radius);
@@ -255,6 +293,16 @@
       <h2>🔐 Admin access</h2>
       <p>Enter the ADMIN_SECRET to continue. It will be kept in your session only.</p>
       <div style="display:flex; flex-direction:column; gap:0.75rem;">
+        <!-- Backend URL inside the auth modal so the right server is targeted from the start -->
+        <div>
+          <label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;">Production backend URL</label>
+          <input id="modalBackendInput" type="url"
+            placeholder="https://janitorai-backend.onrender.com"
+            autocomplete="off" spellcheck="false" />
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:0.3rem;">
+            All API calls go here. Defaults to the Render production server.
+          </div>
+        </div>
         <input id="secretInput" type="password" placeholder="ADMIN_SECRET" autocomplete="current-password" />
         <div id="authError" style="color:var(--danger);font-size:0.82rem;display:none;">Incorrect secret — try again.</div>
         <button class="btn-primary" onclick="submitSecret()">Unlock dashboard</button>
@@ -265,9 +313,35 @@
   <!-- ── Main UI ── -->
   <div class="container">
     <header>
-      <h1>JanitorAI <span>Admin</span></h1>
-      <span class="sign-out" onclick="signOut()" title="Clear session and sign out">Sign out</span>
+      <div>
+        <h1>JanitorAI <span>Admin</span></h1>
+      </div>
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+        <!-- Backend target indicator — click to change -->
+        <div id="backend-badge" onclick="toggleBackendPanel()" title="Click to change target backend">
+          <span class="dot"></span>
+          <span id="backend-url-text">loading…</span>
+          <span style="font-size:0.7rem;opacity:0.6;">✎</span>
+        </div>
+        <span class="sign-out" onclick="signOut()" title="Clear session and sign out">Sign out</span>
+      </div>
     </header>
+
+    <!-- ── Backend config panel (collapsible) ── -->
+    <div id="backend-panel">
+      <label>Production backend URL</label>
+      <div class="row">
+        <input id="backendUrlInput" type="url"
+          placeholder="https://janitorai-backend.onrender.com"
+          spellcheck="false" autocomplete="off" />
+        <button class="btn-primary" onclick="saveBackendUrl()">Apply</button>
+        <button class="btn-ghost" onclick="toggleBackendPanel()">Cancel</button>
+      </div>
+      <div class="hint">
+        All admin API calls (tokens, logs) are sent to this URL. Change it if you want to manage a different environment.
+        The dashboard will re-authenticate against the new URL.
+      </div>
+    </div>
 
     <div id="status"></div>
 
@@ -309,7 +383,6 @@
     <div class="tab-panel" id="tab-presentation">
       <div class="card" style="padding:0;overflow:hidden;border-radius:var(--radius);">
         <iframe
-          src="/presentation"
           id="presentation-frame"
           style="width:100%;height:70vh;border:none;display:block;border-radius:var(--radius);"
           allowfullscreen
@@ -317,7 +390,8 @@
         ></iframe>
       </div>
       <p style="color:var(--muted);font-size:0.78rem;margin-top:0.75rem;text-align:center;">
-        Use arrow keys or click the sides to navigate · <a href="/presentation" target="_blank" style="color:var(--accent);text-decoration:none;">Open full screen ↗</a>
+        Use arrow keys or click the sides to navigate ·
+        <a id="presentation-link" href="#" target="_blank" style="color:var(--accent);text-decoration:none;">Open full screen ↗</a>
       </p>
     </div>
 
@@ -343,6 +417,58 @@
   </div>
 
 <script>
+  // ── Backend URL ───────────────────────────────────────────────────────────────
+  // Stored in localStorage so it persists across page loads.
+  // Defaults to the Render production server so token management always hits
+  // the right database regardless of where this HTML page is served from.
+  const BACKEND_KEY   = 'janitor_admin_api_base';
+  const PRODUCTION_URL = 'https://janitorai-backend.onrender.com';
+
+  function getApiBase() {
+    return localStorage.getItem(BACKEND_KEY) || PRODUCTION_URL;
+  }
+
+  function setApiBase(url) {
+    const trimmed = (url || '').trim().replace(/\/$/, '');
+    if (trimmed) {
+      localStorage.setItem(BACKEND_KEY, trimmed);
+    } else {
+      localStorage.removeItem(BACKEND_KEY);
+    }
+    updateBackendBadge();
+    updatePresentationLinks();
+  }
+
+  function updateBackendBadge() {
+    const url = getApiBase();
+    document.getElementById('backend-url-text').textContent = url || PRODUCTION_URL;
+    document.getElementById('backendUrlInput').value = url;
+  }
+
+  function updatePresentationLinks() {
+    const base = getApiBase();
+    const src = base + '/presentation';
+    document.getElementById('presentation-frame').src = src;
+    document.getElementById('presentation-link').href = src;
+  }
+
+  function toggleBackendPanel() {
+    const panel = document.getElementById('backend-panel');
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) {
+      document.getElementById('backendUrlInput').value = getApiBase();
+      document.getElementById('backendUrlInput').focus();
+    }
+  }
+
+  function saveBackendUrl() {
+    const val = document.getElementById('backendUrlInput').value.trim();
+    setApiBase(val);
+    document.getElementById('backend-panel').classList.remove('open');
+    // Re-auth against the new backend
+    signOut();
+  }
+
   // ── Session storage key ──────────────────────────────────────────────────────
   const SESSION_KEY = 'janitor_admin_secret';
 
@@ -368,33 +494,65 @@
     if (name === 'logs') loadLogs();
   }
 
+  // ── Admin API helpers ─────────────────────────────────────────────────────────
+  // All paths are ABSOLUTE using getApiBase() so the dashboard can manage any
+  // backend environment, not just the one that served this HTML file.
+  async function apiFetch(path, opts = {}) {
+    const url = getApiBase() + path;
+    const res = await fetch(url, {
+      ...opts,
+      headers: {
+        'x-admin-secret': getSecret(),
+        'Content-Type': 'application/json',
+        ...(opts.headers || {}),
+      },
+    });
+    if (res.status === 401) { signOut(); throw new Error('Unauthorized'); }
+    return res;
+  }
+
   // ── Auth flow ─────────────────────────────────────────────────────────────────
   async function submitSecret() {
-    const val = document.getElementById('secretInput').value.trim();
-    if (!val) return;
+    const secretVal  = document.getElementById('secretInput').value.trim();
+    const backendVal = document.getElementById('modalBackendInput').value.trim();
+    if (!secretVal) return;
+
+    // Persist backend URL choice (before the fetch so apiFetch uses it)
+    if (backendVal) setApiBase(backendVal);
 
     // Verify by hitting the list endpoint — a 401 means wrong secret.
-    const res = await fetch('/api/admin/tokens', {
-      headers: { 'x-admin-secret': val },
-    });
+    let res;
+    try {
+      res = await fetch(getApiBase() + '/api/admin/tokens', {
+        headers: { 'x-admin-secret': secretVal, 'Content-Type': 'application/json' },
+      });
+    } catch (err) {
+      document.getElementById('authError').textContent = 'Could not reach backend: ' + err.message;
+      document.getElementById('authError').style.display = 'block';
+      return;
+    }
 
     if (res.status === 401) {
+      document.getElementById('authError').textContent = 'Incorrect secret — try again.';
       document.getElementById('authError').style.display = 'block';
       return;
     }
     if (!res.ok) {
-      document.getElementById('authError').textContent = 'Server error — check that ADMIN_SECRET is configured.';
+      document.getElementById('authError').textContent = 'Server error — check that ADMIN_SECRET is configured on ' + getApiBase();
       document.getElementById('authError').style.display = 'block';
       return;
     }
 
-    setSecret(val);
+    setSecret(secretVal);
     document.getElementById('overlay').classList.add('hidden');
     renderTokenList(await res.json());
   }
 
   document.getElementById('secretInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') submitSecret();
+  });
+  document.getElementById('modalBackendInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('secretInput').focus();
   });
 
   // ── Token generation ──────────────────────────────────────────────────────────
@@ -412,20 +570,6 @@
     el.className = type;
     if (statusTimer) clearTimeout(statusTimer);
     statusTimer = setTimeout(() => { el.className = ''; el.textContent = ''; }, 5000);
-  }
-
-  // ── Admin API helpers ─────────────────────────────────────────────────────────
-  async function apiFetch(path, opts = {}) {
-    const res = await fetch(path, {
-      ...opts,
-      headers: {
-        'x-admin-secret': getSecret(),
-        'Content-Type': 'application/json',
-        ...(opts.headers || {}),
-      },
-    });
-    if (res.status === 401) { signOut(); throw new Error('Unauthorized'); }
-    return res;
   }
 
   // ── Load & render token list ──────────────────────────────────────────────────
@@ -651,10 +795,15 @@
 
   // ── Boot ──────────────────────────────────────────────────────────────────────
   (function init() {
+    // Always default the modal backend field to the production URL
+    document.getElementById('modalBackendInput').value = getApiBase();
+    updateBackendBadge();
+    updatePresentationLinks();
+
     const stored = getSecret();
     if (stored) {
       // Validate stored secret before hiding overlay
-      fetch('/api/admin/tokens', { headers: { 'x-admin-secret': stored } })
+      fetch(getApiBase() + '/api/admin/tokens', { headers: { 'x-admin-secret': stored } })
         .then(res => {
           if (res.status === 401) { signOut(); return; }
           return res.json().then(data => {
