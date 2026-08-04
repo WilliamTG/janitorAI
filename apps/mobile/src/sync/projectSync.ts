@@ -127,11 +127,16 @@ async function uploadMedia(
   const inFlight = uploadsInFlight.get(uri);
   if (inFlight) return inFlight;
 
-  const promise = doUploadMedia(uri, kind, projectId).then((remoteId) => {
-    uploadsInFlight.delete(uri);
-    if (remoteId) uploadedByUri.set(uri, remoteId);
-    return remoteId;
-  });
+  const promise = doUploadMedia(uri, kind, projectId)
+    .then((remoteId) => {
+      if (remoteId) uploadedByUri.set(uri, remoteId);
+      return remoteId;
+    })
+    .finally(() => {
+      // Always remove from in-flight map — even on rejection — so a failed
+      // upload can be retried on the next sync cycle instead of staying stuck.
+      uploadsInFlight.delete(uri);
+    });
   uploadsInFlight.set(uri, promise);
   return promise;
 }
@@ -188,7 +193,18 @@ async function doUploadMedia(
     const meta = guessFileMeta(uri, kind);
 
     if (Platform.OS === 'web') {
-      const response = await fetch(uri);
+      // AbortSignal.timeout prevents the blob fetch from hanging forever.
+      // Without this, a stale/revoked blob URL silently blocks the upload
+      // forever and keeps the UI stuck at "Preparing…".
+      let response: Response;
+      try {
+        response = await fetch(uri, { signal: AbortSignal.timeout(30_000) });
+      } catch (fetchErr: any) {
+        const isTimeout = fetchErr?.name === 'TimeoutError' || fetchErr?.name === 'AbortError';
+        const err = new Error(isTimeout ? 'Blob fetch timed out' : `Blob fetch failed: ${fetchErr?.message}`);
+        logError(err, `upload-${kind}`);
+        return null;
+      }
       if (!response.ok) {
         const err = new Error(`fetch blob failed: HTTP ${response.status}`);
         logError(err, `upload-${kind}`);

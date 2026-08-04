@@ -49,13 +49,31 @@ import {
 function VideoUploadStatus({ videoUri }: { videoUri: string | undefined }) {
   const theme = useAppTheme();
   const pct = useVideoUploadProgress(videoUri);
+  // Track how many seconds we've been stuck at pct===null so we can show
+  // progressively more helpful messages instead of just "Preparing…" forever.
+  const [stallSeconds, setStallSeconds] = useState(0);
+
+  useEffect(() => {
+    if (pct !== null) {
+      setStallSeconds(0);
+      return;
+    }
+    const id = setInterval(() => setStallSeconds((s) => s + 1), 1_000);
+    return () => clearInterval(id);
+  }, [pct]);
 
   if (pct === null) {
-    // Upload hasn't started reporting progress yet (blob being prepared).
+    const label =
+      stallSeconds >= 35
+        ? 'Upload stalled — remove and re-add the video to retry'
+        : stallSeconds >= 15
+        ? 'Still preparing… (this can take a moment)'
+        : 'Preparing…';
+
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <ActivityIndicator size="small" color={theme.colors.accent} />
-        <Caption muted>Preparing…</Caption>
+        <ActivityIndicator size="small" color={stallSeconds >= 35 ? 'orange' : theme.colors.accent} />
+        <Caption muted style={stallSeconds >= 35 ? { color: 'orange' } : undefined}>{label}</Caption>
       </View>
     );
   }
