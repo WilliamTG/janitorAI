@@ -25,7 +25,7 @@ import {
   getProject,
   updateProject as updateProjectInStorage,
 } from '@/src/storage/projectsStorage';
-import { pullAndMerge, schedulePush, touchProject } from '@/src/sync/projectSync';
+import { pullAndMerge, schedulePush, subscribeToProjectUpdates, touchProject } from '@/src/sync/projectSync';
 import { persistMediaLocally } from '@/src/sync/persistMedia';
 import { displayMediaUri } from '@/src/sync/mediaUri';
 import { useVideoUploadProgress } from '@/src/sync/syncStatus';
@@ -267,6 +267,22 @@ export default function ProjectDetailScreen() {
   useEffect(() => {
     loadProject();
   }, [loadProject]);
+
+  // When pushProject writes remote IDs (e.g. videoRemoteId) back to storage
+  // after a successful upload, it notifies subscribers so the UI can update
+  // immediately instead of waiting for the next pull cycle.
+  useEffect(() => {
+    if (!projectId) return;
+    return subscribeToProjectUpdates(projectId, (updatedProject) => {
+      setState((prev) => ({
+        ...prev,
+        project: updatedProject,
+        projects: prev.projects.map((p) =>
+          String(p.id) === String(updatedProject.id) ? updatedProject : p,
+        ),
+      }));
+    });
+  }, [projectId]);
 
   useEffect(() => {
     if (!isEditingDescription) {

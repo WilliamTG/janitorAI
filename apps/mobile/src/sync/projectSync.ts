@@ -85,6 +85,42 @@ export function touchProject(project: Project): Project {
   return { ...project, updatedAt: new Date().toISOString() };
 }
 
+// ---------- PROJECT UPDATE SUBSCRIPTIONS ----------
+// Lets UI screens react immediately when pushProject writes remote IDs back to
+// storage (e.g. videoRemoteId after a successful upload), without polling.
+
+type ProjectUpdateListener = (project: Project) => void;
+const projectUpdateListeners = new Map<string, Set<ProjectUpdateListener>>();
+
+/**
+ * Subscribe to in-process updates for a specific project.
+ * Called when pushProject writes a new remote ID back to local storage so the
+ * UI can re-render without waiting for the next pull.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToProjectUpdates(
+  projectId: string,
+  listener: ProjectUpdateListener,
+): () => void {
+  if (!projectUpdateListeners.has(projectId)) {
+    projectUpdateListeners.set(projectId, new Set());
+  }
+  projectUpdateListeners.get(projectId)!.add(listener);
+  return () => {
+    const set = projectUpdateListeners.get(projectId);
+    if (set) {
+      set.delete(listener);
+      if (set.size === 0) projectUpdateListeners.delete(projectId);
+    }
+  };
+}
+
+function notifyProjectUpdate(project: Project): void {
+  projectUpdateListeners.get(String(project.id))?.forEach((l) => {
+    try { l(project); } catch { /* listener errors must not break the sync loop */ }
+  });
+}
+
 // ---------- MEDIA UPLOAD ----------
 
 function guessFileMeta(uri: string, kind: 'photo' | 'audio' | 'video'): { name: string; type: string } {
@@ -471,6 +507,11 @@ export async function pushProject(project: Project): Promise<Project> {
       // Persist the remote IDs locally so we don't re-upload next time.
       // Keep the same updatedAt to avoid endless sync loops.
       await updateProjectInStorage(toPush);
+
+      // Notify any subscribed UI screens immediately so they can re-render
+      // with the new remote IDs (e.g. videoRemoteId → "✓ Uploaded to server")
+      // without waiting for the next pull cycle.
+      notifyProjectUpdate(toPush);
 
       // Now that videoRemoteId is durable on this device, it is safe to
       // remove the IndexedDB blobs — if a refresh occurs here the note
