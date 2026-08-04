@@ -20,9 +20,11 @@ type Props = {
   onSave: () => void;
   isOpen: boolean;
   onToggle: () => void;
+  saving?: boolean;
+  saveError?: string | null;
 };
 
-export function ReportDetailsSection({ meta, onChange, onSave, isOpen, onToggle }: Props) {
+export function ReportDetailsSection({ meta, onChange, onSave, isOpen, onToggle, saving, saveError }: Props) {
   const theme = useAppTheme();
 
   // ----- helpers -----
@@ -203,7 +205,12 @@ export function ReportDetailsSection({ meta, onChange, onSave, isOpen, onToggle 
           {inputField('Summary', meta.summaryText, v => setField('summaryText', v), true)}
 
           {/* Save button */}
-          <PrimaryButton onPress={onSave}>Save report details</PrimaryButton>
+          {saveError ? (
+            <Caption style={{ color: 'red', textAlign: 'center' }}>{saveError}</Caption>
+          ) : null}
+          <PrimaryButton onPress={onSave} loading={saving} disabled={saving}>
+            Save report details
+          </PrimaryButton>
         </View>
       )}
     </GlassCard>

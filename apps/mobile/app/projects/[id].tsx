@@ -130,6 +130,8 @@ export default function ProjectDetailScreen() {
 
   const [reportMetaDraft, setReportMetaDraft] = useState<ReportMeta>({ contributors: [{}], buildings: [{}] });
   const [reportMetaOpen, setReportMetaOpen] = useState(false);
+  const [isSavingMeta, setIsSavingMeta] = useState(false);
+  const [saveMetaError, setSaveMetaError] = useState<string | null>(null);
 
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
@@ -302,8 +304,17 @@ export default function ProjectDetailScreen() {
 
   const saveReportMeta = async () => {
     if (!project) return;
-    const updatedProject: Project = { ...project, reportMeta: reportMetaDraft };
-    await updateProjectLocally(updatedProject);
+    setIsSavingMeta(true);
+    setSaveMetaError(null);
+    try {
+      const updatedProject: Project = { ...project, reportMeta: reportMetaDraft };
+      await updateProjectLocally(updatedProject);
+      setReportMetaOpen(false); // collapse panel so the user sees it was saved
+    } catch (e: any) {
+      setSaveMetaError(e?.message ?? 'Failed to save. Please try again.');
+    } finally {
+      setIsSavingMeta(false);
+    }
   };
 
   const saveProjectDescriptionText = async () => {
@@ -1557,6 +1568,8 @@ export default function ProjectDetailScreen() {
             onSave={saveReportMeta}
             isOpen={reportMetaOpen}
             onToggle={() => setReportMetaOpen((o) => !o)}
+            saving={isSavingMeta}
+            saveError={saveMetaError}
           />
           {activeTab === 'report' && renderReport()}
         </View>
