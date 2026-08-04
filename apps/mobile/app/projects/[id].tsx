@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Linking, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 
@@ -15,10 +15,12 @@ import apiFetch, {
   validateTesterToken,
 } from '@/src/lib/apiFetch';
 import { logError, logAction } from '@/src/lib/logger';
-import { Note, Project, ReportMeta } from '@/src/features/projects/types';
+import { NO_DATE_SET, Note, Project, ReportMeta, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
 import { ReportDetailsSection } from '@/src/features/projects/ReportDetailsSection';
 import { ReportGeneratingOverlay } from '@/src/features/projects/ReportGeneratingOverlay';
 import { applyNoteChanges } from '@/src/features/projects/noteChanges';
+import { nb, formatDate, formatDateTime } from '@/src/i18n/nb';
+import SyncStatusIndicator from '@/src/components/SyncStatusIndicator';
 import {
   loadProjects,
   saveProjects,
@@ -37,9 +39,11 @@ import {
   PrimaryButton,
   Screen,
   SecondaryButton,
+  StatusChip,
   TextField,
   Title,
   useAppTheme,
+  useToast,
 } from '@/src/ui';
 
 // ── Video upload progress bar ─────────────────────────────────────────────────
@@ -55,7 +59,7 @@ function VideoUploadStatus({ videoUri }: { videoUri: string | undefined }) {
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <ActivityIndicator size="small" color={theme.colors.accent} />
-        <Caption muted>Preparing…</Caption>
+        <Caption muted>Forbereder …</Caption>
       </View>
     );
   }
@@ -65,7 +69,7 @@ function VideoUploadStatus({ videoUri }: { videoUri: string | undefined }) {
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <ActivityIndicator size="small" color={theme.colors.accent} />
-        <Caption muted>Processing…</Caption>
+        <Caption muted>{nb.status.processing}</Caption>
       </View>
     );
   }
@@ -73,7 +77,7 @@ function VideoUploadStatus({ videoUri }: { videoUri: string | undefined }) {
   return (
     <View style={{ gap: 3 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Caption muted>Uploading video…</Caption>
+        <Caption muted>{nb.detail.uploading}</Caption>
         <Caption style={{ color: theme.colors.accent, fontVariant: ['tabular-nums'] }}>
           {pct}%
         </Caption>
@@ -100,6 +104,7 @@ type ProjectTab = 'notes' | 'report';
 
 type ProjectParam = {
   id?: string;
+  retry?: string;
 };
 
 type ProjectState = {
@@ -110,8 +115,10 @@ type ProjectState = {
 export default function ProjectDetailScreen() {
   const theme = useAppTheme();
   const router = useRouter();
-  const { id } = useLocalSearchParams<ProjectParam>();
+  const toast = useToast();
+  const { id, retry } = useLocalSearchParams<ProjectParam>();
   const projectId = typeof id === 'string' ? id : Array.isArray(id) ? id[0] : undefined;
+  const wantsRetry = retry === '1';
 
   const [state, setState] = useState<ProjectState>({ projects: [], project: null });
   const [loading, setLoading] = useState(true);
@@ -147,7 +154,7 @@ export default function ProjectDetailScreen() {
   const handleUnauthorized = useCallback(async (showModal = true) => {
     await clearTesterToken();
     setTokenStatus('invalid');
-    setTokenError('Invalid access token. Please enter a valid token to continue.');
+    setTokenError('Ugyldig tilgangskode. Skriv inn en gyldig kode for å fortsette.');
     if (showModal) setShowTokenModal(true);
   }, []);
 
@@ -178,7 +185,7 @@ export default function ProjectDetailScreen() {
     const trimmedToken = tokenInput.trim();
 
     if (!trimmedToken) {
-      setTokenError('Token required. Please enter the tester token to continue.');
+      setTokenError(nb.auth.accessMissing);
       return;
     }
 
@@ -250,6 +257,22 @@ export default function ProjectDetailScreen() {
     loadProject();
   }, [loadProject]);
 
+  // «Prøv igjen» fra prosjektlisten (?retry=1): åpne rapport-fanen og start
+  // genereringen på nytt — men først når tilgangskoden er ferdig validert,
+  // og aldri mer enn én gang per besøk.
+  const retryConsumedRef = useRef(false);
+  useEffect(() => {
+    if (!wantsRetry || retryConsumedRef.current || loading || !project || tokenStatus === 'checking') {
+      return;
+    }
+    retryConsumedRef.current = true;
+    setActiveTab('report');
+    if (tokenStatus === 'valid' && project.reportStatus === 'failed') {
+      generateGoogleDocReport();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantsRetry, loading, project, tokenStatus]);
+
   useEffect(() => {
     if (!isEditingDescription) {
       setDescriptionDraft(state.project?.projectDescriptionText ?? '');
@@ -311,7 +334,7 @@ export default function ProjectDetailScreen() {
       await updateProjectLocally(updatedProject);
       setReportMetaOpen(false); // collapse panel so the user sees it was saved
     } catch (e: any) {
-      setSaveMetaError(e?.message ?? 'Failed to save. Please try again.');
+      setSaveMetaError(e?.message ?? 'Kunne ikke lagre. Prøv igjen.');
     } finally {
       setIsSavingMeta(false);
     }
@@ -349,6 +372,7 @@ export default function ProjectDetailScreen() {
     const newNotes = [newNote, ...(project.notes || [])];
     await updateProjectNotes(newNotes);
     setNoteText('');
+    toast.show({ message: nb.detail.noteSaved, variant: 'success' });
   };
 
   const deleteNote = async (noteId: string) => {
@@ -357,16 +381,32 @@ export default function ProjectDetailScreen() {
     await updateProjectNotes(newNotes);
   };
 
+  // B15: sletting av notat krever bekreftelse — Alert beholdes for destruktive valg.
+  const confirmDeleteNote = (noteId: string) => {
+    if (Platform.OS === 'web') {
+      // Alert.alert er no-op på web — bruk window.confirm i stedet.
+      if (window.confirm(`${nb.detail.deleteNoteTitle}\n\n${nb.detail.deleteNoteMessage}`)) {
+        deleteNote(noteId);
+      }
+      return;
+    }
+
+    Alert.alert(nb.detail.deleteNoteTitle, nb.detail.deleteNoteMessage, [
+      { text: nb.common.cancel, style: 'cancel' },
+      { text: nb.common.delete, style: 'destructive', onPress: () => deleteNote(noteId) },
+    ]);
+  };
+
   const startRecording = async () => {
     try {
       if (!project) {
-        Alert.alert('Select project', 'Please wait for the project to load first.');
+        toast.show({ message: 'Vent til prosjektet er lastet inn.', variant: 'info' });
         return;
       }
 
       const permission = await Audio.requestPermissionsAsync();
       if (permission.status !== 'granted') {
-        Alert.alert('Permission needed', 'Microphone permission is required.');
+        toast.show({ message: 'Mikrofontilgang kreves for å ta opp lyd.', variant: 'error' });
         return;
       }
 
@@ -379,7 +419,7 @@ export default function ProjectDetailScreen() {
       setRecording(started);
     } catch {
       console.error('Failed to start recording');
-      Alert.alert('Error', 'Could not start recording.');
+      toast.show({ message: 'Kunne ikke starte opptaket.', variant: 'error' });
     }
   };
 
@@ -392,14 +432,14 @@ export default function ProjectDetailScreen() {
       setRecording(null);
 
       if (!uri) {
-        Alert.alert('Error', 'No audio file found.');
+        toast.show({ message: 'Fant ingen lydfil.', variant: 'error' });
         return;
       }
 
       const durableUri = await persistMediaLocally(uri);
 
       const trimmed = noteText.trim();
-      const textForNote = trimmed || 'Voice note (no text added yet – transcription later)';
+      const textForNote = trimmed || 'Lydnotat (ingen tekst ennå – transkriberes senere)';
 
       const newNote: Note = {
         id: Date.now().toString(),
@@ -411,9 +451,10 @@ export default function ProjectDetailScreen() {
       const newNotes = [newNote, ...(project.notes || [])];
       await updateProjectNotes(newNotes);
       setNoteText('');
+      toast.show({ message: nb.detail.audioSaved, variant: 'success' });
     } catch {
       console.error('Failed to stop recording');
-      Alert.alert('Error', 'Could not stop recording.');
+      toast.show({ message: 'Kunne ikke stoppe opptaket.', variant: 'error' });
       setRecording(null);
     }
   };
@@ -429,13 +470,13 @@ export default function ProjectDetailScreen() {
   const startDescriptionRecording = async () => {
     try {
       if (!project) {
-        Alert.alert('Select project', 'Please wait for the project to load first.');
+        toast.show({ message: 'Vent til prosjektet er lastet inn.', variant: 'info' });
         return;
       }
 
       const permission = await Audio.requestPermissionsAsync();
       if (permission.status !== 'granted') {
-        Alert.alert('Permission needed', 'Microphone permission is required.');
+        toast.show({ message: 'Mikrofontilgang kreves for å ta opp lyd.', variant: 'error' });
         return;
       }
 
@@ -450,7 +491,7 @@ export default function ProjectDetailScreen() {
       setDescriptionRecording(started);
     } catch {
       console.error('Failed to start recording project description');
-      Alert.alert('Error', 'Could not start recording.');
+      toast.show({ message: 'Kunne ikke starte opptaket.', variant: 'error' });
     }
   };
 
@@ -463,7 +504,7 @@ export default function ProjectDetailScreen() {
       setDescriptionRecording(null);
 
       if (!uri) {
-        Alert.alert('Error', 'No audio file found.');
+        toast.show({ message: 'Fant ingen lydfil.', variant: 'error' });
         return;
       }
 
@@ -478,9 +519,10 @@ export default function ProjectDetailScreen() {
       };
 
       await updateProjectLocally(updatedProject);
+      toast.show({ message: 'Muntlig beskrivelse lagret', variant: 'success' });
     } catch {
       console.error('Failed to stop recording project description');
-      Alert.alert('Error', 'Could not stop recording.');
+      toast.show({ message: 'Kunne ikke stoppe opptaket.', variant: 'error' });
       setDescriptionRecording(null);
     }
   };
@@ -540,7 +582,7 @@ export default function ProjectDetailScreen() {
       });
     } catch {
       console.error('Failed to play audio');
-      Alert.alert('Error', 'Could not play this recording.');
+      toast.show({ message: 'Kunne ikke spille av opptaket.', variant: 'error' });
     }
   };
 
@@ -549,7 +591,7 @@ export default function ProjectDetailScreen() {
 
     const note = project.notes.find((n) => n.id === noteId);
     if (!note || !note.audioUri) {
-      Alert.alert('No audio', 'This note has no audio to transcribe.');
+      toast.show({ message: 'Notatet har ingen lyd å transkribere.', variant: 'info' });
       return;
     }
 
@@ -566,7 +608,7 @@ export default function ProjectDetailScreen() {
 
       if (!response.ok) {
         console.error('Backend /transcribe error: non-OK response');
-        Alert.alert('Transcription failed', 'The backend returned an error.');
+        toast.show({ message: nb.detail.transcriptionFailed, variant: 'error' });
         return;
       }
 
@@ -574,7 +616,7 @@ export default function ProjectDetailScreen() {
       const textFromApi: string | undefined = data.text;
 
       if (!textFromApi) {
-        Alert.alert('No text', 'The transcription request succeeded but returned no text.');
+        toast.show({ message: 'Transkripsjonen returnerte ingen tekst.', variant: 'error' });
         return;
       }
 
@@ -588,11 +630,11 @@ export default function ProjectDetailScreen() {
       );
 
       await updateProjectNotes(newNotes);
-      Alert.alert('Transcription ready', 'Added to this note.');
+      toast.show({ message: nb.detail.transcriptionReady, variant: 'success' });
     } catch (error) {
       if (await handleApiError(error)) return;
       console.error('Backend /transcribe error');
-      Alert.alert('Error', 'Could not reach backend.');
+      toast.show({ message: 'Fikk ikke kontakt med serveren.', variant: 'error' });
     }
   };
 
@@ -612,7 +654,7 @@ export default function ProjectDetailScreen() {
 
   const transcribeProjectDescription = async () => {
     if (!project?.projectDescriptionAudioUri) {
-      Alert.alert('No audio', 'Record a project description first.');
+      toast.show({ message: 'Ta opp en muntlig prosjektbeskrivelse først.', variant: 'info' });
       return;
     }
 
@@ -630,7 +672,7 @@ export default function ProjectDetailScreen() {
 
       if (!response.ok) {
         console.error('Backend /transcribe error: non-OK response');
-        Alert.alert('Transcription failed', 'The backend returned an error.');
+        toast.show({ message: nb.detail.transcriptionFailed, variant: 'error' });
         return;
       }
 
@@ -638,7 +680,7 @@ export default function ProjectDetailScreen() {
       const textFromApi: string | undefined = data.text;
 
       if (!textFromApi) {
-        Alert.alert('No text', 'The transcription request succeeded but returned no text.');
+        toast.show({ message: 'Transkripsjonen returnerte ingen tekst.', variant: 'error' });
         return;
       }
 
@@ -649,11 +691,11 @@ export default function ProjectDetailScreen() {
       };
 
       await updateProjectLocally(updatedProject);
-      Alert.alert('Transcription ready', 'Added to this project description.');
+      toast.show({ message: nb.detail.transcriptionReady, variant: 'success' });
     } catch (error) {
       if (await handleApiError(error)) return;
       console.error('Backend /transcribe error');
-      Alert.alert('Error', 'Could not reach backend.');
+      toast.show({ message: 'Fikk ikke kontakt med serveren.', variant: 'error' });
     } finally {
       setIsTranscribingDescription(false);
     }
@@ -664,13 +706,13 @@ export default function ProjectDetailScreen() {
 
     const note = project.notes.find((n) => n.id === noteId);
     if (!note || !note.photos) {
-      Alert.alert('Error', 'Photo not found.');
+      toast.show({ message: 'Fant ikke bildet.', variant: 'error' });
       return;
     }
 
     const photo = note.photos.find((p) => p.id === photoId);
     if (!photo) {
-      Alert.alert('Error', 'Photo not found.');
+      toast.show({ message: 'Fant ikke bildet.', variant: 'error' });
       return;
     }
 
@@ -681,7 +723,7 @@ export default function ProjectDetailScreen() {
       const formData = new FormData();
       const uriParts = photo.uri.split('.');
       const fileType = uriParts[uriParts.length - 1];
-      
+
       formData.append('file', {
         uri: photo.uri,
         name: `photo.${fileType}`,
@@ -695,7 +737,7 @@ export default function ProjectDetailScreen() {
 
       if (!response.ok) {
         console.error('Backend /describe-image error: non-OK response');
-        Alert.alert('Description failed', 'The backend returned an error.');
+        toast.show({ message: 'Bildebeskrivelsen feilet.', variant: 'error' });
         return;
       }
 
@@ -703,7 +745,7 @@ export default function ProjectDetailScreen() {
       const description: string | undefined = data.description;
 
       if (!description) {
-        Alert.alert('No description', 'The description request succeeded but returned no text.');
+        toast.show({ message: 'Beskrivelsen returnerte ingen tekst.', variant: 'error' });
         return;
       }
 
@@ -722,10 +764,11 @@ export default function ProjectDetailScreen() {
       });
 
       await updateProjectNotes(newNotes);
+      toast.show({ message: 'Bildebeskrivelse lagt til', variant: 'success' });
     } catch (error) {
       if (await handleApiError(error)) return;
       console.error('Auto-describe error');
-      Alert.alert('Description error', 'Something went wrong while contacting the backend.');
+      toast.show({ message: 'Bildebeskrivelsen feilet.', variant: 'error' });
     } finally {
       setDescribingPhotos((prev) => {
         const next = new Set(prev);
@@ -758,7 +801,7 @@ export default function ProjectDetailScreen() {
 
   const addPhotoNote = async () => {
     if (!project) {
-      Alert.alert('Select project', 'Please wait for the project to load first.');
+      toast.show({ message: 'Vent til prosjektet er lastet inn.', variant: 'info' });
       return;
     }
 
@@ -766,13 +809,13 @@ export default function ProjectDetailScreen() {
       if (fromLibrary) {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Photo library access is required.');
+          toast.show({ message: 'Tilgang til bildebiblioteket kreves.', variant: 'error' });
           return;
         }
       } else {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Camera permission is required.');
+          toast.show({ message: 'Kameratilgang kreves.', variant: 'error' });
           return;
         }
       }
@@ -795,16 +838,18 @@ export default function ProjectDetailScreen() {
 
       // Guard: reject oversized photos
       if (asset.fileSize && asset.fileSize > MAX_PHOTO_BYTES) {
-        Alert.alert(
-          'Photo too large',
-          `This photo is ${(asset.fileSize / 1024 / 1024).toFixed(1)} MB. Please choose a photo under 8 MB to keep uploads fast and within server limits.`,
-        );
+        const sizeMb = (asset.fileSize / 1024 / 1024).toFixed(1).replace('.', ',');
+        toast.show({
+          message: `Bildet er ${sizeMb} MB. Velg et bilde under 8 MB.`,
+          variant: 'error',
+          durationMs: 4200,
+        });
         return;
       }
 
       const uri = await persistMediaLocally(asset.uri);
       const trimmed = noteText.trim();
-      const textForNote = trimmed || 'Photo note (no text added yet).';
+      const textForNote = trimmed || 'Bildenotat (ingen tekst ennå)';
 
       const newNote: Note = {
         id: Date.now().toString(),
@@ -821,6 +866,7 @@ export default function ProjectDetailScreen() {
       const newNotes = [newNote, ...(project.notes || [])];
       await updateProjectNotes(newNotes);
       setNoteText('');
+      toast.show({ message: nb.detail.photoAdded, variant: 'success' });
     };
 
     // Alert.alert is a no-op on web — go straight to the library picker
@@ -829,16 +875,17 @@ export default function ProjectDetailScreen() {
       return;
     }
 
-    Alert.alert('Add photo', 'Choose a source', [
-      { text: 'Take photo', onPress: () => pickPhoto(false) },
-      { text: 'Choose from library', onPress: () => pickPhoto(true) },
-      { text: 'Cancel', style: 'cancel' },
+    // Valg-dialog beholdes som Alert (B18) — men på norsk.
+    Alert.alert(nb.detail.mediaSourceTitle, 'Velg kilde', [
+      { text: nb.detail.takePhoto, onPress: () => pickPhoto(false) },
+      { text: nb.detail.chooseFromLibrary, onPress: () => pickPhoto(true) },
+      { text: nb.common.cancel, style: 'cancel' },
     ]);
   };
 
   const addVideoNote = async () => {
     if (!project) {
-      Alert.alert('Select project', 'Please wait for the project to load first.');
+      toast.show({ message: 'Vent til prosjektet er lastet inn.', variant: 'info' });
       return;
     }
 
@@ -847,13 +894,13 @@ export default function ProjectDetailScreen() {
         if (fromLibrary) {
           const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Photo library access is required to pick videos.');
+            toast.show({ message: 'Tilgang til bildebiblioteket kreves.', variant: 'error' });
             return;
           }
         } else {
           const { status } = await ImagePicker.requestCameraPermissionsAsync();
           if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Camera permission is required to record video.');
+            toast.show({ message: 'Kameratilgang kreves.', variant: 'error' });
             return;
           }
         }
@@ -875,10 +922,11 @@ export default function ProjectDetailScreen() {
           // load a video (e.g. the file is too large or stored in iCloud and
           // the download fails). Give the user a hint so they know what happened.
           if (Platform.OS === 'web') {
-            Alert.alert(
-              'No video loaded',
-              'The video could not be loaded. If you selected a video but nothing happened, it may be stored in iCloud — download it to your device first, or try a shorter clip (under 30 seconds).',
-            );
+            toast.show({
+              message: 'Fikk ikke lastet videoen. Ligger den i iCloud, last den ned til enheten først, eller prøv et kortere klipp.',
+              variant: 'error',
+              durationMs: 5200,
+            });
           }
           return;
         }
@@ -887,26 +935,29 @@ export default function ProjectDetailScreen() {
 
         // Guard: check duration (expo-image-picker reports duration in ms on all platforms)
         if (asset.duration && asset.duration > MAX_VIDEO_DURATION_SECONDS * 1000) {
-          Alert.alert(
-            'Video too long',
-            `Please select a video shorter than ${MAX_VIDEO_DURATION_SECONDS} seconds (2 minutes) to keep uploads within server limits.`,
-          );
+          toast.show({
+            message: 'Videoen er for lang. Velg et klipp under 2 minutter.',
+            variant: 'error',
+            durationMs: 4200,
+          });
           return;
         }
 
         // Guard: check file size (must fit within server's 200 MB cap)
         const MAX_VIDEO_BYTES = 200 * 1024 * 1024; // 200 MB
         if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
-          Alert.alert(
-            'Video too large',
-            `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 200 MB to keep uploads reliable.`,
-          );
+          const sizeMb = (asset.fileSize / 1024 / 1024).toFixed(0);
+          toast.show({
+            message: `Videoen er ${sizeMb} MB. Velg et klipp under 200 MB.`,
+            variant: 'error',
+            durationMs: 4200,
+          });
           return;
         }
 
         const uri = await persistMediaLocally(asset.uri);
         const trimmed = noteText.trim();
-        const textForNote = trimmed || 'Video note (no text added yet).';
+        const textForNote = trimmed || 'Videonotat (ingen tekst ennå)';
 
         const newNote: Note = {
           id: Date.now().toString(),
@@ -918,9 +969,10 @@ export default function ProjectDetailScreen() {
         const newNotes = [newNote, ...(project.notes || [])];
         await updateProjectNotes(newNotes);
         setNoteText('');
+        toast.show({ message: nb.detail.videoAdded, variant: 'success' });
       } catch (error) {
         console.error('[addVideoNote] Unexpected error', error);
-        Alert.alert('Could not add video', 'Something went wrong while adding the video. Please try again.');
+        toast.show({ message: 'Kunne ikke legge til videoen. Prøv igjen.', variant: 'error' });
       } finally {
         setIsAddingVideo(false);
       }
@@ -932,10 +984,11 @@ export default function ProjectDetailScreen() {
       return;
     }
 
-    Alert.alert('Add video', 'Choose a source', [
-      { text: 'Record video', onPress: () => pickVideo(false) },
-      { text: 'Choose from library', onPress: () => pickVideo(true) },
-      { text: 'Cancel', style: 'cancel' },
+    // Valg-dialog beholdes som Alert (B18) — men på norsk.
+    Alert.alert(nb.detail.videoSourceTitle, 'Velg kilde', [
+      { text: nb.detail.recordVideo, onPress: () => pickVideo(false) },
+      { text: nb.detail.chooseVideo, onPress: () => pickVideo(true) },
+      { text: nb.common.cancel, style: 'cancel' },
     ]);
   };
 
@@ -954,7 +1007,7 @@ export default function ProjectDetailScreen() {
         // apiFetch sends the x-tester-token header automatically
         const response = await apiFetch(downloadUrl);
         if (!response.ok) {
-          Alert.alert('Download failed', 'Could not download the report file.');
+          toast.show({ message: 'Kunne ikke laste ned rapporten.', variant: 'error' });
           return;
         }
         const blob = await response.blob();
@@ -971,7 +1024,7 @@ export default function ProjectDetailScreen() {
       }
     } catch (err) {
       console.error('Download error:', err);
-      Alert.alert('Download failed', 'Could not download the report.');
+      toast.show({ message: 'Kunne ikke laste ned rapporten.', variant: 'error' });
     }
   };
 
@@ -990,8 +1043,8 @@ export default function ProjectDetailScreen() {
       // Require an uploaded video — no demo fallback
       const videoNote = (snap.notes || []).find(n => n.videoRemoteId);
       if (!videoNote) {
-        const errMsg = 'No video found on this project.';
-        Alert.alert('No video found', 'Please add a video note to this project before generating a Google Doc report.');
+        const errMsg = nb.report.requiresVideo;
+        toast.show({ message: nb.report.requiresVideo, variant: 'error', durationMs: 4200 });
         await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
         setIsGeneratingGoogleDoc(false);
         return;
@@ -1032,37 +1085,42 @@ export default function ProjectDetailScreen() {
       });
 
       if (!response.ok) {
-        const errMsg = 'Failed to generate Google Doc report (HTTP ' + response.status + ')';
+        const errMsg = `${nb.report.failed} (HTTP ${response.status})`;
         logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
         await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
-        Alert.alert('Error', 'Failed to generate Google Doc report.');
+        toast.show({ message: nb.report.failed, variant: 'error' });
         return;
       }
 
       const data = await response.json();
       if (data.status === 'error') {
-        const errMsg = data.message || 'AI engine returned an error.';
+        const errMsg = data.message || 'AI-motoren returnerte en feil.';
         logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
         await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
-        Alert.alert('Error', errMsg);
+        toast.show({ message: nb.report.failed, variant: 'error' });
         return;
       }
       if (data.url) {
         logAction('generate-google-doc', Date.now() - t0).catch(() => {});
         setGoogleDocUrl(data.url);
         await updateProjectLocally({ ...snap, reportUrl: data.url, reportStatus: 'ready', reportError: undefined });
+        toast.show({ message: nb.report.ready, variant: 'success' });
       } else {
-        const errMsg = 'No document URL returned from AI engine.';
+        const errMsg = 'Fikk ingen dokumentlenke fra AI-motoren.';
         logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
         await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
-        Alert.alert('Error', errMsg);
+        toast.show({ message: nb.report.failed, variant: 'error' });
       }
     } catch (error) {
       logError(error, 'generate-google-doc').catch(() => {});
-      if (await handleApiError(error)) return;
-      const errMsg = 'Could not reach backend.';
+      if (await handleApiError(error)) {
+        // 401 må ikke etterlate prosjektet i evig «Behandler …».
+        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: nb.report.unauthorized });
+        return;
+      }
+      const errMsg = 'Fikk ikke kontakt med serveren.';
       await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
-      Alert.alert('Error', errMsg);
+      toast.show({ message: errMsg, variant: 'error' });
     } finally {
       setIsGeneratingGoogleDoc(false);
     }
@@ -1090,16 +1148,16 @@ export default function ProjectDetailScreen() {
       >
         <GlassCard style={{ width: '100%', gap: theme.spacing.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Title>Enter tester token</Title>
+            <Title>{nb.auth.accessTitle}</Title>
             <TouchableOpacity
               onPress={() => setShowTokenModal(false)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityLabel="Close"
+              accessibilityLabel={nb.common.close}
             >
               <Ionicons name="close" size={22} color={theme.colors.muted} />
             </TouchableOpacity>
           </View>
-          <Body muted>Access is restricted. Enter your tester token to continue.</Body>
+          <Body muted>{nb.auth.accessMessage}</Body>
           {tokenError && <Caption style={{ color: theme.colors.danger }}>{tokenError}</Caption>}
           <TextField
             value={tokenInput}
@@ -1107,15 +1165,15 @@ export default function ProjectDetailScreen() {
               setTokenInput(value);
               setTokenError(null);
             }}
-            placeholder="Tester token"
+            placeholder={nb.auth.accessPlaceholder}
             autoCapitalize="none"
             autoCorrect={false}
           />
           <PrimaryButton onPress={saveToken} loading={isValidatingToken}>
-            Validate & Save
+            {nb.auth.accessSave}
           </PrimaryButton>
           <SecondaryButton onPress={handleRemoveToken} disabled={isValidatingToken}>
-            Remove token
+            Fjern kode
           </SecondaryButton>
         </GlassCard>
       </View>
@@ -1126,7 +1184,7 @@ export default function ProjectDetailScreen() {
     <Animated.View entering={FadeInDown.duration(300).delay(index * 40)}>
       <GlassCard style={{ marginBottom: theme.spacing.sm, gap: theme.spacing.xs }}>
         <Body>{item.text}</Body>
-        <Caption muted>{new Date(item.createdAt).toLocaleString()}</Caption>
+        <Caption muted>{formatDateTime(item.createdAt)}</Caption>
 
         {/* Video clip — show whenever local URI or remote copy exists */}
         {(item.videoUri || item.videoRemoteId) && (
@@ -1143,9 +1201,14 @@ export default function ProjectDetailScreen() {
           >
             <Ionicons name="videocam-outline" size={22} color={theme.colors.accent} />
             <View style={{ flex: 1 }}>
-              <Caption>Video clip attached</Caption>
+              <Caption>Videoklipp vedlagt</Caption>
               {item.videoRemoteId
-                ? <Caption muted>✓ Uploaded to server</Caption>
+                ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="checkmark-circle-outline" size={14} color={theme.colors.accent} />
+                    <Caption muted>{nb.detail.uploaded}</Caption>
+                  </View>
+                )
                 : <VideoUploadStatus videoUri={item.videoUri} />}
             </View>
           </View>
@@ -1159,25 +1222,25 @@ export default function ProjectDetailScreen() {
               const editState = editingPhotos[photoKey];
               const isEditingCaption = editState?.editing ?? false;
               const editedCaption = editState?.caption ?? photo.caption;
-              
+
               return (
                 <View key={photo.id} style={{ gap: theme.spacing.xs }}>
                   <Image
                     source={{ uri: displayMediaUri(photo.uri, photo.remoteId) }}
                     style={{ width: 82, height: 82, borderRadius: theme.radii.sm }}
                   />
-                  
+
                   {isEditingCaption ? (
                     <>
                       <TextField
                         value={editedCaption}
-                        onChangeText={(text) => 
+                        onChangeText={(text) =>
                           setEditingPhotos(prev => ({
                             ...prev,
                             [photoKey]: { editing: true, caption: text }
                           }))
                         }
-                        placeholder="Describe this photo…"
+                        placeholder="Beskriv bildet …"
                         multiline
                         style={{ minHeight: 60 }}
                       />
@@ -1193,7 +1256,7 @@ export default function ProjectDetailScreen() {
                           }}
                           width={100}
                         >
-                          Save
+                          {nb.common.save}
                         </SecondaryButton>
                         <SecondaryButton
                           onPress={() => {
@@ -1205,7 +1268,7 @@ export default function ProjectDetailScreen() {
                           }}
                           width={100}
                         >
-                          Cancel
+                          {nb.common.cancel}
                         </SecondaryButton>
                       </View>
                     </>
@@ -1213,7 +1276,7 @@ export default function ProjectDetailScreen() {
                     <>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: theme.spacing.xs }}>
                         <Body style={{ flex: 1 }}>
-                          {photo.caption || 'No description yet'}
+                          {photo.caption || 'Ingen beskrivelse ennå'}
                         </Body>
                         <SecondaryButton
                           onPress={() => {
@@ -1222,20 +1285,20 @@ export default function ProjectDetailScreen() {
                               [photoKey]: { editing: true, caption: photo.caption }
                             }));
                           }}
-                          width={80}
+                          width={100}
                         >
-                          Edit
+                          Rediger
                         </SecondaryButton>
                       </View>
                     </>
                   )}
-                  
+
                   <SecondaryButton
                     onPress={() => autoDescribePhoto(item.id, photo.id)}
                     loading={isDescribing}
-                    width={160}
+                    width={180}
                   >
-                    {isDescribing ? 'Describing...' : 'Auto-describe'}
+                    {isDescribing ? 'Beskriver …' : 'Beskriv automatisk'}
                   </SecondaryButton>
                 </View>
               );
@@ -1245,7 +1308,7 @@ export default function ProjectDetailScreen() {
 
         {(item.images?.length || 0) > 0 && (
           <View style={{ marginTop: theme.spacing.xs, gap: theme.spacing.xs }}>
-            <Caption muted>Photos: {item.images?.length}</Caption>
+            <Caption muted>{item.images?.length} {nb.projects.photosCount}</Caption>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
               {item.images?.map((uri, idx) => (
                 <Image
@@ -1259,29 +1322,41 @@ export default function ProjectDetailScreen() {
         )}
 
         {item.audioUri && (
-          <View style={{ flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
-            <SecondaryButton onPress={() => playAudio(displayMediaUri(item.audioUri, item.audioRemoteId))} width={120}>
-              ▶ Play
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
+            <SecondaryButton
+              onPress={() => playAudio(displayMediaUri(item.audioUri, item.audioRemoteId))}
+              width={120}
+              icon={<Ionicons name="play" size={16} color={theme.colors.foreground} />}
+            >
+              {nb.detail.play}
             </SecondaryButton>
-            <SecondaryButton onPress={stopPlayback} width={120}>
-              ⏹ Stop
+            <SecondaryButton
+              onPress={stopPlayback}
+              width={120}
+              icon={<Ionicons name="stop" size={16} color={theme.colors.foreground} />}
+            >
+              {nb.detail.stop}
             </SecondaryButton>
             <SecondaryButton onPress={() => transcribeNote(item.id)} width={160}>
-              Transcribe
+              Transkriber
             </SecondaryButton>
           </View>
         )}
 
         {item.transcription && (
           <View style={{ marginTop: theme.spacing.xs }}>
-            <Caption muted>Transcription</Caption>
+            <Caption muted>Transkripsjon</Caption>
             <Body>{item.transcription}</Body>
           </View>
         )}
 
         <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: theme.spacing.sm }}>
-          <SecondaryButton onPress={() => deleteNote(item.id)} width={120}>
-            Delete
+          <SecondaryButton
+            onPress={() => confirmDeleteNote(item.id)}
+            width={120}
+            icon={<Ionicons name="trash-outline" size={16} color={theme.colors.danger} />}
+          >
+            {nb.common.delete}
           </SecondaryButton>
         </View>
       </GlassCard>
@@ -1298,22 +1373,19 @@ export default function ProjectDetailScreen() {
           onPress={generateGoogleDocReport}
           loading={isGeneratingGoogleDoc}
           disabled={!isTokenValid || isGeneratingGoogleDoc}
+          style={{ minHeight: 56 }}
         >
-          {isGeneratingGoogleDoc ? 'Generating…' : 'Generate Google Doc Report'}
+          {isGeneratingGoogleDoc ? nb.report.generating : nb.report.generate}
         </PrimaryButton>
 
         {!isTokenValid && (
-          <Caption muted>Enter a valid tester token to enable report generation.</Caption>
+          <Caption muted>Skriv inn en gyldig tilgangskode for å lage rapport.</Caption>
         )}
 
+        {/* B20: feilet generering viser status-chip med «Prøv igjen» — feilteksten under. */}
         {reportFailed && !displayUrl && (
-          <GlassCard style={{ gap: theme.spacing.xs, borderColor: theme.colors.danger }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
-              <Ionicons name="warning" size={16} color={theme.colors.danger} />
-              <Caption style={{ color: theme.colors.danger, fontWeight: '600' }}>
-                Report generation failed
-              </Caption>
-            </View>
+          <GlassCard style={{ gap: theme.spacing.xs }}>
+            <StatusChip status="failed" onRetry={isTokenValid ? generateGoogleDocReport : undefined} />
             {project?.reportError ? (
               <Caption muted>{project.reportError}</Caption>
             ) : null}
@@ -1322,13 +1394,18 @@ export default function ProjectDetailScreen() {
 
         {displayUrl && (
           <GlassCard style={{ gap: theme.spacing.sm }}>
-            <Caption muted>Google Doc report ready:</Caption>
-            <TouchableOpacity onPress={() => Linking.openURL(displayUrl)}>
-              <Body
-                style={{ color: theme.colors.accent, textDecorationLine: 'underline' }}
-                numberOfLines={2}
-              >
-                {displayUrl}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+              <Ionicons name="checkmark-circle-outline" size={18} color={theme.colors.accent} />
+              <Caption muted>{nb.report.ready}</Caption>
+            </View>
+            <TouchableOpacity
+              onPress={() => Linking.openURL(displayUrl)}
+              accessibilityRole="link"
+              style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, minHeight: 44 }}
+            >
+              <Ionicons name="open-outline" size={18} color={theme.colors.accent} />
+              <Body style={{ color: theme.colors.accent, textDecorationLine: 'underline' }}>
+                {nb.report.openReport}
               </Body>
             </TouchableOpacity>
             <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
@@ -1336,15 +1413,17 @@ export default function ProjectDetailScreen() {
                 style={{ flex: 1 }}
                 onPress={() => downloadReport('pdf')}
                 disabled={isGeneratingGoogleDoc}
+                icon={<Ionicons name="download-outline" size={16} color={theme.colors.foreground} />}
               >
-                ↓ PDF
+                {nb.report.downloadPdf}
               </SecondaryButton>
               <SecondaryButton
                 style={{ flex: 1 }}
                 onPress={() => downloadReport('docx')}
                 disabled={isGeneratingGoogleDoc}
+                icon={<Ionicons name="download-outline" size={16} color={theme.colors.foreground} />}
               >
-                ↓ Word
+                {nb.report.downloadWord}
               </SecondaryButton>
             </View>
           </GlassCard>
@@ -1356,15 +1435,15 @@ export default function ProjectDetailScreen() {
   const renderProjectDescription = () => (
     <GlassCard style={{ gap: theme.spacing.sm }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Title style={{ fontSize: 18 }}>Project description</Title>
+        <Title style={{ fontSize: 18 }}>{nb.detail.description}</Title>
         {!isEditingDescription && (
-          <SecondaryButton onPress={() => setIsEditingDescription(true)} width={120}>
-            Edit text
+          <SecondaryButton onPress={() => setIsEditingDescription(true)} width={140}>
+            Rediger tekst
           </SecondaryButton>
         )}
       </View>
 
-      <Caption muted>Add context about the project so the report focuses on the right things.</Caption>
+      <Caption muted>Gi litt kontekst om prosjektet, så rapporten fokuserer på det viktigste.</Caption>
 
       {isEditingDescription ? (
         <View style={{ gap: theme.spacing.sm }}>
@@ -1372,49 +1451,67 @@ export default function ProjectDetailScreen() {
             multiline
             value={descriptionDraft}
             onChangeText={setDescriptionDraft}
-            placeholder="Describe the project goals, constraints, client preferences, etc."
+            placeholder={nb.detail.descriptionPlaceholder}
             style={{ minHeight: 120, textAlignVertical: 'top' }}
           />
           <View style={{ flexDirection: 'row', gap: theme.spacing.sm, justifyContent: 'flex-end' }}>
             <PrimaryButton onPress={saveProjectDescriptionText} width={120}>
-              Save
+              {nb.common.save}
             </PrimaryButton>
             <SecondaryButton onPress={cancelProjectDescriptionEdit} width={120}>
-              Cancel
+              {nb.common.cancel}
             </SecondaryButton>
           </View>
         </View>
       ) : (
         <View style={{ gap: theme.spacing.sm }}>
-          <GlassCard style={{ backgroundColor: theme.colors.glass, borderColor: theme.colors.border }}>
+          <GlassCard style={{ backgroundColor: theme.colors.glassOverlay, borderColor: theme.colors.border }}>
             <Body muted={!project?.projectDescriptionText}>
-              {project?.projectDescriptionText || 'No project description yet.'}
+              {project?.projectDescriptionText || 'Ingen prosjektbeskrivelse ennå.'}
             </Body>
           </GlassCard>
           <View style={{ flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
             <SecondaryButton onPress={() => setIsEditingDescription(true)} width={140}>
-              Edit text
+              Rediger tekst
             </SecondaryButton>
-            <SecondaryButton onPress={handleDescriptionRecordPress} width={160}>
-              {descriptionRecording ? 'Stop & save voice' : 'Record voice'}
+            <SecondaryButton
+              onPress={handleDescriptionRecordPress}
+              width={180}
+              icon={
+                <Ionicons
+                  name={descriptionRecording ? 'stop-circle-outline' : 'mic-outline'}
+                  size={16}
+                  color={descriptionRecording ? theme.colors.danger : theme.colors.foreground}
+                />
+              }
+            >
+              {descriptionRecording ? nb.detail.stopRecording : 'Les inn beskrivelse'}
             </SecondaryButton>
           </View>
         </View>
       )}
 
       <View style={{ gap: theme.spacing.xs }}>
-        <Caption muted>Voice description</Caption>
+        <Caption muted>Muntlig beskrivelse</Caption>
         {project?.projectDescriptionAudioUri ? (
           <View style={{ gap: theme.spacing.xs }}>
             <View style={{ flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
-              <SecondaryButton onPress={() => playAudio(displayMediaUri(project.projectDescriptionAudioUri, project.projectDescriptionAudioRemoteId))} width={120}>
-                ▶ Play
+              <SecondaryButton
+                onPress={() => playAudio(displayMediaUri(project.projectDescriptionAudioUri, project.projectDescriptionAudioRemoteId))}
+                width={120}
+                icon={<Ionicons name="play" size={16} color={theme.colors.foreground} />}
+              >
+                {nb.detail.play}
               </SecondaryButton>
-              <SecondaryButton onPress={stopPlayback} width={120}>
-                ⏹ Stop
+              <SecondaryButton
+                onPress={stopPlayback}
+                width={120}
+                icon={<Ionicons name="stop" size={16} color={theme.colors.foreground} />}
+              >
+                {nb.detail.stop}
               </SecondaryButton>
-              <SecondaryButton onPress={handleDescriptionRecordPress} width={140}>
-                {descriptionRecording ? 'Stop recording' : 'Re-record'}
+              <SecondaryButton onPress={handleDescriptionRecordPress} width={160}>
+                {descriptionRecording ? nb.detail.stopRecording : 'Ta opp på nytt'}
               </SecondaryButton>
             </View>
 
@@ -1425,21 +1522,25 @@ export default function ProjectDetailScreen() {
                   loading={isTranscribingDescription}
                   width={160}
                 >
-                  Transcribe
+                  Transkriber
                 </SecondaryButton>
               )}
-              <SecondaryButton onPress={deleteProjectDescriptionAudio} width={140}>
-                Delete voice
+              <SecondaryButton
+                onPress={deleteProjectDescriptionAudio}
+                width={160}
+                icon={<Ionicons name="trash-outline" size={16} color={theme.colors.danger} />}
+              >
+                Slett lydopptak
               </SecondaryButton>
             </View>
           </View>
         ) : (
-          <Caption muted>No voice project description yet.</Caption>
+          <Caption muted>Ingen muntlig beskrivelse ennå.</Caption>
         )}
 
         {project?.projectDescriptionTranscription && (
           <View style={{ gap: theme.spacing.xs }}>
-            <Caption muted>Transcription</Caption>
+            <Caption muted>Transkripsjon</Caption>
             <Body>{project.projectDescriptionTranscription}</Body>
           </View>
         )}
@@ -1447,85 +1548,101 @@ export default function ProjectDetailScreen() {
     </GlassCard>
   );
 
-  const renderHeader = () => (
-    <View style={{ gap: theme.spacing.md }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <View style={{ flex: 1 }}>
-          <Caption muted>Project</Caption>
-          <Title numberOfLines={1}>{project?.name ?? 'Project'}</Title>
-        </View>
-        <IconButton onPress={() => setShowTokenModal(true)}>
+  const renderInfoCard = () => {
+    const rawDate = project?.inspectionDate;
+    const dateText =
+      rawDate && rawDate !== NO_DATE_SET ? formatDate(rawDate) || rawDate : nb.projects.dateNotSet;
+    const inspectorText =
+      project?.inspector && project.inspector !== UNKNOWN_INSPECTOR
+        ? project.inspector
+        : nb.projects.unknownInspector;
+    return (
+      <GlassCard style={{ gap: theme.spacing.xs }}>
+        <Body muted>Befaringsdato: {dateText}</Body>
+        <Body muted>{nb.projects.inspectorLabel}: {inspectorText}</Body>
+      </GlassCard>
+    );
+  };
+
+  // B16: fast topprad (scroller ikke) — prosjektnavn + synk-status + tilgangskode.
+  const renderTopBar = () => (
+    <View style={{ gap: theme.spacing.sm }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+        <Title numberOfLines={1} style={{ flex: 1 }}>{project?.name ?? 'Prosjekt'}</Title>
+        <SyncStatusIndicator />
+        <IconButton onPress={() => setShowTokenModal(true)} accessibilityLabel={nb.auth.accessTitle}>
           <Ionicons name="key-outline" size={18} color={theme.colors.foreground} />
         </IconButton>
       </View>
 
-      <GlassCard style={{ gap: theme.spacing.xs }}>
-        <Body muted>Inspection date: {project?.inspectionDate}</Body>
-        <Body muted>Inspector: {project?.inspector}</Body>
-        <View style={{ flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
-          <SecondaryButton
-            style={{ flex: 1, borderColor: activeTab === 'notes' ? theme.colors.accent : theme.colors.border }}
-            onPress={() => setActiveTab('notes')}
-          >
-            Notes
-          </SecondaryButton>
-          <SecondaryButton
-            style={{ flex: 1, borderColor: activeTab === 'report' ? theme.colors.accent : theme.colors.border }}
-            onPress={() => setActiveTab('report')}
-          >
-            Report
-          </SecondaryButton>
-        </View>
-      </GlassCard>
+      <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+        <SecondaryButton
+          style={{ flex: 1, borderColor: activeTab === 'notes' ? theme.colors.accent : theme.colors.border }}
+          onPress={() => setActiveTab('notes')}
+        >
+          {nb.detail.notesTab}
+        </SecondaryButton>
+        <SecondaryButton
+          style={{ flex: 1, borderColor: activeTab === 'report' ? theme.colors.accent : theme.colors.border }}
+          onPress={() => setActiveTab('report')}
+        >
+          {nb.detail.reportTab}
+        </SecondaryButton>
+      </View>
     </View>
   );
 
-  const noteComposer = (
-    <>
-      <GlassCard style={{ gap: theme.spacing.sm, marginBottom: theme.spacing.xs }}>
-        <Caption muted>What would you say during the inspection?</Caption>
-        <TextField
-          multiline
-          value={noteText}
-          onChangeText={setNoteText}
-          placeholder="Type your observation here..."
-          style={{ minHeight: 100, textAlignVertical: 'top' }}
-        />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: theme.spacing.sm }}>
-          <PrimaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addTextNote}>
-            Save note
-          </PrimaryButton>
-          <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={handleRecordPress}>
-            {recording ? 'Stop & save voice' : 'Voice note'}
-          </SecondaryButton>
-          <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addPhotoNote}>
-            📷 Add photo
-          </SecondaryButton>
-          <SecondaryButton style={{ flexBasis: '48%', flexGrow: 1 }} onPress={addVideoNote} disabled={isAddingVideo}>
-            {isAddingVideo ? '⏳ Loading video…' : '🎬 Add video'}
-          </SecondaryButton>
-        </View>
-      </GlassCard>
-      <TouchableOpacity
-        onPress={() => setActiveTab('report')}
-        activeOpacity={0.75}
+  // B13: tre store fangst-knapper i full bredde — alltid synlige uten scrolling.
+  const renderCaptureButtons = () => (
+    <View style={{ gap: theme.spacing.sm }}>
+      <SecondaryButton
+        onPress={handleRecordPress}
         style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: theme.spacing.sm,
-          paddingVertical: theme.spacing.md,
-          paddingHorizontal: theme.spacing.lg,
-          backgroundColor: theme.colors.accent,
-          borderRadius: theme.radii.md,
-          marginTop: theme.spacing.xs,
-          marginBottom: theme.spacing.lg,
+          minHeight: 56,
+          borderColor: recording ? theme.colors.danger : theme.colors.border,
+          borderWidth: recording ? 2 : 1,
         }}
+        icon={
+          <Ionicons
+            name={recording ? 'stop-circle-outline' : 'mic-outline'}
+            size={22}
+            color={recording ? theme.colors.danger : theme.colors.foreground}
+          />
+        }
       >
-        <Body style={{ color: '#fff', fontWeight: '600' }}>View Report</Body>
-        <Ionicons name="arrow-forward" size={18} color="#fff" />
-      </TouchableOpacity>
-    </>
+        {recording ? nb.detail.stopRecording : nb.detail.audioNote}
+      </SecondaryButton>
+      <SecondaryButton
+        onPress={addPhotoNote}
+        style={{ minHeight: 56 }}
+        icon={<Ionicons name="camera-outline" size={22} color={theme.colors.foreground} />}
+      >
+        {nb.detail.photo}
+      </SecondaryButton>
+      <SecondaryButton
+        onPress={addVideoNote}
+        disabled={isAddingVideo}
+        style={{ minHeight: 56 }}
+        icon={<Ionicons name="videocam-outline" size={22} color={theme.colors.foreground} />}
+      >
+        {isAddingVideo ? nb.detail.loadingVideo : nb.detail.video}
+      </SecondaryButton>
+    </View>
+  );
+
+  const renderTextNoteCard = () => (
+    <GlassCard style={{ gap: theme.spacing.sm }}>
+      <TextField
+        multiline
+        value={noteText}
+        onChangeText={setNoteText}
+        placeholder={nb.detail.notePlaceholder}
+        style={{ minHeight: 100, textAlignVertical: 'top' }}
+      />
+      <PrimaryButton onPress={addTextNote} style={{ minHeight: 56 }}>
+        {nb.detail.saveNote}
+      </PrimaryButton>
+    </GlassCard>
   );
 
   const renderNotesTab = () => {
@@ -1533,47 +1650,54 @@ export default function ProjectDetailScreen() {
 
     return (
       <Animated.View entering={FadeInRight.duration(320)} style={{ flex: 1 }}>
-        <Screen scrollable={false} style={{ flex: 1 }}>
-          {renderTokenModal()}
+        {/* B13: fangst-knappene ligger fast øverst, utenfor scrollingen. */}
+        <View style={{ marginTop: theme.spacing.md }}>
+          {renderCaptureButtons()}
+        </View>
+
+        <View style={{ flex: 1, marginTop: theme.spacing.md }}>
           <FlatList
             data={loading ? [] : noteData}
             keyExtractor={(item) => item.id}
             renderItem={renderNoteItem}
             ListHeaderComponent={
-              <View style={{ gap: theme.spacing.md }}>
-                {renderHeader()}
+              <View style={{ gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
+                {renderInfoCard()}
                 {renderProjectDescription()}
-                {noteComposer}
-                {loading && <Caption muted>Loading notes…</Caption>}
+                {renderTextNoteCard()}
+                {loading && <Caption muted>{nb.common.loadingEllipsis}</Caption>}
               </View>
             }
-            ListEmptyComponent={!loading ? <Caption muted>No notes yet. Add your first observation.</Caption> : null}
-            contentContainerStyle={{ paddingBottom: theme.spacing.xl * 1.5 }}
+            ListEmptyComponent={
+              !loading ? <Caption muted>Ingen notater ennå. Legg til din første observasjon.</Caption> : null
+            }
+            contentContainerStyle={{ paddingBottom: theme.spacing.md }}
             showsVerticalScrollIndicator={false}
           />
-        </Screen>
+        </View>
       </Animated.View>
     );
   };
 
   const renderReportTab = () => (
     <Animated.View entering={FadeInRight.duration(320)} style={{ flex: 1 }}>
-      <Screen>
-        {renderTokenModal()}
-        <View style={{ gap: theme.spacing.md }}>
-          {renderHeader()}
-          <ReportDetailsSection
-            meta={reportMetaDraft}
-            onChange={setReportMetaDraft}
-            onSave={saveReportMeta}
-            isOpen={reportMetaOpen}
-            onToggle={() => setReportMetaOpen((o) => !o)}
-            saving={isSavingMeta}
-            saveError={saveMetaError}
-          />
-          {activeTab === 'report' && renderReport()}
-        </View>
-      </Screen>
+      <ScrollView
+        style={{ flex: 1, marginTop: theme.spacing.md }}
+        contentContainerStyle={{ gap: theme.spacing.md, paddingBottom: theme.spacing.md }}
+        showsVerticalScrollIndicator={false}
+      >
+        {renderInfoCard()}
+        <ReportDetailsSection
+          meta={reportMetaDraft}
+          onChange={setReportMetaDraft}
+          onSave={saveReportMeta}
+          isOpen={reportMetaOpen}
+          onToggle={() => setReportMetaOpen((o) => !o)}
+          saving={isSavingMeta}
+          saveError={saveMetaError}
+        />
+        {renderReport()}
+      </ScrollView>
     </Animated.View>
   );
 
@@ -1581,7 +1705,7 @@ export default function ProjectDetailScreen() {
     if (loading) {
       return (
         <Screen>
-          <Caption muted>Loading project…</Caption>
+          <Caption muted>{nb.common.loadingEllipsis}</Caption>
         </Screen>
       );
     }
@@ -1590,29 +1714,48 @@ export default function ProjectDetailScreen() {
       return (
         <Screen>
           <GlassCard style={{ gap: theme.spacing.sm }}>
-            <Title muted>Project not found</Title>
-            <Body muted>We could not locate that project. It may have been removed.</Body>
-            <PrimaryButton onPress={() => router.back()}>Go back</PrimaryButton>
+            <Title muted>Fant ikke prosjektet</Title>
+            <Body muted>Vi fant ikke prosjektet. Det kan være slettet.</Body>
+            <PrimaryButton onPress={() => router.back()}>{nb.common.back}</PrimaryButton>
           </GlassCard>
         </Screen>
       );
     }
 
-    if (activeTab === 'notes') {
-      return renderNotesTab();
-    }
+    // Fast topprad (B16) og fast bunn-CTA (B13) — bare innholdet i midten scroller.
+    return (
+      <Screen scrollable={false} style={{ flex: 1 }}>
+        {renderTokenModal()}
+        {renderTopBar()}
 
-    return renderReportTab();
+        <View style={{ flex: 1 }}>
+          {activeTab === 'notes' ? renderNotesTab() : renderReportTab()}
+        </View>
+
+        {/* B13: «Se rapport» fast i bunn, skjult når rapport-fanen alt er aktiv.
+            Screen sin SafeAreaView gir safe-area-polstring i bunnen. */}
+        {activeTab !== 'report' && (
+          <View style={{ paddingTop: theme.spacing.sm }}>
+            <PrimaryButton
+              onPress={() => setActiveTab('report')}
+              style={{ minHeight: 56 }}
+              icon={<Ionicons name="document-text-outline" size={20} color="#fff" />}
+            >
+              {nb.detail.seeReport}
+            </PrimaryButton>
+          </View>
+        )}
+      </Screen>
+    );
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.surface }}>
       <Stack.Screen
         options={{
-          title: project?.name ?? 'Project',
+          title: project?.name ?? 'Prosjekt',
           headerShown: true,
-          headerBackTitleVisible: false,
-          headerBackTitle: 'Projects',
+          headerBackTitle: nb.tabs.home,
         }}
       />
 

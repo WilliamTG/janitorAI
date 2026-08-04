@@ -100,3 +100,9 @@ export type Project = {
 };
 
 export const PROJECT_STORAGE_KEY = '@inspection_projects';
+
+// Sentinel-verdier som lagres i prosjektdata når felt står tomme. De er
+// engelske av historiske grunner og må aldri vises rått — begge skjermene
+// oversetter dem ved visning (nb.projects.dateNotSet/unknownInspector).
+export const UNKNOWN_INSPECTOR = 'Unknown inspector';
+export const NO_DATE_SET = 'No date set';

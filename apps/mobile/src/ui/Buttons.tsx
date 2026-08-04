@@ -1,5 +1,5 @@
 import React, { PropsWithChildren, useCallback, useMemo } from 'react';
-import { ActivityIndicator, Pressable, PressableProps, StyleSheet, ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, PressableProps, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
@@ -30,7 +30,7 @@ const PressableScale = ({ children, style, ...props }: ButtonProps & { backgroun
   }, [scale]);
 
   const pressableStyle = useMemo(() => {
-    const flattenedStyle = StyleSheet.flatten(style);
+    const flattenedStyle = StyleSheet.flatten(style as StyleProp<ViewStyle>);
     return {
       overflow: 'hidden' as const,
       borderRadius: flattenedStyle?.borderRadius,
@@ -50,7 +50,7 @@ const PressableScale = ({ children, style, ...props }: ButtonProps & { backgroun
       }}
       style={pressableStyle}
     >
-      <Animated.View style={[animatedStyle, style]}>{children}</Animated.View>
+      <Animated.View style={[animatedStyle, style as StyleProp<ViewStyle>]}>{children}</Animated.View>
     </Pressable>
   );
 };
@@ -81,7 +81,7 @@ export const PrimaryButton = ({ children, style, loading, disabled, icon, width,
     <PressableScale
       {...props}
       disabled={disabled || loading}
-      style={[baseStyle, style]}
+      style={[baseStyle, style as StyleProp<ViewStyle>]}
       backgroundColor={theme.colors.accent}
       foreground={theme.colors.foreground}
     >
@@ -118,7 +118,7 @@ export const SecondaryButton = ({ children, style, disabled, icon, width, ...pro
     <PressableScale
       {...props}
       disabled={disabled}
-      style={[baseStyle, style]}
+      style={[baseStyle, style as StyleProp<ViewStyle>]}
       backgroundColor={theme.colors.surfaceSecondary}
       foreground={theme.colors.foreground}
     >
@@ -148,7 +148,7 @@ export const IconButton = ({ children, style, disabled, ...props }: ButtonProps)
   };
 
   return (
-    <PressableScale {...props} disabled={disabled} style={[baseStyle, style]} backgroundColor={theme.colors.surface} foreground={theme.colors.foreground}>
+    <PressableScale {...props} disabled={disabled} style={[baseStyle, style as StyleProp<ViewStyle>]} backgroundColor={theme.colors.surface} foreground={theme.colors.foreground}>
       {children}
     </PressableScale>
   );

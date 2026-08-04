@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 
 import { isDevelopment } from '@/src/config/api';
+import { nb } from '@/src/i18n/nb';
 import { loadProfile, saveProfile, InspectorProfile } from '@/src/storage/profileStorage';
 import {
   Body,
@@ -14,6 +15,7 @@ import {
   TextField,
   Title,
   useAppTheme,
+  useToast,
 } from '@/src/ui';
 
 type StepProps = {
@@ -41,7 +43,7 @@ const Step = ({ number, title, description, icon }: StepProps) => {
           <Ionicons name={icon} size={18} color="#fff" />
         </View>
         <View style={{ flex: 1 }}>
-          <Caption muted>Step {number}</Caption>
+          <Caption muted>{`Steg ${number}`}</Caption>
           <Title style={{ fontSize: 16 }}>{title}</Title>
         </View>
       </View>
@@ -50,9 +52,24 @@ const Step = ({ number, title, description, icon }: StepProps) => {
   );
 };
 
+const TipRow = ({ text }: { text: string }) => {
+  const theme = useAppTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.spacing.sm }}>
+      <View style={{ paddingTop: 7 }}>
+        <Ionicons name="ellipse" size={6} color={theme.colors.muted} />
+      </View>
+      <Body muted style={{ flex: 1 }}>
+        {text}
+      </Body>
+    </View>
+  );
+};
+
 export default function GuideScreen() {
   const theme = useAppTheme();
   const router = useRouter();
+  const toast = useToast();
 
   const [profile, setProfile] = useState<InspectorProfile>({ name: '', phone: '', company: '' });
   const [isSaving, setIsSaving] = useState(false);
@@ -67,9 +84,12 @@ export default function GuideScreen() {
     setIsSaving(true);
     try {
       await saveProfile(profile);
-      Alert.alert('Saved', 'Your profile has been saved. New projects will be pre-filled with these details.');
+      toast.show({
+        message: 'Profilen ble lagret. Nye prosjekter fylles ut med disse opplysningene.',
+        variant: 'success',
+      });
     } catch {
-      Alert.alert('Error', 'Could not save profile. Please try again.');
+      toast.show({ message: 'Kunne ikke lagre profilen. Prøv igjen.', variant: 'error' });
     } finally {
       setIsSaving(false);
     }
@@ -80,75 +100,77 @@ export default function GuideScreen() {
       <View style={{ gap: theme.spacing.md }}>
         {/* Header */}
         <View style={{ gap: theme.spacing.xs }}>
-          <Caption muted>How it works</Caption>
-          <Title>Inspection Guide</Title>
+          <Caption muted>{nb.tabs.guide}</Caption>
+          <Title>{nb.guide.title}</Title>
           <Body muted>
-            JanitorAI turns your field observations into professional reports in minutes.
+            DocrAI gjør observasjonene dine fra befaringen om til profesjonelle rapporter på få
+            minutter.
           </Body>
         </View>
 
-        {/* My Profile */}
+        {/* Takstpersonprofil */}
         <GlassCard style={{ gap: theme.spacing.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
             <Ionicons name="person-circle-outline" size={22} color={theme.colors.accent} />
-            <Title style={{ fontSize: 16 }}>My profile</Title>
+            <Title style={{ fontSize: 16 }}>{nb.guide.profileTitle}</Title>
           </View>
           <Body muted>
-            Save your details once — they'll pre-fill the inspector block whenever you create a new project.
+            Lagre opplysningene dine én gang — de fyller ut takstperson-feltene automatisk når du
+            oppretter et nytt prosjekt.
           </Body>
           <TextField
-            label="Full name"
+            label={nb.guide.nameLabel}
             value={profile.name}
             onChangeText={(text) => setProfile((p) => ({ ...p, name: text }))}
-            placeholder="Jane Smith"
+            placeholder="Kari Nordmann"
           />
           <TextField
-            label="Phone"
+            label={nb.guide.phoneLabel}
             value={profile.phone}
             onChangeText={(text) => setProfile((p) => ({ ...p, phone: text }))}
-            placeholder="+1 555 000 1234"
+            placeholder="+47 900 00 000"
             keyboardType="phone-pad"
           />
           <TextField
-            label="Company"
+            label={nb.guide.companyLabel}
             value={profile.company}
             onChangeText={(text) => setProfile((p) => ({ ...p, company: text }))}
-            placeholder="Acme Inspections"
+            placeholder="Takst AS"
           />
           <SecondaryButton onPress={handleSave} disabled={isSaving}>
-            {isSaving ? 'Saving…' : 'Save profile'}
+            {isSaving ? 'Lagrer …' : 'Lagre profil'}
           </SecondaryButton>
         </GlassCard>
 
-        {/* Steps */}
+        {/* Steg */}
         <Step
           number="1"
-          title="Create a project"
-          description="Tap 'New project' on the home screen and fill in the project name, inspection date, and your name."
+          title="Opprett et prosjekt"
+          description="Trykk «Nytt prosjekt» på startsiden og fyll inn prosjektnavn, befaringsdato og navnet ditt."
           icon="folder-open-outline"
         />
         <Step
           number="2"
-          title="Collect observations"
-          description="Open the project and add notes as you walk the site. Type observations, record voice memos, snap photos, or attach short video clips."
+          title="Samle observasjoner"
+          description="Åpne prosjektet og legg til notater mens du går befaringen. Skriv observasjoner, ta opp lydnotater, ta bilder eller legg ved korte videoklipp."
           icon="create-outline"
         />
         <Step
           number="3"
-          title="Enrich with AI"
-          description="Tap 'Auto-describe' on any photo for an instant AI description. Tap 'Transcribe' on any voice note to convert speech to text automatically."
+          title="Berik med KI"
+          description="Trykk «Beskriv automatisk» på et bilde for en umiddelbar KI-beskrivelse. Trykk «Transkriber» på et lydnotat for å gjøre tale om til tekst automatisk."
           icon="sparkles-outline"
         />
         <Step
           number="4"
-          title="Generate the report"
-          description="Switch to the Report tab inside a project and tap 'Create report'. The AI analyses all your notes, photos, and transcriptions to produce a structured inspection report."
+          title="Lag rapporten"
+          description="Gå til Rapport-fanen i prosjektet og trykk «Lag rapport». KI-en analyserer notatene, bildene og transkripsjonene dine og lager en strukturert befaringsrapport."
           icon="document-text-outline"
         />
         <Step
           number="5"
-          title="Export and share"
-          description="Tap 'Export DOCX' to download a Word document you can share directly with your client."
+          title="Eksporter og del"
+          description="Trykk «Last ned Word» for å laste ned et Word-dokument du kan dele direkte med kunden."
           icon="share-outline"
         />
 
@@ -156,31 +178,32 @@ export default function GuideScreen() {
         <GlassCard style={{ gap: theme.spacing.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
             <Ionicons name="information-circle-outline" size={22} color={theme.colors.accent} />
-            <Title style={{ fontSize: 16 }}>Tips for best results</Title>
+            <Title style={{ fontSize: 16 }}>Tips for best resultat</Title>
           </View>
           <View style={{ gap: theme.spacing.xs }}>
-            <Body muted>• Keep photos under 8 MB — the app warns you if they're too large.</Body>
-            <Body muted>• Video clips must be 2 minutes or shorter for reliable uploads.</Body>
-            <Body muted>• Add a project description so the AI focuses on the right areas.</Body>
-            <Body muted>• Transcribe voice notes before generating the report.</Body>
+            <TipRow text="Hold bildene under 8 MB — appen varsler deg hvis de er for store." />
+            <TipRow text="Videoklipp må være 2 minutter eller kortere for pålitelig opplasting." />
+            <TipRow text="Legg til en prosjektbeskrivelse så KI-en fokuserer på de riktige områdene." />
+            <TipRow text="Transkriber lydnotatene før du lager rapporten." />
           </View>
         </GlassCard>
 
-        {/* Access */}
+        {/* Tilgang */}
         <GlassCard style={{ gap: theme.spacing.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
             <Ionicons name="key-outline" size={22} color={theme.colors.accent} />
-            <Title style={{ fontSize: 16 }}>Access</Title>
+            <Title style={{ fontSize: 16 }}>{nb.auth.accessTitle}</Title>
           </View>
           <Body muted>
-            An access token is required to use AI features. Enter it by tapping the key icon on the home screen.
+            Du trenger en tilgangskode for å bruke KI-funksjonene. Skriv den inn ved å trykke på
+            nøkkelikonet på startsiden.
           </Body>
         </GlassCard>
 
         {/* Dev debug link */}
         {isDevelopment() && (
           <SecondaryButton onPress={() => router.push('/debug' as any)}>
-            🛠️ Debug Info
+            Feilsøkingsinfo
           </SecondaryButton>
         )}
       </View>

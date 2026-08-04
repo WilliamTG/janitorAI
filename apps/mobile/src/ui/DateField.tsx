@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Platform, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { formatDate } from '@/src/i18n/nb';
+
 import { Caption } from './Typography';
 import { TextField } from './TextField';
 import { useAppTheme } from './theme';
@@ -84,8 +86,8 @@ export const DateField = ({ value, onChange, label }: DateFieldProps) => {
     <View>
       <TextField
         label={label}
-        value={effectiveValue}
-        placeholder="Select a date"
+        value={formatDate(effectiveValue) || effectiveValue}
+        placeholder="Velg dato"
         editable={false}
         rightIcon={<Ionicons name="calendar-outline" size={18} color={theme.colors.muted} />}
         onPressIn={() => setShowPicker(true)}

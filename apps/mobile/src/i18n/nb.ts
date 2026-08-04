@@ -46,6 +46,9 @@ export const nb = {
   projects: {
     title: 'Prosjekter',
     subtitle: 'Befaringer og skadesaker',
+    created: 'Prosjektet ble opprettet',
+    dateNotSet: 'Ikke angitt',
+    unknownInspector: 'Ukjent takstperson',
     empty: 'Ingen prosjekter ennå',
     emptyHint: 'Opprett et prosjekt for å starte en befaring.',
     newProject: 'Nytt prosjekt',
@@ -115,6 +118,8 @@ export const nb = {
     downloadPdf: 'Last ned PDF',
     downloadWord: 'Last ned Word',
     requiresVideo: 'Rapporten trenger minst én video fra befaringen.',
+    interrupted: 'Genereringen ble avbrutt — prøv igjen.',
+    unauthorized: 'Tilgangskoden er ugyldig eller utløpt.',
     details: 'Rapportdetaljer',
     approvedBy: 'Godkjent av takstperson',
   },
@@ -138,6 +143,12 @@ export const nb = {
 
 // dd.mm.åååå (B2: norske datoformater)
 export function formatDate(input: Date | string | number): string {
+  // Rene datostrenger ('2026-08-04') må ikke innom Date: new Date tolker dem
+  // som UTC-midnatt, som viser gårsdagens dato i tidssoner vest for UTC.
+  if (typeof input === 'string') {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.trim());
+    if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+  }
   const d = input instanceof Date ? input : new Date(input);
   if (Number.isNaN(d.getTime())) return '';
   const dd = String(d.getDate()).padStart(2, '0');
