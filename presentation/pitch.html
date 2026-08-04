@@ -1,0 +1,609 @@
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DocrAI — Kundereisen (pitch)</title>
+<style>
+  :root {
+    --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
+    --border: #DDE4EB; --accent: #3D5A80; --accent-fill: #3D5A80; --accent-pale: #E8F0F7;
+    --amber: #A8681F; --amber-pale: #F7EEDD; --ok: #2E7D4F; --bad: #A6453A;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #131920; --surface: #0F141A; --ink: #E4EAF1; --muted: #97A6B5;
+      --border: #2A3542; --accent: #94B9DE; --accent-fill: #3D5A80; --accent-pale: #1B2634;
+      --amber: #D69A4E; --amber-pale: #2B2214; --ok: #5CB884; --bad: #D3766B;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
+    --border: #DDE4EB; --accent: #3D5A80; --accent-fill: #3D5A80; --accent-pale: #E8F0F7;
+    --amber: #A8681F; --amber-pale: #F7EEDD; --ok: #2E7D4F; --bad: #A6453A;
+  }
+  :root[data-theme="dark"] {
+    --paper: #131920; --surface: #0F141A; --ink: #E4EAF1; --muted: #97A6B5;
+    --border: #2A3542; --accent: #94B9DE; --accent-fill: #3D5A80; --accent-pale: #1B2634;
+    --amber: #D69A4E; --amber-pale: #2B2214; --ok: #5CB884; --bad: #D3766B;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface); color: var(--ink);
+    font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.55;
+  }
+  .page { max-width: 980px; margin: 0 auto; padding: 40px 20px 72px; display: flex; flex-direction: column; gap: 44px; }
+
+  header .brand-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .brand-sq { width: 22px; height: 22px; background: var(--accent-fill); flex: none; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  h1 { margin: 0 0 10px; font-size: 28px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+  .lede { margin: 0; max-width: 64ch; color: var(--muted); font-size: 15.5px; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  /* ═══════════ PLAYER ═══════════ */
+  .player { background: #0C1118; border: 1px solid #232D3A; user-select: none; }
+  .stage {
+    position: relative; width: 100%; aspect-ratio: 16 / 9.6; overflow: hidden;
+    color: #E7EDF5; font-size: clamp(9px, 1.55vw, 15.5px);
+  }
+  @media (min-width: 1000px) { .stage { font-size: 15.5px; } }
+
+  .scene { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity 0.55s ease; }
+  .scene.active { opacity: 1; pointer-events: auto; }
+
+  /* trinnvise inn-animasjoner */
+  @keyframes riseIn { from { opacity: 0; transform: translateY(1em); } to { opacity: 1; transform: none; } }
+  @keyframes popIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: none; } }
+  .scene .rise, .scene .pop { opacity: 0; }
+  .scene.active .rise { animation: riseIn 0.6s ease forwards; }
+  .scene.active .pop { animation: popIn 0.5s ease forwards; }
+  .scene.active .d1 { animation-delay: 0.5s; }  .scene.active .d2 { animation-delay: 1.1s; }
+  .scene.active .d3 { animation-delay: 1.8s; }  .scene.active .d4 { animation-delay: 2.6s; }
+  .scene.active .d5 { animation-delay: 3.4s; }  .scene.active .d6 { animation-delay: 4.2s; }
+  @media (prefers-reduced-motion: reduce) {
+    .scene { transition: none; }
+    .scene .rise, .scene .pop { opacity: 1 !important; animation: none !important; }
+  }
+
+  .sc-label { position: absolute; top: 5%; left: 5%; font-size: 0.72em; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #7FA1C7; }
+  .sc-kicker { position: absolute; top: 5%; right: 5%; font-size: 0.72em; color: #5C6E84; font-variant-numeric: tabular-nums; }
+
+  /* Scene 1 — intro */
+  .s-intro { background: linear-gradient(160deg, #0C1118 55%, #14202E); }
+  .s-intro .clock { position: absolute; top: 24%; left: 8%; font-size: 3.4em; font-weight: 700; letter-spacing: -0.02em; color: #E7EDF5; font-variant-numeric: tabular-nums; }
+  .s-intro .big { position: absolute; top: 44%; left: 8%; font-size: 1.55em; font-weight: 700; max-width: 20ch; line-height: 1.25; text-wrap: balance; }
+  .s-intro .pain { position: absolute; top: 24%; right: 6%; width: 34%; display: flex; flex-direction: column; gap: 0.7em; }
+  .pain .p-item { border: 1px solid #33231F; background: #1A1310; color: #D9A793; padding: 0.7em 0.9em; font-size: 0.82em; line-height: 1.4; }
+  .brandline { display: flex; align-items: center; gap: 0.6em; font-weight: 700; font-size: 1.05em; }
+  .s-intro .brandline { position: absolute; bottom: 12%; left: 8%; }
+  .brandline .sq { width: 0.85em; height: 0.85em; background: #5B84B4; flex: none; }
+
+  /* telefonramme */
+  .phone {
+    position: absolute; width: 24.5%; max-width: 250px; aspect-ratio: 0.52;
+    background: #05080C; border: 2px solid #2C3947; border-radius: 1.6em; padding: 0.5em;
+  }
+  .p-screen { width: 100%; height: 100%; border-radius: 1.1em; overflow: hidden; background: linear-gradient(170deg, #0b1020, #101A2C); display: flex; flex-direction: column; font-size: 0.78em; }
+  .p-head { display: flex; align-items: center; justify-content: space-between; padding: 0.8em 0.9em 0.6em; border-bottom: 1px solid #1D2836; }
+  .p-title { font-weight: 700; font-size: 1em; }
+  .p-sync { display: inline-flex; align-items: center; gap: 0.4em; font-size: 0.72em; color: #9BD1AC; border: 1px solid #244631; background: #12241A; padding: 0.2em 0.55em; border-radius: 999px; }
+  .p-sync.wait { color: #E3C08A; border-color: #4A3A20; background: #251C0E; }
+  .p-sync .dot { width: 0.5em; height: 0.5em; border-radius: 50%; background: currentColor; }
+  .p-body { flex: 1; padding: 0.8em 0.9em; display: flex; flex-direction: column; gap: 0.7em; overflow: hidden; }
+
+  .p-card { border: 1px solid #223045; background: #131E30; border-radius: 0.7em; padding: 0.75em 0.85em; }
+  .p-card .t { font-weight: 700; font-size: 0.95em; }
+  .p-card .s { color: #8DA2BA; font-size: 0.78em; margin-top: 0.15em; }
+  .chip { display: inline-block; font-size: 0.7em; font-weight: 600; padding: 0.18em 0.6em; border-radius: 999px; border: 1px solid; margin-top: 0.5em; }
+  .chip.draft { color: #C7D4E4; border-color: #3A4A60; background: #1B2739; }
+  .chip.proc  { color: #A9C9EF; border-color: #2E4D74; background: #14273E; }
+  .chip.ready { color: #9BD1AC; border-color: #2E5940; background: #12241A; }
+  .chip.fail  { color: #E8A79D; border-color: #5C332C; background: #291511; }
+
+  .bigbtn { display: flex; align-items: center; gap: 0.7em; border: 1px solid #2E4D74; background: #16283F; border-radius: 0.8em; padding: 1.05em 0.9em; font-weight: 700; font-size: 1em; }
+  .bigbtn .ic { width: 1.15em; height: 1.15em; flex: none; }
+  .bigbtn .ic path, .bigbtn .ic rect, .bigbtn .ic circle, .bigbtn .ic polygon { stroke: #A9C9EF; stroke-width: 1.6; fill: none; }
+  .p-foot { padding: 0.75em 0.9em; border-top: 1px solid #1D2836; }
+  .cta { text-align: center; background: #2E5D9E; border-radius: 0.8em; padding: 0.9em; font-weight: 700; }
+
+  .evrow { display: flex; gap: 0.6em; align-items: center; border: 1px solid #223045; background: #131E30; border-radius: 0.7em; padding: 0.6em 0.7em; }
+  .thumb { width: 2.6em; height: 2em; border-radius: 0.35em; background: linear-gradient(135deg, #24455F, #12202E); flex: none; position: relative; }
+  .thumb::after { content: ""; position: absolute; left: 35%; top: 28%; border-style: solid; border-width: 0.32em 0 0.32em 0.55em; border-color: transparent transparent transparent #BFD7EE; }
+  .evmeta { font-size: 0.72em; color: #8DA2BA; line-height: 1.45; }
+  .evmeta b { color: #D7E3F2; }
+
+  .pipe-step { display: flex; align-items: center; gap: 0.6em; border: 1px solid #223045; background: #131E30; border-radius: 0.7em; padding: 0.65em 0.8em; font-size: 0.9em; }
+  .pipe-step .st { margin-left: auto; font-size: 0.75em; font-weight: 600; }
+  .st.done { color: #9BD1AC; } .st.run { color: #A9C9EF; } .st.wait { color: #8DA2BA; }
+
+  /* callouts */
+  .co { position: absolute; max-width: 30%; display: flex; flex-direction: column; gap: 0.35em; }
+  .co .co-line { display: flex; align-items: center; gap: 0.5em; }
+  .co .co-dot { width: 0.55em; height: 0.55em; border-radius: 50%; background: #E0B36A; flex: none; }
+  .co .co-rule { height: 1px; flex: 1; background: #4A3E28; }
+  .co .co-tag { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 0.68em; color: #E0B36A; }
+  .co h4 { margin: 0; font-size: 0.92em; font-weight: 700; color: #F0E2C8; }
+  .co p { margin: 0; font-size: 0.76em; color: #A5946F; line-height: 1.45; }
+  .co.left .co-line { flex-direction: row-reverse; }
+  .co.left { text-align: right; align-items: flex-end; }
+
+  /* mottakervisning (browser) */
+  .browser { position: absolute; width: 46%; background: #0E141C; border: 1px solid #26313F; border-radius: 0.7em; overflow: hidden; }
+  .b-bar { display: flex; align-items: center; gap: 0.5em; padding: 0.55em 0.8em; background: #121A24; border-bottom: 1px solid #26313F; font-size: 0.72em; color: #8DA2BA; }
+  .b-bar .dots { display: flex; gap: 0.3em; }
+  .b-bar .dots i { width: 0.55em; height: 0.55em; border-radius: 50%; background: #33414F; }
+  .b-url { border: 1px solid #26313F; background: #0B1119; border-radius: 999px; padding: 0.2em 0.8em; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-body { padding: 1em 1.1em; display: flex; flex-direction: column; gap: 0.7em; font-size: 0.82em; }
+  .r-h { font-weight: 700; font-size: 1.15em; }
+  .r-row { display: flex; gap: 0.6em; }
+  .r-k { color: #7C90A8; min-width: 8.5em; }
+  .r-v { color: #DCE6F2; }
+  .quote { border-left: 3px solid #5B84B4; background: #121C2B; padding: 0.6em 0.8em; font-size: 0.9em; color: #C3D4E8; }
+  .quote .src { display: flex; gap: 0.5em; align-items: center; margin-top: 0.4em; font-size: 0.78em; color: #7FA1C7; }
+  .vbadge { display: inline-flex; align-items: center; gap: 0.35em; font-size: 0.85em; color: #9BD1AC; border: 1px solid #2E5940; background: #12241A; border-radius: 999px; padding: 0.1em 0.6em; }
+  .stamp { align-self: flex-start; border: 2px solid #7FBF93; color: #9BD1AC; padding: 0.3em 0.8em; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.78em; transform: rotate(-2deg); border-radius: 0.3em; }
+  .pinpill { display: inline-flex; gap: 0.5em; align-items: center; font-size: 0.78em; color: #E3C08A; border: 1px solid #4A3A20; background: #251C0E; border-radius: 999px; padding: 0.25em 0.8em; }
+
+  /* toast */
+  .toastx { position: absolute; display: inline-flex; align-items: center; gap: 0.6em; background: #12241A; border: 1px solid #2E5940; color: #C9E8D2; padding: 0.6em 1em; border-radius: 0.6em; font-size: 0.85em; font-weight: 600; }
+
+  /* outro */
+  .s-outro { background: radial-gradient(90% 120% at 50% 110%, #17263A, #0C1118 65%); }
+  .s-outro .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.1em; text-align: center; padding: 0 8%; }
+  .s-outro .loop { display: flex; align-items: center; gap: 0.8em; font-size: 0.85em; color: #8DA2BA; flex-wrap: wrap; justify-content: center; }
+  .loop .n { border: 1px solid #2C3947; background: #121A26; padding: 0.5em 0.9em; border-radius: 0.5em; color: #C9D7E8; }
+  .loop .a { color: #5C6E84; }
+  .s-outro .tagline { font-size: 1.7em; font-weight: 700; letter-spacing: -0.01em; max-width: 22ch; text-wrap: balance; }
+  .s-outro .sub { color: #8DA2BA; font-size: 0.95em; max-width: 46ch; }
+
+  /* caption + kontroller */
+  .caption {
+    min-height: 4.6em; display: flex; align-items: center; gap: 14px;
+    padding: 12px 18px; border-top: 1px solid #232D3A; color: #C9D7E8; font-size: 14.5px; line-height: 1.5;
+  }
+  .caption .cnum { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: #5C6E84; flex: none; }
+  .controls { display: flex; align-items: center; gap: 14px; padding: 10px 14px 14px; }
+  .btn {
+    width: 40px; height: 40px; border: 1px solid #33414F; background: #16202C; color: #DCE6F2;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 15px; border-radius: 4px;
+  }
+  .btn:hover { background: #1D2A39; }
+  .segs { flex: 1; display: flex; gap: 6px; }
+  .seg { flex: 1; height: 6px; background: #22303F; cursor: pointer; position: relative; border-radius: 3px; overflow: hidden; }
+  .seg .fill { position: absolute; inset: 0; width: 0%; background: #5B84B4; }
+  .seg.done .fill { width: 100%; }
+
+  /* ═══════════ UI-GREP-SEKSJON ═══════════ */
+  section { display: flex; flex-direction: column; gap: 16px; }
+  .sec-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  .sec-head .eyebrow { color: var(--muted); }
+  h2 { margin: 0; font-size: 20px; font-weight: 700; }
+  section > p { margin: 0; max-width: 68ch; color: var(--muted); }
+  section > p strong { color: var(--ink); font-weight: 600; }
+
+  .grep { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
+  .g-card { background: var(--paper); border: 1px solid var(--border); padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+  .g-top { display: flex; align-items: center; gap: 8px; }
+  .g-id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; color: var(--accent); border: 1px solid var(--accent); padding: 1px 7px; }
+  .g-st { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-left: auto; }
+  .g-st.miss { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+  .g-st.part { color: var(--amber); background: var(--amber-pale); }
+  .g-st.wip  { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+  .g-card h3 { margin: 0; font-size: 15px; font-weight: 700; }
+  .g-card .now { font-size: 13px; color: var(--muted); }
+  .g-card .now code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; background: var(--surface); border: 1px solid var(--border); padding: 0 4px; }
+  .g-card .rec { font-size: 13.5px; }
+  .g-card .rec b { font-weight: 600; }
+
+  footer { border-top: 1px solid var(--border); padding-top: 16px; font-size: 12.5px; color: var(--muted); max-width: 70ch; }
+</style>
+
+<div class="page">
+
+  <header>
+    <div class="brand-row">
+      <div class="brand-sq"></div>
+      <span class="eyebrow">DocrAI · Pitch · Kundereisen</span>
+    </div>
+    <h1>Én vannskade, syv minutter, null tvil</h1>
+    <p class="lede">
+      En autospillende pitch som følger takstmann Kari gjennom en ekte vannskadesak — og viser
+      <strong>UI-grepene som anbefales</strong>, forankret i appens faktiske kode. Trykk play, eller
+      hopp mellom scenene med pilene og fremdriftslinjen.
+    </p>
+  </header>
+
+  <!-- ═══════════ VIDEO-PITCH ═══════════ -->
+  <div class="player" aria-label="DocrAI pitch-video">
+    <div class="stage" id="stage">
+
+      <!-- SCENE 1 · Krok -->
+      <div class="scene s-intro" data-dur="14000">
+        <span class="sc-label">Scene 1 · Oppdraget</span>
+        <span class="sc-kicker">Rykkinn, en tirsdag i november</span>
+        <div class="clock rise">07:42</div>
+        <div class="big rise d1">Vannskade i kjeller. Forsikringen trenger svar: akutt — eller gradvis?</div>
+        <div class="pain">
+          <div class="p-item rise d2">I dag: 2 timer rapportskriving i bilen etterpå</div>
+          <div class="p-item rise d3">Notater på mobil — med våte hansker på små knapper</div>
+          <div class="p-item rise d4">Dokumentasjon som ikke holder i oppgjøret</div>
+        </div>
+        <div class="brandline rise d5"><span class="sq"></span>DocrAI — fra befaring til bevis</div>
+      </div>
+
+      <!-- SCENE 2 · Prosjektet -->
+      <div class="scene" data-dur="17000">
+        <span class="sc-label">Scene 2 · Før hun kjører</span>
+        <div class="phone pop" style="left: 12%; top: 10%;">
+          <div class="p-screen">
+            <div class="p-head">
+              <span class="p-title">DocrAI</span>
+              <span class="p-sync"><span class="dot"></span>Lagret i skyen</span>
+            </div>
+            <div class="p-body">
+              <div class="p-card pop d2">
+                <div class="t">Solbergveien 14, Rykkinn</div>
+                <div class="s">Vannskade kjeller · i dag 07:44</div>
+                <span class="chip draft">Utkast</span>
+              </div>
+              <div class="p-card">
+                <div class="t">Fjellhamarveien 3B</div>
+                <div class="s">Fuktkontroll bad · i går</div>
+                <span class="chip ready">Klar</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="co rise d1" style="right: 6%; top: 12%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B16 · underveis</span></div>
+          <h4>Sync-status fast i header</h4>
+          <p>«Lagret i skyen · nå» eller «Venter på nett» — alltid synlig, aldri bortscrollet.</p>
+        </div>
+        <div class="co rise d3" style="right: 6%; top: 44%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B17 + B14</span></div>
+          <h4>Adressen er prosjektnavnet</h4>
+          <p>Foreslås automatisk — og hele kortet er trykkflate, ikke bare en knapp.</p>
+        </div>
+        <div class="co rise d4" style="right: 6%; top: 74%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B15</span></div>
+          <h4>Sletting bak meny</h4>
+          <p>Ingen søppelbøtte rett på kortet — bekreftelse med prosjektnavn.</p>
+        </div>
+      </div>
+
+      <!-- SCENE 3 · I felt -->
+      <div class="scene" data-dur="19000">
+        <span class="sc-label">Scene 3 · I kjelleren — med hansker på</span>
+        <div class="phone pop" style="left: 12%; top: 10%;">
+          <div class="p-screen">
+            <div class="p-head">
+              <span class="p-title">Solbergveien 14</span>
+              <span class="p-sync wait"><span class="dot"></span>Lagret lokalt</span>
+            </div>
+            <div class="p-body">
+              <div class="bigbtn pop d1">
+                <svg class="ic" viewBox="0 0 24 24"><path d="M12 3v10M8 9a4 4 0 0 0 8 0M12 17v3M8 21h8"/></svg>
+                Lydnotat
+              </div>
+              <div class="bigbtn pop d2">
+                <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="4"/></svg>
+                Bilde
+              </div>
+              <div class="bigbtn pop d3">
+                <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><polygon points="16,10 21,7 21,17 16,14"/></svg>
+                Video
+              </div>
+              <div class="evrow pop d4">
+                <div class="thumb"></div>
+                <div class="evmeta"><b>video_kjeller.mp4</b><br/>59.94°N 10.52°Ø · 08:12:44 · sha256 ✓</div>
+              </div>
+            </div>
+            <div class="p-foot"><div class="cta">Se rapport</div></div>
+          </div>
+        </div>
+        <div class="co rise d1" style="right: 6%; top: 12%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B13</span></div>
+          <h4>Tre store knapper — minst 56 px</h4>
+          <p>I dag: fire knapper på ~42 px i 2×2-grid, med emoji. Hansker krever høyde, ikonene byttes ut (B18).</p>
+        </div>
+        <div class="co rise d4" style="right: 6%; top: 47%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B9 + B11</span></div>
+          <h4>Bevis fødes verifiserbart</h4>
+          <p>Geo, klokkeslett og kryptografisk sjekksum settes ved opptak — ikke i etterkant.</p>
+        </div>
+        <div class="co rise d5" style="right: 6%; top: 76%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B13</span></div>
+          <h4>«Se rapport» fast i bunn</h4>
+          <p>I dag scroller den bort sammen med resten av headeren.</p>
+        </div>
+      </div>
+
+      <!-- SCENE 4 · AI-en jobber -->
+      <div class="scene" data-dur="19000">
+        <span class="sc-label">Scene 4 · På vei til neste befaring</span>
+        <div class="phone pop" style="left: 12%; top: 10%;">
+          <div class="p-screen">
+            <div class="p-head">
+              <span class="p-title">Solbergveien 14</span>
+              <span class="p-sync"><span class="dot"></span>Synkronisert</span>
+            </div>
+            <div class="p-body">
+              <div class="pipe-step pop d1">Transkripsjon (norsk) <span class="st done">Ferdig</span></div>
+              <div class="pipe-step pop d2">Skadetype: <b>&nbsp;Vann — gradvis?</b> <span class="st run">Forslag</span></div>
+              <div class="pipe-step pop d3">Bevisbilde @ 02:41.320 <span class="st done">Hentet</span></div>
+              <div class="pipe-step pop d4">Byggforsk 727.121 våtrom <span class="st done">Verifisert</span></div>
+              <div class="evrow pop d5">
+                <div class="thumb"></div>
+                <div class="evmeta"><b>Fuktskjolder ved sluk</b><br/>bilde låst til påstand — ikke talen alene</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="co rise d1" style="right: 6%; top: 12%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B1 + B4 + B8</span></div>
+          <h4>AI-en gjør grovarbeidet</h4>
+          <p>Norsk språkhint på fagspråk og stedsnavn; skadetype foreslås — aldri fastslås.</p>
+        </div>
+        <div class="co rise d3" style="right: 6%; top: 42%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">RAG</span></div>
+          <h4>Sitatet er hentet, ikke diktet</h4>
+          <p>Byggforsk-punktet verifiseres før visning — 13–21 % av frie AI-siteringer er oppspinn.</p>
+        </div>
+        <div class="co rise d5" style="right: 6%; top: 72%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B20</span></div>
+          <h4>Status man kan lese</h4>
+          <p>Chips med AA-kontrast — og «Feilet» gir alltid «Prøv igjen», ikke bare en feilmelding.</p>
+        </div>
+      </div>
+
+      <!-- SCENE 5 · Godkjenning -->
+      <div class="scene" data-dur="17000">
+        <span class="sc-label">Scene 5 · Takstmannen bestemmer</span>
+        <div class="phone pop" style="left: 12%; top: 10%;">
+          <div class="p-screen">
+            <div class="p-head">
+              <span class="p-title">Utkast</span>
+              <span class="p-sync"><span class="dot"></span>Synkronisert</span>
+            </div>
+            <div class="p-body">
+              <div class="p-card">
+                <div class="t">Årsak</div>
+                <div class="s">Utett klemring ved sluk — <b>gradvis</b> inntrengning</div>
+              </div>
+              <div class="p-card pop d1">
+                <div class="t">Kari endrer:</div>
+                <div class="s">«akutt» → <b>«gradvis, over uker»</b> — AI-forslaget korrigeres</div>
+              </div>
+              <div class="p-card pop d2">
+                <div class="t">Byggforsk 727.121</div>
+                <div class="s">«Membran skal føres minst … ved sluk» · punktnr. verifisert ✓</div>
+              </div>
+            </div>
+            <div class="p-foot"><div class="cta">Godkjenn rapport</div></div>
+          </div>
+        </div>
+        <div class="toastx pop d4" style="left: 15%; bottom: 4.5%;">✓ Rapport godkjent</div>
+        <div class="co rise d1" style="right: 6%; top: 14%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">Menneske-i-løkken</span></div>
+          <h4>AI foreslår. Kari avgjør.</h4>
+          <p>Ingenting deles uten godkjenning — og godkjenningen stemples synlig i rapporten. Det er et salgsargument, ikke en brems.</p>
+        </div>
+        <div class="co rise d3" style="right: 6%; top: 52%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B18</span></div>
+          <h4>Toast, ikke alert</h4>
+          <p>I dag: 57 systemvarsler i hovedflyten. Kvitteringer skal bekrefte — ikke avbryte.</p>
+        </div>
+      </div>
+
+      <!-- SCENE 6 · Deling -->
+      <div class="scene" data-dur="19000">
+        <span class="sc-label">Scene 6 · Hos forsikringsselskapet</span>
+        <div class="browser pop" style="left: 8%; top: 12%;">
+          <div class="b-bar"><span class="dots"><i></i><i></i><i></i></span><span class="b-url">docrai.no/r/solbergveien-14</span></div>
+          <div class="b-body">
+            <span class="pinpill pop d1">PIN-beskyttet · utløper om 30 dager</span>
+            <div class="r-h">Skaderapport — Solbergveien 14</div>
+            <div class="r-row"><span class="r-k">Årsak</span><span class="r-v">Utett klemring ved sluk</span></div>
+            <div class="r-row"><span class="r-k">Klassifisering</span><span class="r-v"><b>Gradvis</b> — vurdert av takstmann</span></div>
+            <div class="quote pop d2">
+              «Membran skal føres minst 15 mm opp på slukets klemring …»
+              <span class="src">Byggforsk 727.121 <span class="vbadge">✓ punktnr. verifisert</span></span>
+            </div>
+            <div class="r-row pop d3"><span class="r-k">Bevis</span><span class="r-v">Bilde @ 02:41.320 · geo + tid · sha256 ✓</span></div>
+            <div class="stamp pop d4">Godkjent av takstmann · 04.11 09:31</div>
+          </div>
+        </div>
+        <div class="co left rise d1" style="right: 6%; top: 16%; max-width: 34%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B7</span></div>
+          <h4>Lenken åpner en rapport — ikke råfiler</h4>
+          <p>I dag deles en rå Google Doc-URL. Mottakeren skal møte skadefaget: årsak, klassifisering, sitat, bevis.</p>
+        </div>
+        <div class="co left rise d3" style="right: 6%; top: 52%; max-width: 34%;">
+          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B10 + B11</span></div>
+          <h4>Tillit som standard</h4>
+          <p>PIN og utløpsdato på hver lenke; hash lar mottakeren verifisere at beviset er urørt.</p>
+        </div>
+      </div>
+
+      <!-- SCENE 7 · Outro -->
+      <div class="scene s-outro" data-dur="15000">
+        <span class="sc-label">Scene 7 · Og neste sak?</span>
+        <div class="center">
+          <div class="loop rise">
+            <span class="n">Karis rettelser</span><span class="a">→</span>
+            <span class="n">Evalsett · 30–50 ekte saker</span><span class="a">→</span>
+            <span class="n">Målt siteringsscore</span><span class="a">→</span>
+            <span class="n">Bedre forslag</span>
+          </div>
+          <div class="tagline rise d2">Hver sak gjør den neste bedre — og datafortrinnet er vårt.</div>
+          <div class="sub rise d3">
+            Forsikringsverdig dokumentasjon av komplekse bygningsskader: video inn, verifisert
+            Byggforsk-forankret rapport ut. Ingen andre i Norden gjør akkurat dette.
+          </div>
+          <div class="brandline rise d4" style="position: static;"><span class="sq"></span>DocrAI — fra befaring til bevis</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="caption"><span class="cnum" id="cnum">1/7</span><span id="cap"></span></div>
+    <div class="controls">
+      <button class="btn" id="prev" aria-label="Forrige scene">‹</button>
+      <button class="btn" id="play" aria-label="Spill / pause">❚❚</button>
+      <button class="btn" id="next" aria-label="Neste scene">›</button>
+      <div class="segs" id="segs"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ UI-GREPENE ═══════════ -->
+  <section>
+    <div class="sec-head"><span class="eyebrow">Grunnlaget</span><h2>UI-grepene — mot appens faktiske kode</h2></div>
+    <p>
+      Hver anbefaling i pitchen er sjekket mot kodebasen per i dag. <strong>Status</strong> viser
+      avstanden: <em>mangler</em> = finnes ikke, <em>delvis</em> = finnes men treffer ikke kravet,
+      <em>underveis</em> = påbegynt i siste endringer.
+    </p>
+    <div class="grep">
+      <div class="g-card">
+        <div class="g-top"><span class="g-id">B13</span><h3>Store fangst-knapper + fast «Se rapport»</h3><span class="g-st miss">mangler</span></div>
+        <p class="now">I dag: fire knapper à ~42 px i 2×2-grid med emoji, som scroller bort — <code>app/projects/[id].tsx:1433</code>.</p>
+        <p class="rec"><b>Anbefalt:</b> tre knapper ≥ 56 px (Lydnotat · Bilde · Video) øverst, «Se rapport» forankret i bunn. Hansker er normaltilstanden i felt.</p>
+      </div>
+      <div class="g-card">
+        <div class="g-top"><span class="g-id">B7</span><h3>Delt lenke åpner forensisk rapport</h3><span class="g-st miss">mangler</span></div>
+        <p class="now">I dag: rå Google Doc-URL fra <code>ai-engine/main.py:225</code>; bevisbilder gjøres offentlige («anyone») i <code>doc_engine.py:45</code>.</p>
+        <p class="rec"><b>Anbefalt:</b> egen mottakervisning med årsak → bevis → sitat, uten Google-konto. Delingen <em>er</em> produktet i forsikringens øyne.</p>
+      </div>
+      <div class="g-card">
+        <div class="g-top"><span class="g-id">B10</span><h3>PIN + utløpsdato som standard</h3><span class="g-st miss">mangler</span></div>
+        <p class="now">Ingen delings-endepunkter i API-et i dag; medietilgang via tester-token i URL — <code>apps/api/src/routes/media.js:200</code>.</p>
+        <p class="rec"><b>Anbefalt:</b> hver lenke PIN-beskyttet og tidsbegrenset, med synlig status for mottaker. Wenn deler kontoløst — uten PIN. Dette er differensieringen.</p>
+      </div>
+      <div class="g-card">
+        <div class="g-top"><span class="g-id">B16</span><h3>Sync-status alltid synlig</h3><span class="g-st wip">underveis</span></div>
+        <p class="now">Tilstandsmaskinen finnes nå (<code>src/sync/syncStatus.ts</code>, PR #2), men indikatoren ligger i listens scrollheader og mangler helt på detaljskjermen.</p>
+        <p class="rec"><b>Anbefalt:</b> flytt til fast app-header på begge skjermer: «Lagret i skyen · nå» / «Venter på nett — lagret lokalt».</p>
+      </div>
+      <div class="g-card">
+        <div class="g-top"><span class="g-id">B14</span><h3>Kompakt, klikkbart prosjektkort</h3><span class="g-st part">delvis</span></div>
+        <p class="now">Kortet er ikke trykkflate (kun «Open project →»-knappen), og innholdet strekkes i full bredde på web — <code>src/ui/Screen.tsx</code> mangler maks-bredde.</p>
+        <p class="rec"><b>Anbefalt:</b> hele kortet klikkbart, maks ~840 px innholdsbredde, statistikk som stille metadata i stedet for tre piller.</p>
+      </div>
+      <div class="g-card">
+        <div class="g-top"><span class="g-id">B18</span><h3>Toasts og ikoner — ikke alerts og emoji</h3><span class="g-st miss">mangler</span></div>
+        <p class="now">57 forekomster av <code>Alert.alert</code>/<code>window.confirm</code>; emoji i knapper og prosessoverlay (🎬 🗣️ 🧠 📄).</p>
+        <p class="rec"><b>Anbefalt:</b> toast-system for kvitteringer, alerts kun for destruktive valg; ikonsett (SF Symbols/Ionicons) gjennomgående.</p>
+      </div>
+      <div class="g-card">
+        <div class="g-top"><span class="g-id">B20</span><h3>Statuschip med AA-kontrast og «Prøv igjen»</h3><span class="g-st miss">mangler</span></div>
+        <p class="now">Status er 13 px farget tekst med ~1,9–3,8:1-kontrast på glassbakgrunn (<code>index.tsx:64</code>); «Failed» gir bare «View Error»-alert.</p>
+        <p class="rec"><b>Anbefalt:</b> chip-komponent som består WCAG AA (4,5:1) i begge temaer, og «Feilet» alltid parret med en «Prøv igjen»-handling.</p>
+      </div>
+      <div class="g-card">
+        <div class="g-top"><span class="g-id">B15+B17</span><h3>Trygg sletting · adresse som navn</h3><span class="g-st part">delvis</span></div>
+        <p class="now">Søppelbøtte rett på kortet; notatsletting uten bekreftelse (<code>[id].tsx:1221</code>). Prosjektnavn er fritekst («e.g. Main lobby walkthrough»).</p>
+        <p class="rec"><b>Anbefalt:</b> sletting bak meny/sveip med navnebekreftelse; adressen fra rapportskjemaet foreslås som prosjektnavn ved opprettelse.</p>
+      </div>
+      <div class="g-card">
+        <div class="g-top"><span class="g-id">B2+B19</span><h3>Norsk språk · DocrAI-navnet</h3><span class="g-st miss">mangler</span></div>
+        <p class="now">Hele UI-et er engelsk; appen heter «inspection-mvp» / «Inspections», og «DocrAI» finnes ingen steder i koden.</p>
+        <p class="rec"><b>Anbefalt:</b> strings-fil (nb.ts) med norske datoformater, og navnebytte i app-config, header og bundle-id før første demo.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Manuset følger kundereisen fra løsningsskissen (scene 1–7 = felt → pipeline → godkjenning →
+    rapport → deling → læringssløyfe). Kodefunnene er fra en kartlegging av
+    <code>apps/mobile</code>, <code>apps/api</code> og <code>ai-engine</code> per 04.08.2026,
+    inkludert endringene i PR #2 (sync-status). Mockupene viser anbefalt UI, ikke dagens.
+  </footer>
+</div>
+
+<script>
+  (function () {
+    var stage = document.getElementById('stage');
+    var scenes = Array.prototype.slice.call(stage.querySelectorAll('.scene'));
+    var caps = [
+      'Kl. 07:42 ringer telefonen: vannskade i kjeller. Spørsmålet som avgjør oppgjøret er om den er akutt eller gradvis — og svaret må dokumenteres.',
+      'Kari oppretter saken før hun kjører. Adressen blir prosjektnavnet, kortet er én trykkflate, og sync-status står fast i headeren.',
+      'I kjelleren er det mørkt og hanskene er våte. Tre store knapper — Lydnotat, Bilde, Video — og hvert opptak fødes med geo, tid og sjekksum.',
+      'Mens Kari kjører videre, transkriberer AI-en på norsk, foreslår skadetype, trekker bevisbilder og henter Byggforsk-anvisningen — med verifisert punktnummer.',
+      'AI foreslår, Kari avgjør: hun korrigerer «akutt» til «gradvis» og godkjenner. Rettelsen blir treningsdata; godkjenningen stemples i rapporten.',
+      'Forsikringsselskapet åpner en PIN-beskyttet lenke og møter en forensisk rapport — årsak, klassifisering, verifisert sitat og hash-sikret bevis. Ikke råfiler.',
+      'Hver rettelse mates inn i evalsettet og måles. Verktøyet blir bedre for hver sak — og datafortrinnet kan ingen kopiere. DocrAI: fra befaring til bevis.'
+    ];
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var idx = 0, playing = !reduced, raf = null, sceneStart = 0, acc = 0;
+
+    var segs = document.getElementById('segs');
+    scenes.forEach(function (s, i) {
+      var seg = document.createElement('div');
+      seg.className = 'seg'; seg.setAttribute('role', 'button');
+      seg.setAttribute('aria-label', 'Gå til scene ' + (i + 1));
+      seg.innerHTML = '<div class="fill"></div>';
+      seg.addEventListener('click', function () { go(i, true); });
+      segs.appendChild(seg);
+    });
+    var fills = Array.prototype.slice.call(segs.querySelectorAll('.fill'));
+    var playBtn = document.getElementById('play');
+    var capEl = document.getElementById('cap');
+    var numEl = document.getElementById('cnum');
+
+    function dur(i) { return parseInt(scenes[i].getAttribute('data-dur'), 10) || 15000; }
+
+    function render() {
+      scenes.forEach(function (s, i) { s.classList.toggle('active', i === idx); });
+      segs.querySelectorAll('.seg').forEach(function (seg, i) {
+        seg.classList.toggle('done', i < idx);
+        if (i > idx) fills[i].style.width = '0%';
+      });
+      capEl.textContent = caps[idx];
+      numEl.textContent = (idx + 1) + '/' + scenes.length;
+      playBtn.textContent = playing ? '❚❚' : '▶';
+    }
+
+    function go(i, pauseAcc) {
+      idx = (i + scenes.length) % scenes.length;
+      acc = 0; sceneStart = performance.now();
+      fills[idx].style.width = '0%';
+      render();
+    }
+
+    function tick(now) {
+      if (playing) {
+        var elapsed = acc + (now - sceneStart);
+        var d = dur(idx);
+        fills[idx].style.width = Math.min(100, (elapsed / d) * 100) + '%';
+        if (elapsed >= d) {
+          if (idx === scenes.length - 1) { playing = false; fills[idx].style.width = '100%'; render(); }
+          else go(idx + 1);
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    }
+
+    function toggle() {
+      if (!playing && idx === scenes.length - 1 && acc === 0 && fills[idx].style.width === '100%') go(0);
+      playing = !playing;
+      if (playing) sceneStart = performance.now();
+      else acc += performance.now() - sceneStart;
+      render();
+    }
+
+    playBtn.addEventListener('click', toggle);
+    document.getElementById('prev').addEventListener('click', function () { go(idx - 1); });
+    document.getElementById('next').addEventListener('click', function () { go(idx + 1); });
+    stage.addEventListener('click', toggle);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight') go(idx + 1);
+      else if (e.key === 'ArrowLeft') go(idx - 1);
+      else if (e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+
+    var qs = new URLSearchParams(location.search);
+    if (qs.has('scene')) { playing = false; go(parseInt(qs.get('scene'), 10) - 1 || 0); }
+    else go(0);
+    sceneStart = performance.now();
+    raf = requestAnimationFrame(tick);
+  })();
+</script>
