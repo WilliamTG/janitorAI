@@ -66,6 +66,13 @@ app.get("/presentation", (req, res) => {
   res.sendFile(path.join(__dirname, "../../../presentation/index.html"));
 });
 
+// ---------- SHARE PAGE (public HTML shell; data endpoints gate on PIN) ------
+// Registered before the static/SPA fallback so /share/:id is never swallowed
+// by the web app's index.html.
+app.get("/share/:id", (req, res) => {
+  res.sendFile(path.join(__dirname, "share-page.html"));
+});
+
 if (fs.existsSync(STATIC_DIR)) {
   app.use(express.static(STATIC_DIR, { extensions: ["html"] }));
   app.use((req, res, next) => {
@@ -88,6 +95,11 @@ if (fs.existsSync(STATIC_DIR)) {
 // <Image>/audio players, which cannot set custom headers.
 const mediaRouter = require("./routes/media");
 app.use("/api/media", mediaRouter);
+
+// ---------- SHARE LINKS (mixed auth: create/revoke need tester token, the
+// recipient endpoints gate on PIN + view token) ----------
+const shareRouter = require("./routes/share");
+app.use("/api/share", shareRouter);
 
 // ---------- ADMIN (own auth: x-admin-secret header) ----------
 // Mounted before the global tester-token guard so it uses its own middleware.

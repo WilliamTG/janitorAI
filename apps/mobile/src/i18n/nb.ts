@@ -124,6 +124,21 @@ export const nb = {
     approvedBy: 'Godkjent av takstperson',
   },
 
+  share: {
+    title: 'Del rapporten',
+    create: 'Lag delingslenke',
+    creating: 'Lager lenke …',
+    linkLabel: 'Lenke',
+    pinLabel: 'PIN-kode',
+    statusPrefix: 'PIN-beskyttet · utløper',
+    copyLink: 'Kopier lenke',
+    copied: 'Lenke kopiert',
+    shareVia: 'Del lenken',
+    hint: 'Mottakeren åpner lenken uten konto og låser opp med PIN-koden. Send PIN-koden i en annen kanal enn selve lenken.',
+    failed: 'Kunne ikke lage delingslenke',
+    requiresToken: 'Skriv inn en gyldig tilgangskode for å dele.',
+  },
+
   auth: {
     accessTitle: 'Tilgangskode',
     accessMessage: 'Skriv inn tilgangskoden fra DocrAI',
