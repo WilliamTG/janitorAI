@@ -1564,11 +1564,12 @@ export default function ProjectDetailScreen() {
     );
   };
 
-  // B16: fast topprad (scroller ikke) — prosjektnavn + synk-status + tilgangskode.
+  // B16: fast topprad (scroller ikke) — synk-status + tilgangskode.
+  // Prosjektnavnet vises i navigasjonsheaderen (Stack.Screen), ikke her —
+  // ellers står tittelen dobbelt og trunkeres ved siden av synk-pillen.
   const renderTopBar = () => (
     <View style={{ gap: theme.spacing.sm }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
-        <Title numberOfLines={1} style={{ flex: 1 }}>{project?.name ?? 'Prosjekt'}</Title>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: theme.spacing.sm }}>
         <SyncStatusIndicator />
         <IconButton onPress={() => setShowTokenModal(true)} accessibilityLabel={nb.auth.accessTitle}>
           <Ionicons name="key-outline" size={18} color={theme.colors.foreground} />
