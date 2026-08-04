@@ -66,6 +66,21 @@ app.get("/presentation", (req, res) => {
   res.sendFile(path.join(__dirname, "../../../presentation/index.html"));
 });
 
+// Pitch-, skisse- og sammenstillings-sidene er skrevet uten dokumentskall
+// (de publiseres også som artifacts); pakk dem inn her så nettleseren
+// rendrer i standards mode.
+function sendPresentationPage(res, filename) {
+  const file = path.join(__dirname, "../../../presentation", filename);
+  fs.readFile(file, "utf8", (err, html) => {
+    if (err) return res.status(404).json({ error: "Not found" });
+    res.type("html").send('<!DOCTYPE html>\n<html lang="nb">\n' + html + "\n</html>");
+  });
+}
+
+app.get("/pitch", (req, res) => sendPresentationPage(res, "pitch.html"));
+app.get("/losningsskisse", (req, res) => sendPresentationPage(res, "losningsskisse.html"));
+app.get("/ui-endringer", (req, res) => sendPresentationPage(res, "ui-endringer.html"));
+
 // ---------- SHARE PAGE (public HTML shell; data endpoints gate on PIN) ------
 // Registered before the static/SPA fallback so /share/:id is never swallowed
 // by the web app's index.html.
