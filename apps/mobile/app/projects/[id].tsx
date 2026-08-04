@@ -922,12 +922,15 @@ export default function ProjectDetailScreen() {
           return;
         }
 
-        const uri = await persistMediaLocally(asset.uri);
+        // Generate the note ID before persisting so we can pass it to
+        // persistMediaLocally — on web it uses the ID as the IndexedDB key.
+        const noteId = Date.now().toString();
+        const uri = await persistMediaLocally(asset.uri, noteId);
         const trimmed = noteText.trim();
         const textForNote = trimmed || 'Video note (no text added yet).';
 
         const newNote: Note = {
-          id: Date.now().toString(),
+          id: noteId,
           text: textForNote,
           createdAt: new Date().toISOString(),
           videoUri: uri,

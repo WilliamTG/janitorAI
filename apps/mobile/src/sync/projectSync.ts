@@ -14,6 +14,7 @@ import {
   clearVideoUploadProgress,
 } from './syncStatus';
 import { logError, logAction } from '@/src/lib/logger';
+import { isIdbUri, noteIdFromIdbUri, loadVideoFromIdb, deleteVideoFromIdb } from './videoIdb';
 
 // Number of consecutive push cycles with at least one media upload failure
 // before we surface a warning to the inspector.
@@ -193,24 +194,39 @@ async function doUploadMedia(
     const meta = guessFileMeta(uri, kind);
 
     if (Platform.OS === 'web') {
-      // AbortSignal.timeout prevents the blob fetch from hanging forever.
-      // Without this, a stale/revoked blob URL silently blocks the upload
-      // forever and keeps the UI stuck at "Preparing…".
-      let response: Response;
-      try {
-        response = await fetch(uri, { signal: AbortSignal.timeout(30_000) });
-      } catch (fetchErr: any) {
-        const isTimeout = fetchErr?.name === 'TimeoutError' || fetchErr?.name === 'AbortError';
-        const err = new Error(isTimeout ? 'Blob fetch timed out' : `Blob fetch failed: ${fetchErr?.message}`);
-        logError(err, `upload-${kind}`);
-        return null;
+      // Resolve the video bytes. Two possible sources:
+      //   1. idb://<noteId>  — bytes stored in IndexedDB by persistMediaLocally;
+      //      survives page refreshes and is the durable path for web videos.
+      //   2. blob:<url>      — in-memory reference valid only for the current
+      //      session; AbortSignal.timeout prevents hanging on a revoked URL.
+      let blob: Blob;
+
+      if (isIdbUri(uri)) {
+        const noteId = noteIdFromIdbUri(uri);
+        const stored = await loadVideoFromIdb(noteId);
+        if (!stored) {
+          const err = new Error(`IndexedDB entry missing for note ${noteId} — video cannot be recovered`);
+          logError(err, `upload-${kind}`);
+          return null;
+        }
+        blob = stored;
+      } else {
+        let response: Response;
+        try {
+          response = await fetch(uri, { signal: AbortSignal.timeout(30_000) });
+        } catch (fetchErr: any) {
+          const isTimeout = fetchErr?.name === 'TimeoutError' || fetchErr?.name === 'AbortError';
+          const err = new Error(isTimeout ? 'Blob fetch timed out' : `Blob fetch failed: ${fetchErr?.message}`);
+          logError(err, `upload-${kind}`);
+          return null;
+        }
+        if (!response.ok) {
+          const err = new Error(`fetch blob failed: HTTP ${response.status}`);
+          logError(err, `upload-${kind}`);
+          return null;
+        }
+        blob = await response.blob();
       }
-      if (!response.ok) {
-        const err = new Error(`fetch blob failed: HTTP ${response.status}`);
-        logError(err, `upload-${kind}`);
-        return null;
-      }
-      const blob = await response.blob();
 
       // Pre-flight size check: catch oversized files here rather than relying on
       // a clean 413 from the server. When multer hits the cap it aborts the
@@ -281,6 +297,10 @@ async function doUploadMedia(
 
     if (remoteId) {
       logAction(`upload-${kind}`, Date.now() - startMs);
+      // IDB cleanup is intentionally deferred to the caller (pushProject) so
+      // it happens only after the videoRemoteId is committed to local storage.
+      // Deleting here — before updateProjectInStorage — would leave the note
+      // pointing to a missing IDB entry if a refresh occurred in that window.
     } else {
       logError(new Error('Media upload response missing id'), `upload-${kind}`);
     }
@@ -299,13 +319,17 @@ async function doUploadMedia(
 /**
  * Upload any media that has no durable server copy yet.
  * Returns an updated project (with remote IDs), whether anything changed,
- * and the count of items that still failed to upload.
+ * the count of items that still failed to upload, and the list of idb://
+ * URIs whose IndexedDB entries can be safely removed — but only after the
+ * caller has committed the new videoRemoteId to local storage (to avoid a
+ * window where the note references an already-deleted IDB entry).
  */
 async function uploadPendingMedia(
   project: Project,
-): Promise<{ project: Project; changed: boolean; failedCount: number }> {
+): Promise<{ project: Project; changed: boolean; failedCount: number; idbUrisToCleanup: string[] }> {
   let changed = false;
   let failedCount = 0;
+  const idbUrisToCleanup: string[] = [];
 
   const notes: Note[] = await Promise.all(
     (project.notes || []).map(async (note) => {
@@ -342,6 +366,11 @@ async function uploadPendingMedia(
         if (remoteId) {
           nextNote = { ...nextNote, videoRemoteId: remoteId };
           changed = true;
+          // Schedule IDB cleanup for this note's video — deferred so the
+          // caller can commit the remoteId to local storage first.
+          if (Platform.OS === 'web' && isIdbUri(note.videoUri)) {
+            idbUrisToCleanup.push(note.videoUri);
+          }
         } else {
           failedCount += 1;
         }
@@ -363,7 +392,7 @@ async function uploadPendingMedia(
     }
   }
 
-  return { project: next, changed, failedCount };
+  return { project: next, changed, failedCount, idbUrisToCleanup };
 }
 
 // ---------- PUSH ----------
@@ -374,7 +403,8 @@ function isDeviceLocalUri(uri?: string): boolean {
     uri.startsWith('file://') ||
     uri.startsWith('content://') ||
     uri.startsWith('blob:') ||
-    uri.startsWith('data:')
+    uri.startsWith('data:') ||
+    uri.startsWith('idb://')
   );
 }
 
@@ -420,7 +450,7 @@ export async function pushProject(project: Project): Promise<Project> {
   setSyncState('syncing');
 
   try {
-    const { project: withMedia, changed, failedCount } = await uploadPendingMedia(project);
+    const { project: withMedia, changed, failedCount, idbUrisToCleanup } = await uploadPendingMedia(project);
     let toPush = withMedia;
 
     // Track consecutive push cycles that had media upload failures so we can
@@ -441,6 +471,13 @@ export async function pushProject(project: Project): Promise<Project> {
       // Persist the remote IDs locally so we don't re-upload next time.
       // Keep the same updatedAt to avoid endless sync loops.
       await updateProjectInStorage(toPush);
+
+      // Now that videoRemoteId is durable on this device, it is safe to
+      // remove the IndexedDB blobs — if a refresh occurs here the note
+      // already has a remoteId and the sync will use the server copy.
+      for (const idbUri of idbUrisToCleanup) {
+        deleteVideoFromIdb(noteIdFromIdbUri(idbUri)).catch(() => {});
+      }
     }
 
     const response = await apiFetch(projectsUrl(`/${encodeURIComponent(project.id)}`), {
