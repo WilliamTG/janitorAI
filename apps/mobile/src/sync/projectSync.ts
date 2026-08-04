@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 import { getApiBaseUrl } from '@/src/config/api';
-import apiFetch, { UnauthorizedError } from '@/src/lib/apiFetch';
+import apiFetch, { UnauthorizedError, getCachedTesterToken } from '@/src/lib/apiFetch';
 import { Note, Photo, Project } from '@/src/features/projects/types';
 import { updateProject as updateProjectInStorage } from '@/src/storage/projectsStorage';
 import {
@@ -10,6 +10,8 @@ import {
   setMediaUploadFailures,
   clearMediaUploadFailures,
   recordOversizedFile,
+  setVideoUploadProgress,
+  clearVideoUploadProgress,
 } from './syncStatus';
 import { logError, logAction } from '@/src/lib/logger';
 
@@ -134,6 +136,44 @@ async function uploadMedia(
   return promise;
 }
 
+/**
+ * Upload FormData via XMLHttpRequest so we get upload progress events.
+ * Returns a minimal Response-like object compatible with the rest of doUploadMedia.
+ * XHR works on both web and React Native (where fetch() has no upload progress).
+ */
+function uploadWithProgress(
+  url: string,
+  formData: FormData,
+  token: string | null,
+  onProgress: (pct: number) => void,
+): Promise<{ ok: boolean; status: number; json(): Promise<any> }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    // Do NOT set Content-Type — the browser/RN fills in the multipart boundary automatically.
+    if (token) xhr.setRequestHeader('x-tester-token', token);
+
+    xhr.upload.onprogress = (e: ProgressEvent) => {
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      const text = xhr.responseText;
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        json: async () => JSON.parse(text),
+      });
+    };
+
+    xhr.onerror = () => reject(new Error('Network error during video upload'));
+    xhr.ontimeout = () => reject(new Error('Video upload timed out'));
+    xhr.send(formData);
+  });
+}
+
 async function doUploadMedia(
   uri: string,
   kind: 'photo' | 'audio' | 'video',
@@ -177,11 +217,24 @@ async function doUploadMedia(
       formData.append('file', { uri, name: meta.name, type: meta.type } as any);
     }
 
-    const response = await apiFetch(mediaUploadUrl(), {
-      method: 'POST',
-      body: formData,
-      skipAuthHandling: true,
-    });
+    // Video uploads use XHR so we can report byte-level progress to the UI.
+    // Photos and audio use the normal apiFetch path (progress isn't needed for small files).
+    let response: { ok: boolean; status: number; json(): Promise<any> };
+    if (kind === 'video') {
+      setVideoUploadProgress(uri, 0);
+      response = await uploadWithProgress(
+        mediaUploadUrl(),
+        formData,
+        getCachedTesterToken(),
+        (pct) => setVideoUploadProgress(uri, pct),
+      );
+    } else {
+      response = await apiFetch(mediaUploadUrl(), {
+        method: 'POST',
+        body: formData,
+        skipAuthHandling: true,
+      });
+    }
 
     if (!response.ok) {
       // Try to read a structured error body to detect a permanent rejection.
@@ -221,6 +274,9 @@ async function doUploadMedia(
     console.warn('[sync] Media upload error', error);
     logError(error, `upload-${kind}`);
     return null;
+  } finally {
+    // Always clear progress so the UI doesn't stay stuck at a partial percentage.
+    if (kind === 'video') clearVideoUploadProgress(uri);
   }
 }
 

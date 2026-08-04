@@ -8,6 +8,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';

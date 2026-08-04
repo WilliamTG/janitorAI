@@ -28,6 +28,7 @@ import {
 import { pullAndMerge, schedulePush, touchProject } from '@/src/sync/projectSync';
 import { persistMediaLocally } from '@/src/sync/persistMedia';
 import { displayMediaUri } from '@/src/sync/mediaUri';
+import { useVideoUploadProgress } from '@/src/sync/syncStatus';
 import {
   Body,
   Caption,
@@ -40,6 +41,60 @@ import {
   Title,
   useAppTheme,
 } from '@/src/ui';
+
+// ── Video upload progress bar ─────────────────────────────────────────────────
+// Defined outside ProjectDetailScreen so it can call hooks at the top level.
+// Shows a live progress bar while a video is uploading, and a spinner for the
+// brief "preparing" (blob fetch) and "processing" (server response) phases.
+function VideoUploadStatus({ videoUri }: { videoUri: string | undefined }) {
+  const theme = useAppTheme();
+  const pct = useVideoUploadProgress(videoUri);
+
+  if (pct === null) {
+    // Upload hasn't started reporting progress yet (blob being prepared).
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <ActivityIndicator size="small" color={theme.colors.accent} />
+        <Caption muted>Preparing…</Caption>
+      </View>
+    );
+  }
+
+  if (pct >= 100) {
+    // Bytes sent — waiting for server to confirm and return the media ID.
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <ActivityIndicator size="small" color={theme.colors.accent} />
+        <Caption muted>Processing…</Caption>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ gap: 3 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Caption muted>Uploading video…</Caption>
+        <Caption style={{ color: theme.colors.accent, fontVariant: ['tabular-nums'] }}>
+          {pct}%
+        </Caption>
+      </View>
+      {/* Progress track */}
+      <View style={{
+        height: 4,
+        backgroundColor: theme.colors.border,
+        borderRadius: 2,
+        overflow: 'hidden',
+      }}>
+        <View style={{
+          height: '100%',
+          width: `${pct}%` as `${number}%`,
+          backgroundColor: theme.colors.accent,
+          borderRadius: 2,
+        }} />
+      </View>
+    </View>
+  );
+}
 
 type ProjectTab = 'notes' | 'report';
 
@@ -75,6 +130,8 @@ export default function ProjectDetailScreen() {
 
   const [reportMetaDraft, setReportMetaDraft] = useState<ReportMeta>({ contributors: [{}], buildings: [{}] });
   const [reportMetaOpen, setReportMetaOpen] = useState(false);
+  const [isSavingMeta, setIsSavingMeta] = useState(false);
+  const [saveMetaError, setSaveMetaError] = useState<string | null>(null);
 
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
@@ -247,8 +304,17 @@ export default function ProjectDetailScreen() {
 
   const saveReportMeta = async () => {
     if (!project) return;
-    const updatedProject: Project = { ...project, reportMeta: reportMetaDraft };
-    await updateProjectLocally(updatedProject);
+    setIsSavingMeta(true);
+    setSaveMetaError(null);
+    try {
+      const updatedProject: Project = { ...project, reportMeta: reportMetaDraft };
+      await updateProjectLocally(updatedProject);
+      setReportMetaOpen(false); // collapse panel so the user sees it was saved
+    } catch (e: any) {
+      setSaveMetaError(e?.message ?? 'Failed to save. Please try again.');
+    } finally {
+      setIsSavingMeta(false);
+    }
   };
 
   const saveProjectDescriptionText = async () => {
@@ -1080,12 +1146,7 @@ export default function ProjectDetailScreen() {
               <Caption>Video clip attached</Caption>
               {item.videoRemoteId
                 ? <Caption muted>✓ Uploaded to server</Caption>
-                : (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <ActivityIndicator size="small" color={theme.colors.accent} />
-                    <Caption muted>Uploading video…</Caption>
-                  </View>
-                )}
+                : <VideoUploadStatus videoUri={item.videoUri} />}
             </View>
           </View>
         )}
@@ -1507,6 +1568,8 @@ export default function ProjectDetailScreen() {
             onSave={saveReportMeta}
             isOpen={reportMetaOpen}
             onToggle={() => setReportMetaOpen((o) => !o)}
+            saving={isSavingMeta}
+            saveError={saveMetaError}
           />
           {activeTab === 'report' && renderReport()}
         </View>
