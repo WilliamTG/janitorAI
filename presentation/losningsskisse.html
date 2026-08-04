@@ -1,0 +1,500 @@
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DocrAI — Løsningsskisse</title>
+<style>
+  :root {
+    --paper: #FFFFFF;
+    --surface: #F4F7FA;
+    --ink: #16202B;
+    --muted: #5C6B7A;
+    --border: #DDE4EB;
+    --accent: #3D5A80;          /* tekst/strek-aksent */
+    --accent-fill: #3D5A80;     /* solide flater med hvit tekst */
+    --accent-pale: #E8F0F7;
+    --amber: #A8681F;           /* mennesket i løkken */
+    --amber-pale: #F7EEDD;
+    --ok: #2E7D4F;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #131920;
+      --surface: #0F141A;
+      --ink: #E4EAF1;
+      --muted: #97A6B5;
+      --border: #2A3542;
+      --accent: #94B9DE;
+      --accent-fill: #3D5A80;
+      --accent-pale: #1B2634;
+      --amber: #D69A4E;
+      --amber-pale: #2B2214;
+      --ok: #5CB884;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
+    --border: #DDE4EB; --accent: #3D5A80; --accent-fill: #3D5A80;
+    --accent-pale: #E8F0F7; --amber: #A8681F; --amber-pale: #F7EEDD; --ok: #2E7D4F;
+  }
+  :root[data-theme="dark"] {
+    --paper: #131920; --surface: #0F141A; --ink: #E4EAF1; --muted: #97A6B5;
+    --border: #2A3542; --accent: #94B9DE; --accent-fill: #3D5A80;
+    --accent-pale: #1B2634; --amber: #D69A4E; --amber-pale: #2B2214; --ok: #5CB884;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.55;
+    font-size: 15px;
+  }
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 48px 24px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  /* ── Header ── */
+  header { display: flex; flex-direction: column; gap: 14px; }
+  .brand-row { display: flex; align-items: center; gap: 12px; }
+  .brand-sq { width: 22px; height: 22px; background: var(--accent-fill); flex: none; }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  h1 {
+    margin: 0; font-size: 30px; font-weight: 700; line-height: 1.2;
+    letter-spacing: -0.01em; text-wrap: balance; max-width: 24ch;
+  }
+  .lede { margin: 0; max-width: 62ch; color: var(--muted); font-size: 16px; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  /* ── Sections ── */
+  section { display: flex; flex-direction: column; gap: 18px; }
+  .sec-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  .sec-head .eyebrow { color: var(--muted); }
+  h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  section > p { margin: 0; max-width: 68ch; color: var(--muted); }
+  section > p strong { color: var(--ink); font-weight: 600; }
+
+  /* ── Figures ── */
+  figure { margin: 0; background: var(--paper); border: 1px solid var(--border); }
+  .fig-scroll { overflow-x: auto; padding: 20px 16px; }
+  figure svg { display: block; min-width: 760px; width: 100%; height: auto; }
+  figcaption {
+    padding: 12px 20px 14px; border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--muted); max-width: none;
+  }
+
+  /* SVG-klasser */
+  .db { fill: var(--paper); stroke: var(--border); stroke-width: 1.25; }
+  .db-accent { fill: var(--accent-pale); stroke: var(--accent); stroke-width: 1.25; }
+  .db-solid { fill: var(--accent-fill); stroke: none; }
+  .db-amber { fill: var(--amber-pale); stroke: var(--amber); stroke-width: 1.5; }
+  .db-dash { fill: none; stroke: var(--muted); stroke-width: 1.25; stroke-dasharray: 5 4; }
+  .dt   { fill: var(--ink); font-size: 12.5px; font-weight: 600; }
+  .dt-w { fill: #FFFFFF; font-size: 12.5px; font-weight: 600; }
+  .ds   { fill: var(--muted); font-size: 11px; }
+  .ds-w { fill: #D9E4F0; font-size: 11px; }
+  .dl   { fill: var(--muted); font-size: 10.5px; }
+  .dnum { fill: var(--accent); font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; }
+  .darr { stroke: var(--ink); stroke-width: 1.4; fill: none; }
+  .darr-dash { stroke: var(--muted); stroke-width: 1.3; fill: none; stroke-dasharray: 5 4; }
+  .mk-ink { fill: var(--ink); }
+  .mk-mut { fill: var(--muted); }
+
+  /* ── Kort (forskningsgrep) ── */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+  .card { background: var(--paper); border: 1px solid var(--border); padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .card h3 { margin: 0; font-size: 15px; font-weight: 700; }
+  .card p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .card p strong { color: var(--ink); font-weight: 600; }
+  .card .stat { font-size: 24px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .tagrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 8px; }
+  .tag {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 11px; padding: 2px 7px; border: 1px solid var(--border);
+    color: var(--muted); background: var(--surface);
+  }
+  .tag.hot { border-color: var(--accent); color: var(--accent); background: var(--accent-pale); }
+
+  /* ── Roadmap ── */
+  .sprints { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .sprint { background: var(--paper); border: 1px solid var(--border); border-top: 3px solid var(--accent-fill); padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .sprint .s-num { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  .sprint h3 { margin: 0; font-size: 14.5px; font-weight: 700; }
+  .sprint p { margin: 0; font-size: 13px; color: var(--muted); }
+  .sprint .goal { font-size: 12.5px; color: var(--ink); border-top: 1px dashed var(--border); padding-top: 8px; margin-top: auto; }
+  .sprint .goal b { font-weight: 600; }
+
+  .callout {
+    display: flex; gap: 14px; align-items: flex-start;
+    background: var(--amber-pale); border: 1px solid var(--amber);
+    padding: 16px 18px;
+  }
+  .callout .bar { width: 4px; align-self: stretch; background: var(--amber); flex: none; }
+  .callout p { margin: 0; font-size: 14px; }
+  .callout p strong { font-weight: 700; }
+
+  /* ── Økosystem ── */
+  .eco { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+  .eco .card h3 { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; flex: none; }
+  .dot.red { background: #B4533A; }
+  .dot.green { background: var(--ok); }
+  .dot.blue { background: var(--accent-fill); }
+  .eco ul { margin: 0; padding: 0 0 0 2px; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .eco li { font-size: 13.5px; color: var(--muted); }
+  .eco li b { color: var(--ink); font-weight: 600; }
+
+  footer { border-top: 1px solid var(--border); padding-top: 16px; font-size: 12.5px; color: var(--muted); max-width: 68ch; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="page">
+
+  <header>
+    <div class="brand-row">
+      <div class="brand-sq"></div>
+      <span class="eyebrow">DocrAI · Løsningsskisse · 04.08.2026</span>
+    </div>
+    <h1>Fra befaringsvideo til forsikringsverdig skaderapport</h1>
+    <p class="lede">
+      Markedskartleggingen viser at <strong>ingen nordisk aktør</strong> leverer forensisk
+      skaderapport med norsk Byggforsk-forankring — befaringsverktøy, fuktsensorer og insurtech
+      nærmer seg fra hver sin kant, men skjæringspunktet står åpent. Denne skissen setter sammen
+      innspillene fra markedsanalysen, produktbackloggen og forskningsgrunnlaget til <strong>én
+      løsning</strong>: hva som bygges, hvorfor den kan stoles på, og i hvilken rekkefølge.
+    </p>
+  </header>
+
+  <!-- ══ 1 · Løsningen i ett bilde ══ -->
+  <section>
+    <div class="sec-head">
+      <span class="eyebrow">01</span>
+      <h2>Løsningen i ett bilde</h2>
+    </div>
+    <p>
+      Fem trinn fra kjeller til oppgjør. Alt AI-arbeid skjer innenfor EU/EØS (B12), hver
+      bevispåstand er låst til et konkret bilde med tidsstempel, og <strong>takstmannen godkjenner
+      alltid</strong> før noe deles — det er både produktkrav og forskningsfunn. Rettelsene
+      takstmannen gjør, mates tilbake som evaluerings- og treningsdata og bygger datafortrinnet.
+    </p>
+    <figure>
+      <div class="fig-scroll">
+      <svg viewBox="0 0 1150 470" role="img" aria-label="Flytdiagram: felt-opptak lastes sikret opp til en AI-pipeline i EU/EØS med transkripsjon, skadeklassifisering, bevisuttrekk og Byggforsk-RAG. Utkastet går til takstmann som godkjenner, deretter forensisk rapport som deles PIN-beskyttet med forsikring og takst. Takstmannens rettelser går til et evalsett som måler og forbedrer pipelinen.">
+        <defs>
+          <marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="mk-ink"/>
+          </marker>
+          <marker id="a-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="mk-mut"/>
+          </marker>
+        </defs>
+
+        <!-- 1 · FELT -->
+        <text x="14" y="100" class="dnum">1 · FELT</text>
+        <rect x="10" y="110" width="150" height="200" class="db"/>
+        <text x="26" y="136" class="dt">Takstmann fanger</text>
+        <rect x="26" y="150" width="118" height="30" class="db"/>
+        <text x="38" y="169" class="ds">Video</text>
+        <rect x="26" y="188" width="118" height="30" class="db"/>
+        <text x="38" y="207" class="ds">Lydnotat</text>
+        <rect x="26" y="226" width="118" height="30" class="db"/>
+        <text x="38" y="245" class="ds">Foto</text>
+        <text x="26" y="274" class="dl">hash ved opplasting (B11)</text>
+        <text x="26" y="288" class="dl">geo + tid på alt bevis (B9)</text>
+        <text x="26" y="302" class="dl">hanske-UX (B13)</text>
+
+        <!-- pil felt → pipeline -->
+        <line x1="160" y1="210" x2="211" y2="210" class="darr" marker-end="url(#a-ink)"/>
+        <text x="186" y="198" class="dl" text-anchor="middle">opplasting</text>
+
+        <!-- 2 · AI-PIPELINE (EU/EØS-grense) -->
+        <text x="219" y="54" class="dnum">2 · AI-PIPELINE</text>
+        <rect x="215" y="64" width="370" height="300" class="db-dash"/>
+        <text x="235" y="86" class="ds">all databehandling i EU/EØS · Vertex AI EU-region (B12)</text>
+        <rect x="235" y="98" width="330" height="54" class="db"/>
+        <text x="249" y="120" class="dt">Transkripsjon</text>
+        <text x="249" y="138" class="ds">norsk språkhint · fagspråk og stedsnavn (B1, B4)</text>
+        <rect x="235" y="162" width="330" height="54" class="db"/>
+        <text x="249" y="184" class="dt">Skadeklassifisering</text>
+        <text x="249" y="202" class="ds">forslag: vann · brann · fukt · råte (B8)</text>
+        <rect x="235" y="226" width="330" height="54" class="db"/>
+        <text x="249" y="248" class="dt">Bevisuttrekk</text>
+        <text x="249" y="266" class="ds">bilde + tidsstempel på millisekund — talen alene teller ikke</text>
+        <rect x="235" y="290" width="330" height="54" class="db-accent"/>
+        <text x="249" y="312" class="dt">Byggforsk-RAG</text>
+        <text x="249" y="330" class="ds">hent anvisning → siter kun hentet tekst → verifiser punktnr.</text>
+
+        <!-- pil pipeline → gate -->
+        <line x1="585" y1="214" x2="626" y2="214" class="darr" marker-end="url(#a-ink)"/>
+        <text x="607" y="200" class="dl" text-anchor="middle">utkast</text>
+
+        <!-- 3 · GATE -->
+        <text x="634" y="168" class="dnum">3 · GODKJENNING</text>
+        <rect x="630" y="178" width="150" height="72" class="db-amber"/>
+        <text x="646" y="204" class="dt">Takstmann</text>
+        <text x="646" y="222" class="dt">godkjenner alltid</text>
+        <text x="646" y="240" class="ds">menneske-i-løkken</text>
+
+        <!-- pil gate → rapport -->
+        <line x1="780" y1="214" x2="831" y2="214" class="darr" marker-end="url(#a-ink)"/>
+        <text x="806" y="200" class="dl" text-anchor="middle">godkjent</text>
+
+        <!-- 4 · RAPPORT -->
+        <text x="839" y="130" class="dnum">4 · FORENSISK RAPPORT</text>
+        <rect x="835" y="140" width="160" height="180" class="db-solid"/>
+        <text x="851" y="166" class="dt-w">Skaderapport</text>
+        <text x="851" y="190" class="ds-w">Årsak</text>
+        <text x="851" y="208" class="ds-w">Akutt vs. gradvis</text>
+        <text x="851" y="226" class="ds-w">Byggforsk-sitater</text>
+        <text x="851" y="244" class="ds-w">Bevis m/tidsstempel</text>
+        <text x="851" y="262" class="ds-w">Synlig godkjenning</text>
+        <text x="851" y="296" class="ds-w">docx uten Google-konto</text>
+
+        <!-- pil rapport → mottaker -->
+        <line x1="995" y1="214" x2="1046" y2="214" class="darr" marker-end="url(#a-ink)"/>
+        <text x="1021" y="200" class="dl" text-anchor="middle">deling</text>
+
+        <!-- 5 · MOTTAKER -->
+        <text x="1054" y="168" class="dnum">5 · MOTTAKER</text>
+        <rect x="1050" y="178" width="90" height="72" class="db"/>
+        <text x="1064" y="204" class="dt">Forsikring</text>
+        <text x="1064" y="222" class="dt">og takst</text>
+        <text x="1064" y="240" class="ds">verifiserer hash</text>
+        <text x="1140" y="270" class="dl" text-anchor="end">PIN + utløpsdato (B10)</text>
+
+        <!-- tilbakekobling -->
+        <polyline points="705,250 705,412 545,412" class="darr-dash" marker-end="url(#a-mut)"/>
+        <text x="720" y="332" class="dl">rettelser (med samtykke)</text>
+        <rect x="335" y="390" width="210" height="46" class="db-dash"/>
+        <text x="351" y="410" class="dt">Evalsett</text>
+        <text x="351" y="426" class="ds">30–50 ekte saker · siteringsscore</text>
+        <polyline points="335,412 300,412 300,366" class="darr-dash" marker-end="url(#a-mut)"/>
+        <text x="292" y="440" class="dl" text-anchor="end">målt forbedring per endring</text>
+      </svg>
+      </div>
+      <figcaption>
+        Heltrukne piler er skadesaken på vei mot oppgjør; stiplede piler er læringssløyfen.
+        Byggforsk-RAG (uthevet) og takstmann-godkjenningen (gul) er de to leddene som gjør
+        rapporten forsikringsverdig i stedet for en demo.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ══ 2 · Forskningsgrepene ══ -->
+  <section>
+    <div class="sec-head">
+      <span class="eyebrow">02</span>
+      <h2>Tre forskningsgrep som gjør den til å stole på</h2>
+    </div>
+    <p>
+      Forskningsgrunnlaget peker på tre risikoer — og tre mottiltak som allerede ligger i
+      backloggen. Dette er ikke polish: det er det som skiller et forsikringsverdig verktøy fra
+      en demo, og det som gir Innovasjon Norge-søknaden innovasjonshøyde.
+    </p>
+    <div class="cards">
+      <div class="card">
+        <span class="stat">13–21&nbsp;%</span>
+        <h3>Ekte RAG, ikke fri sitering</h3>
+        <p>
+          Så stor andel av kilde&shy;siteringer er oppdiktet selv <strong>med</strong> RAG, når
+          oppslaget er svakt. Derfor: hent anvisningen, siter kun fra hentet tekst, og
+          <strong>verifiser at punktnummeret finnes</strong> før det vises. Start med et rent
+          delsett — våtrom/vann — der Byggforsk er godt strukturert.
+        </p>
+        <div class="tagrow"><span class="tag hot">SINTEF-lisens</span><span class="tag">arXiv 2606.00898</span></div>
+      </div>
+      <div class="card">
+        <span class="stat">Bilde &gt; tale</span>
+        <h3>Bevis låst til bilde + tidsstempel</h3>
+        <p>
+          Videomodeller «jukser» ofte ved å svare fra lyden alene — takstmannens tale kan bli til
+          en skade modellen aldri har sett. Hver bevispåstand må derfor forankres i et
+          <strong>konkret bilde med tidsstempel</strong>, og evalsettet bygges av ekte, mørke
+          kjelleropptak — ikke rene demovideoer.
+        </p>
+        <div class="tagrow"><span class="tag hot">B9</span><span class="tag hot">B11</span><span class="tag">Video-MME, CVPR 2025</span></div>
+      </div>
+      <div class="card">
+        <span class="stat">Målt kvalitet</span>
+        <h3>Menneske i løkken — og bevis for det</h3>
+        <p>
+          Menneskelig verifisering pluss validert kilde er det som gjør AI forsvarlig i
+          høyrisiko-domener. Godkjenningen vises <strong>i selve rapporten</strong>, og en fast
+          Byggforsk-siteringsscore (finnes · relevant · gyldig) kjøres ved hver modell- og
+          promptendring.
+        </p>
+        <div class="tagrow"><span class="tag hot">Evalsett</span><span class="tag">ISO/IEC 42001</span><span class="tag">JMIR 2024/25</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 3 · Posisjonen ══ -->
+  <section>
+    <div class="sec-head">
+      <span class="eyebrow">03</span>
+      <h2>Posisjonen: tre fronter — ingen når inn</h2>
+    </div>
+    <p>
+      Feltet nærmer seg DocrAIs område fra tre kanter, men hver front stopper før
+      skjæringspunktet: Wenn eier håndverkerens tilbudsfase, sensorene virker <strong>før</strong>
+      skaden, og insurtech automatiserer de enkle sakene. Dokumentasjonen av komplekse
+      bygningsskader står åpen — hvis fagforankringen sikres først.
+    </p>
+    <figure>
+      <div class="fig-scroll">
+      <svg viewBox="0 0 900 370" role="img" aria-label="Posisjonskart: befaringsverktøy, fuktsensorer og insurtech peker mot midten, men pilene stopper før DocrAIs felt — forensisk skaderapport med Byggforsk-forankring. SINTEF-lisensen er koblet på som forutsetning.">
+        <defs>
+          <marker id="p-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="mk-mut"/>
+          </marker>
+          <marker id="p-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="mk-ink"/>
+          </marker>
+        </defs>
+
+        <!-- topp: sensorer -->
+        <rect x="330" y="18" width="240" height="58" class="db"/>
+        <text x="346" y="42" class="dt">Fuktsensorer</text>
+        <text x="346" y="60" class="ds">Tector · 7Analytics · Smartvatten</text>
+        <line x1="450" y1="76" x2="450" y2="122" class="darr-dash" marker-end="url(#p-mut)"/>
+        <text x="462" y="106" class="dl">varsler før skaden — partner</text>
+
+        <!-- venstre: befaringsverktøy -->
+        <rect x="20" y="156" width="220" height="58" class="db"/>
+        <text x="36" y="180" class="dt">Befaringsverktøy</text>
+        <text x="36" y="198" class="ds">Wenn · Hosta/Yembo · Zanus</text>
+        <line x1="240" y1="185" x2="308" y2="185" class="darr-dash" marker-end="url(#p-mut)"/>
+        <text x="274" y="148" class="dl" text-anchor="middle">eier tilbudsfasen</text>
+
+        <!-- bunn: insurtech -->
+        <rect x="330" y="294" width="240" height="58" class="db"/>
+        <text x="346" y="318" class="dt">Insurtech</text>
+        <text x="346" y="336" class="ds">Mavera · Hedvig · Trygg-Hansa</text>
+        <line x1="450" y1="294" x2="450" y2="248" class="darr-dash" marker-end="url(#p-mut)"/>
+        <text x="462" y="278" class="dl">automatiserer de enkle sakene</text>
+
+        <!-- midten: DocrAI -->
+        <rect x="320" y="132" width="260" height="106" class="db-solid"/>
+        <text x="338" y="160" class="dt-w">DocrAI — den åpne flekken</text>
+        <text x="338" y="182" class="ds-w">Forensisk rapport for komplekse</text>
+        <text x="338" y="198" class="ds-w">bygningsskader: video → årsak,</text>
+        <text x="338" y="214" class="ds-w">akutt/gradvis, Byggforsk-sitat —</text>
+        <text x="338" y="230" class="ds-w">for norsk takst og forsikring</text>
+
+        <!-- høyre: SINTEF -->
+        <rect x="668" y="156" width="212" height="58" class="db-dash"/>
+        <text x="684" y="180" class="dt">SINTEF / Byggforsk</text>
+        <text x="684" y="198" class="ds">lisens må sikres først</text>
+        <line x1="668" y1="185" x2="584" y2="185" class="darr" marker-end="url(#p-ink)"/>
+        <text x="626" y="171" class="dl" text-anchor="middle">fagforankring</text>
+      </svg>
+      </div>
+      <figcaption>
+        Stiplede piler stopper før midten: hver front dekker sin del, ingen dekker
+        skjæringspunktet. Den heltrukne pilen fra SINTEF er forutsetningen som avgjør om
+        fagforankringen blir DocrAIs — eller en konkurrents.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ══ 4 · Veien dit ══ -->
+  <section>
+    <div class="sec-head">
+      <span class="eyebrow">04</span>
+      <h2>Veien dit: fire sprinter</h2>
+    </div>
+    <p>
+      Backloggen er allerede sekvensert mot to milepæler: en demo som selger seg selv, og en
+      pilot som tåler forsikringens blikk.
+    </p>
+    <div class="sprints">
+      <div class="sprint">
+        <span class="s-num">Sprint 1</span>
+        <h3>Fundament</h3>
+        <p>Transkripsjon som virker, norsk som standard, tilgangskode, privat repo.</p>
+        <div class="tagrow"><span class="tag">B1</span><span class="tag">B2</span><span class="tag">B3</span><span class="tag">B4</span><span class="tag">B5</span></div>
+        <p class="goal"><b>Mål:</b> kjerneflyten er norsk og pålitelig</p>
+      </div>
+      <div class="sprint">
+        <span class="s-num">Sprint 2</span>
+        <h3>Demo-verdi</h3>
+        <p>Demoprosjekt uten konto, delt lenke åpner i forensisk rapport, felt-UX med store knapper.</p>
+        <div class="tagrow"><span class="tag">B6</span><span class="tag">B7</span><span class="tag">B13</span><span class="tag">B14</span><span class="tag">B15</span></div>
+        <p class="goal"><b>Mål:</b> video → rapport på under 2 min, uten innlogging</p>
+      </div>
+      <div class="sprint">
+        <span class="s-num">Sprint 3</span>
+        <h3>Differensiering</h3>
+        <p>Auto-skadetype, geo-tag, hash-signert bevis, PIN-lenker — pluss evalsett med 30–50 ekte Ocab-saker.</p>
+        <div class="tagrow"><span class="tag">B8</span><span class="tag">B9</span><span class="tag">B10</span><span class="tag">B11</span><span class="tag">B16</span></div>
+        <p class="goal"><b>Mål:</b> beviskjeden er verifiserbar og målt</p>
+      </div>
+      <div class="sprint">
+        <span class="s-num">Sprint 4</span>
+        <h3>Pilot-klar</h3>
+        <p>EU/EØS-databehandling, docx uten Google-konto, og resterende polish.</p>
+        <div class="tagrow"><span class="tag">B12</span><span class="tag">B17–B20</span></div>
+        <p class="goal"><b>Mål:</b> klar for pilotsalg mot takst og forsikring</p>
+      </div>
+    </div>
+    <div class="callout">
+      <div class="bar"></div>
+      <p>
+        <strong>Kritisk sti, løpende:</strong> avklar SINTEF-lisensen (Byggforsk) tidlig. Den er
+        forutsetningen for hele kildeforankringen — RAG-en i trinn 2, siteringsscoren i evalsettet
+        og den hvite flekken i markedet hviler alle på den.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══ 5 · Økosystem ══ -->
+  <section>
+    <div class="sec-head">
+      <span class="eyebrow">05</span>
+      <h2>Hvem er hvem rundt løsningen</h2>
+    </div>
+    <div class="eco">
+      <div class="card">
+        <h3><span class="dot red"></span>Overvåk</h3>
+        <ul>
+          <li><b>Wenn Property</b> — nærmest; følg bevegelsen mot skadesegmentet (Reco er alt kunde)</li>
+          <li><b>Hosta / Yembo</b> — video-først for forsikring, kan gå inn i Norden</li>
+          <li><b>Forsikringens interne AI-team</b> — bygger selv der de kan</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="dot green"></span>Alliér</h3>
+        <ul>
+          <li><b>Tector</b> — sensor varsler → DocrAI dokumenterer: den mest åpenbare kjeden</li>
+          <li><b>SINTEF</b> — fagforankring og validert treningsdata (Kiwa-mønsteret)</li>
+          <li><b>In4mo / Propcloud</b> — distribusjon og data inn i skadeflyten</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="dot blue"></span>Selg til</h3>
+        <ul>
+          <li><b>Takstfolk og skadeteknikere</b> — brukeren i felt (Ocab-saker som evalsett)</li>
+          <li><b>Forsikringsselskapene</b> — sluttmarkedet; de kjøper heller dokumentasjon enn å bygge den</li>
+          <li><b>Markedet er utdannet</b> — av Wenn og insurtech; nisjen står fortsatt åpen</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Skissen bygger på tre underlag datert 04.08.2026: markeds- og konkurransekartleggingen
+    (nordisk proptech), produktbackloggen (B1–B20) og forskningsgrunnlaget (siteringshallusinasjon,
+    multimodal video, kvalitetsmåling). Backlog-ID-er i parentes peker rett inn i backloggen.
+  </footer>
+
+</div>
