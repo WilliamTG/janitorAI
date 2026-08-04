@@ -288,11 +288,16 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     if (project?.projectDescriptionTranscription) projectContext.projectDescriptionTranscription = project.projectDescriptionTranscription;
     if (enrichedNotes.length > 0) projectContext.notes = enrichedNotes;
 
+    // Use the dedicated service-to-service secret for the AI engine call.
+    // This is separate from the user's tester token (which is validated against
+    // the DB) — the AI engine authenticates against its own TESTER_TOKEN env var,
+    // so the backend needs AI_ENGINE_TOKEN set to that same value.
+    const aiToken = process.env.AI_ENGINE_TOKEN || "";
     const response = await fetch(`${aiEngineUrl}/api/report`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-tester-token": token || "",
+        "x-tester-token": aiToken,
       },
       body: JSON.stringify({
         video_url: videoUrl,
@@ -347,11 +352,10 @@ app.get("/api/projects/:id/download/:format", async (req, res) => {
   }
 
   try {
-    // Use the validated token set by middleware — not the raw header.
-    const token = req.testerToken || "";
+    const aiToken = process.env.AI_ENGINE_TOKEN || "";
     const aiRes = await fetch(
       `${aiEngineUrl}/api/export/${encodeURIComponent(docId)}?format=${format}`,
-      { headers: { "x-tester-token": token } }
+      { headers: { "x-tester-token": aiToken } }
     );
 
     if (!aiRes.ok) {
