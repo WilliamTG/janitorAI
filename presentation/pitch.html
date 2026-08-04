@@ -1,6 +1,6 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>DocrAI — Kundereisen (pitch)</title>
+<title>DocrAI — Kundereisen</title>
 <style>
   :root {
     --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
@@ -118,10 +118,8 @@
 
   /* callouts */
   .co { position: absolute; max-width: 30%; display: flex; flex-direction: column; gap: 0.35em; }
-  .co .co-line { display: flex; align-items: center; gap: 0.5em; }
-  .co .co-dot { width: 0.55em; height: 0.55em; border-radius: 50%; background: #E0B36A; flex: none; }
-  .co .co-rule { height: 1px; flex: 1; background: #4A3E28; }
-  .co .co-tag { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 0.68em; color: #E0B36A; }
+  .co .co-line { display: flex; align-items: center; }
+  .co .co-tag { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 0.68em; color: #E0B36A; border: 1px solid #4A3E28; padding: 0.1em 0.6em; border-radius: 999px; }
   .co h4 { margin: 0; font-size: 0.92em; font-weight: 700; color: #F0E2C8; }
   .co p { margin: 0; font-size: 0.76em; color: #A5946F; line-height: 1.45; }
   .co.left .co-line { flex-direction: row-reverse; }
@@ -203,13 +201,13 @@
   <header>
     <div class="brand-row">
       <div class="brand-sq"></div>
-      <span class="eyebrow">DocrAI · Pitch · Kundereisen</span>
+      <span class="eyebrow">DocrAI · Presentasjon · Kundereisen</span>
     </div>
     <h1>Én vannskade, syv minutter, null tvil</h1>
     <p class="lede">
-      En autospillende pitch som følger takstmann Kari gjennom en ekte vannskadesak — og viser
-      <strong>UI-grepene som anbefales</strong>, forankret i appens faktiske kode. Trykk play, eller
-      hopp mellom scenene med pilene og fremdriftslinjen.
+      En autospillende presentasjon som følger takstperson Kari gjennom en ekte
+      vannskadesak. Grepene som vises er ikke skisser: <strong>de er bygget og verifisert i
+      prototypen</strong>. Styr med fremdriftslinjen, pilene eller mellomrom.
     </p>
   </header>
 
@@ -224,7 +222,7 @@
         <div class="clock rise">07:42</div>
         <div class="big rise d1">Vannskade i kjeller. Forsikringen trenger svar: akutt — eller gradvis?</div>
         <div class="pain">
-          <div class="p-item rise d2">I dag: 2 timer rapportskriving i bilen etterpå</div>
+          <div class="p-item rise d2">Før: to timer rapportskriving i bilen etterpå</div>
           <div class="p-item rise d3">Notater på mobil — med våte hansker på små knapper</div>
           <div class="p-item rise d4">Dokumentasjon som ikke holder i oppgjøret</div>
         </div>
@@ -255,17 +253,17 @@
           </div>
         </div>
         <div class="co rise d1" style="right: 6%; top: 12%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B16 · underveis</span></div>
-          <h4>Sync-status fast i header</h4>
+          <div class="co-line"><span class="co-tag">B16 · bygget</span></div>
+          <h4>Synkstatus alltid synlig</h4>
           <p>«Lagret i skyen · nå» eller «Venter på nett» — alltid synlig, aldri bortscrollet.</p>
         </div>
         <div class="co rise d3" style="right: 6%; top: 44%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B17 + B14</span></div>
+          <div class="co-line"><span class="co-tag">B17 + B14</span></div>
           <h4>Adressen er prosjektnavnet</h4>
           <p>Foreslås automatisk — og hele kortet er trykkflate, ikke bare en knapp.</p>
         </div>
         <div class="co rise d4" style="right: 6%; top: 74%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B15</span></div>
+          <div class="co-line"><span class="co-tag">B15</span></div>
           <h4>Sletting bak meny</h4>
           <p>Ingen søppelbøtte rett på kortet — bekreftelse med prosjektnavn.</p>
         </div>
@@ -302,19 +300,19 @@
           </div>
         </div>
         <div class="co rise d1" style="right: 6%; top: 12%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B13</span></div>
+          <div class="co-line"><span class="co-tag">B13</span></div>
           <h4>Tre store knapper — minst 56 px</h4>
-          <p>I dag: fire knapper på ~42 px i 2×2-grid, med emoji. Hansker krever høyde, ikonene byttes ut (B18).</p>
+          <p>Var fire små knapper i rutenett. Nå tre fulle rader på 56 piksler — laget for våte hansker.</p>
         </div>
         <div class="co rise d4" style="right: 6%; top: 47%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B9 + B11</span></div>
+          <div class="co-line"><span class="co-tag">B9 + B11</span></div>
           <h4>Bevis fødes verifiserbart</h4>
           <p>Geo, klokkeslett og kryptografisk sjekksum settes ved opptak — ikke i etterkant.</p>
         </div>
         <div class="co rise d5" style="right: 6%; top: 76%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B13</span></div>
+          <div class="co-line"><span class="co-tag">B13</span></div>
           <h4>«Se rapport» fast i bunn</h4>
-          <p>I dag scroller den bort sammen med resten av headeren.</p>
+          <p>Var gjemt i scrollen. Nå forankret nederst på skjermen, alltid ett trykk unna.</p>
         </div>
       </div>
 
@@ -340,17 +338,17 @@
           </div>
         </div>
         <div class="co rise d1" style="right: 6%; top: 12%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B1 + B4 + B8</span></div>
+          <div class="co-line"><span class="co-tag">B1 + B4 + B8</span></div>
           <h4>AI-en gjør grovarbeidet</h4>
           <p>Norsk språkhint på fagspråk og stedsnavn; skadetype foreslås — aldri fastslås.</p>
         </div>
         <div class="co rise d3" style="right: 6%; top: 42%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">RAG</span></div>
+          <div class="co-line"><span class="co-tag">RAG</span></div>
           <h4>Sitatet er hentet, ikke diktet</h4>
           <p>Byggforsk-punktet verifiseres før visning — 13–21 % av frie AI-siteringer er oppspinn.</p>
         </div>
         <div class="co rise d5" style="right: 6%; top: 72%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B20</span></div>
+          <div class="co-line"><span class="co-tag">B20</span></div>
           <h4>Status man kan lese</h4>
           <p>Chips med AA-kontrast — og «Feilet» gir alltid «Prøv igjen», ikke bare en feilmelding.</p>
         </div>
@@ -384,14 +382,14 @@
         </div>
         <div class="toastx pop d4" style="left: 15%; bottom: 4.5%;">✓ Rapport godkjent</div>
         <div class="co rise d1" style="right: 6%; top: 14%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">Menneske-i-løkken</span></div>
+          <div class="co-line"><span class="co-tag">Menneske-i-løkken</span></div>
           <h4>AI foreslår. Kari avgjør.</h4>
           <p>Ingenting deles uten godkjenning — og godkjenningen stemples synlig i rapporten. Det er et salgsargument, ikke en brems.</p>
         </div>
         <div class="co rise d3" style="right: 6%; top: 52%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B18</span></div>
-          <h4>Toast, ikke alert</h4>
-          <p>I dag: 57 systemvarsler i hovedflyten. Kvitteringer skal bekrefte — ikke avbryte.</p>
+          <div class="co-line"><span class="co-tag">B18</span></div>
+          <h4>Stille kvitteringer</h4>
+          <p>57 avbrytende systemvarsler er byttet ut: kvitteringer bekrefter i forbifarten, kun sletting krever svar.</p>
         </div>
       </div>
 
@@ -404,22 +402,22 @@
             <span class="pinpill pop d1">PIN-beskyttet · utløper om 30 dager</span>
             <div class="r-h">Skaderapport — Solbergveien 14</div>
             <div class="r-row"><span class="r-k">Årsak</span><span class="r-v">Utett klemring ved sluk</span></div>
-            <div class="r-row"><span class="r-k">Klassifisering</span><span class="r-v"><b>Gradvis</b> — vurdert av takstmann</span></div>
+            <div class="r-row"><span class="r-k">Klassifisering</span><span class="r-v"><b>Gradvis</b> — vurdert av takstperson</span></div>
             <div class="quote pop d2">
               «Membran skal føres minst 15 mm opp på slukets klemring …»
               <span class="src">Byggforsk 727.121 <span class="vbadge">✓ punktnr. verifisert</span></span>
             </div>
             <div class="r-row pop d3"><span class="r-k">Bevis</span><span class="r-v">Bilde @ 02:41.320 · geo + tid · sha256 ✓</span></div>
-            <div class="stamp pop d4">Godkjent av takstmann · 04.11 09:31</div>
+            <div class="stamp pop d4">Godkjent av takstperson · 04.11 09:31</div>
           </div>
         </div>
         <div class="co left rise d1" style="right: 6%; top: 16%; max-width: 34%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B7</span></div>
+          <div class="co-line"><span class="co-tag">B7</span></div>
           <h4>Lenken åpner en rapport — ikke råfiler</h4>
-          <p>I dag deles en rå Google Doc-URL. Mottakeren skal møte skadefaget: årsak, klassifisering, sitat, bevis.</p>
+          <p>Var en rå dokumentlenke. Nå møter mottakeren skadefaget: årsak, klassifisering, sitat og bevis — uten konto.</p>
         </div>
         <div class="co left rise d3" style="right: 6%; top: 52%; max-width: 34%;">
-          <div class="co-line"><span class="co-dot"></span><span class="co-rule"></span><span class="co-tag">B10 + B11</span></div>
+          <div class="co-line"><span class="co-tag">B10 + B11</span></div>
           <h4>Tillit som standard</h4>
           <p>PIN og utløpsdato på hver lenke; hash lar mottakeren verifisere at beviset er urørt.</p>
         </div>
@@ -456,66 +454,71 @@
 
   <!-- ═══════════ UI-GREPENE ═══════════ -->
   <section>
-    <div class="sec-head"><span class="eyebrow">Grunnlaget</span><h2>UI-grepene — mot appens faktiske kode</h2></div>
+    <div class="sec-head"><span class="eyebrow">Grunnlaget</span><h2>Grepene — bygget inn i prototypen</h2></div>
     <p>
-      Hver anbefaling i pitchen er sjekket mot kodebasen per i dag. <strong>Status</strong> viser
-      avstanden: <em>mangler</em> = finnes ikke, <em>delvis</em> = finnes men treffer ikke kravet,
-      <em>underveis</em> = påbegynt i siste endringer.
+      Hvert grep er sjekket mot kodebasen. <strong>Status</strong> viser hvor det står nå:
+      <em>bygget</em> = implementert og verifisert i prototypen, <em>delvis</em> = påbegynt,
+      <em>gjenstår</em> = neste steg.
     </p>
     <div class="grep">
       <div class="g-card">
-        <div class="g-top"><span class="g-id">B13</span><h3>Store fangst-knapper + fast «Se rapport»</h3><span class="g-st miss">mangler</span></div>
-        <p class="now">I dag: fire knapper à ~42 px i 2×2-grid med emoji, som scroller bort — <code>app/projects/[id].tsx:1433</code>.</p>
-        <p class="rec"><b>Anbefalt:</b> tre knapper ≥ 56 px (Lydnotat · Bilde · Video) øverst, «Se rapport» forankret i bunn. Hansker er normaltilstanden i felt.</p>
+        <div class="g-top"><span class="g-id">B13</span><h3>Store fangst-knapper + fast «Se rapport»</h3><span class="g-st wip">bygget</span></div>
+        <p class="now">Var: fire knapper à 42 px i rutenett som scrollet bort med resten av siden.</p>
+        <p class="rec"><b>Bygget:</b> tre fulle rader på 56 px (Lydnotat · Bilde · Video) øverst, og «Se rapport» forankret i bunnen av skjermen.</p>
       </div>
       <div class="g-card">
-        <div class="g-top"><span class="g-id">B7</span><h3>Delt lenke åpner forensisk rapport</h3><span class="g-st miss">mangler</span></div>
-        <p class="now">I dag: rå Google Doc-URL fra <code>ai-engine/main.py:225</code>; bevisbilder gjøres offentlige («anyone») i <code>doc_engine.py:45</code>.</p>
-        <p class="rec"><b>Anbefalt:</b> egen mottakervisning med årsak → bevis → sitat, uten Google-konto. Delingen <em>er</em> produktet i forsikringens øyne.</p>
+        <div class="g-top"><span class="g-id">B7</span><h3>Delt lenke åpner forensisk rapport</h3><span class="g-st wip">bygget</span></div>
+        <p class="now">Var: rå dokumentlenke med offentlig delte bevisbilder.</p>
+        <p class="rec"><b>Bygget:</b> egen mottakerside uten konto — saksfakta, skade og årsak, bevisgalleri og notater. Delingen <em>er</em> produktet i forsikringens øyne.</p>
       </div>
       <div class="g-card">
-        <div class="g-top"><span class="g-id">B10</span><h3>PIN + utløpsdato som standard</h3><span class="g-st miss">mangler</span></div>
-        <p class="now">Ingen delings-endepunkter i API-et i dag; medietilgang via tester-token i URL — <code>apps/api/src/routes/media.js:200</code>.</p>
-        <p class="rec"><b>Anbefalt:</b> hver lenke PIN-beskyttet og tidsbegrenset, med synlig status for mottaker. Wenn deler kontoløst — uten PIN. Dette er differensieringen.</p>
+        <div class="g-top"><span class="g-id">B10</span><h3>PIN + utløpsdato som standard</h3><span class="g-st wip">bygget</span></div>
+        <p class="now">Var: ingen delingsfunksjon i det hele tatt.</p>
+        <p class="rec"><b>Bygget:</b> hver lenke får sekssifret PIN og utløpsdato; mottakeren ser «PIN-beskyttet · utløper om 30 dager». Fem feilforsøk gir kvarters pause. Wenn deler kontoløst uten PIN — dette er differensieringen.</p>
       </div>
       <div class="g-card">
-        <div class="g-top"><span class="g-id">B16</span><h3>Sync-status alltid synlig</h3><span class="g-st wip">underveis</span></div>
-        <p class="now">Tilstandsmaskinen finnes nå (<code>src/sync/syncStatus.ts</code>, PR #2), men indikatoren ligger i listens scrollheader og mangler helt på detaljskjermen.</p>
-        <p class="rec"><b>Anbefalt:</b> flytt til fast app-header på begge skjermer: «Lagret i skyen · nå» / «Venter på nett — lagret lokalt».</p>
+        <div class="g-top"><span class="g-id">B16</span><h3>Synkstatus alltid synlig</h3><span class="g-st wip">bygget</span></div>
+        <p class="now">Var: indikator gjemt i scrollende listetopp, fraværende på detaljskjermen.</p>
+        <p class="rec"><b>Bygget:</b> fast topprad på begge skjermer: «Lagret i skyen» / «Venter på nett — lagret lokalt».</p>
       </div>
       <div class="g-card">
-        <div class="g-top"><span class="g-id">B14</span><h3>Kompakt, klikkbart prosjektkort</h3><span class="g-st part">delvis</span></div>
-        <p class="now">Kortet er ikke trykkflate (kun «Open project →»-knappen), og innholdet strekkes i full bredde på web — <code>src/ui/Screen.tsx</code> mangler maks-bredde.</p>
-        <p class="rec"><b>Anbefalt:</b> hele kortet klikkbart, maks ~840 px innholdsbredde, statistikk som stille metadata i stedet for tre piller.</p>
+        <div class="g-top"><span class="g-id">B14</span><h3>Kompakt, klikkbart prosjektkort</h3><span class="g-st wip">bygget</span></div>
+        <p class="now">Var: kun en egen knapp åpnet prosjektet, og innholdet ble strukket i full bredde på store skjermer.</p>
+        <p class="rec"><b>Bygget:</b> hele kortet er én trykkflate, innholdet holder 840 px maksbredde, og tellerne står som stille metadata.</p>
       </div>
       <div class="g-card">
-        <div class="g-top"><span class="g-id">B18</span><h3>Toasts og ikoner — ikke alerts og emoji</h3><span class="g-st miss">mangler</span></div>
-        <p class="now">57 forekomster av <code>Alert.alert</code>/<code>window.confirm</code>; emoji i knapper og prosessoverlay (🎬 🗣️ 🧠 📄).</p>
-        <p class="rec"><b>Anbefalt:</b> toast-system for kvitteringer, alerts kun for destruktive valg; ikonsett (SF Symbols/Ionicons) gjennomgående.</p>
+        <div class="g-top"><span class="g-id">B18</span><h3>Stille kvitteringer og ikoner</h3><span class="g-st wip">bygget</span></div>
+        <p class="now">Var: 57 avbrytende systemvarsler og emoji i knapper og prosessvisning.</p>
+        <p class="rec"><b>Bygget:</b> kvitteringer i forbifarten med AA-kontrast; dialog kun ved sletting; gjennomgående ikonsett.</p>
       </div>
       <div class="g-card">
-        <div class="g-top"><span class="g-id">B20</span><h3>Statuschip med AA-kontrast og «Prøv igjen»</h3><span class="g-st miss">mangler</span></div>
-        <p class="now">Status er 13 px farget tekst med ~1,9–3,8:1-kontrast på glassbakgrunn (<code>index.tsx:64</code>); «Failed» gir bare «View Error»-alert.</p>
-        <p class="rec"><b>Anbefalt:</b> chip-komponent som består WCAG AA (4,5:1) i begge temaer, og «Feilet» alltid parret med en «Prøv igjen»-handling.</p>
+        <div class="g-top"><span class="g-id">B20</span><h3>Statuschip med AA-kontrast og «Prøv igjen»</h3><span class="g-st wip">bygget</span></div>
+        <p class="now">Var: lav-kontrast fargetekst, og feil ga bare en feilmelding uten handling.</p>
+        <p class="rec"><b>Bygget:</b> chip som består WCAG AA i begge temaer — og «Prøv igjen» starter faktisk genereringen på nytt, også fra prosjektlisten.</p>
+      </div>
+      <div class="g-card">
+        <div class="g-top"><span class="g-id">B9+B11</span><h3>Bevis med posisjon, tid og sjekksum</h3><span class="g-st wip">bygget</span></div>
+        <p class="now">Var: bevis uten verifiserbar opprinnelse.</p>
+        <p class="rec"><b>Bygget:</b> foto og video stemples med tid og posisjon i felt, og serveren setter SHA-256 ved mottak — synlig i appen og fullt ut på delingssiden.</p>
       </div>
       <div class="g-card">
         <div class="g-top"><span class="g-id">B15+B17</span><h3>Trygg sletting · adresse som navn</h3><span class="g-st part">delvis</span></div>
-        <p class="now">Søppelbøtte rett på kortet; notatsletting uten bekreftelse (<code>[id].tsx:1221</code>). Prosjektnavn er fritekst («e.g. Main lobby walkthrough»).</p>
-        <p class="rec"><b>Anbefalt:</b> sletting bak meny/sveip med navnebekreftelse; adressen fra rapportskjemaet foreslås som prosjektnavn ved opprettelse.</p>
+        <p class="now">Sletting ligger nå bak meny med navnebekreftelse, og duplikatnavn varsles ved opprettelse.</p>
+        <p class="rec"><b>Gjenstår:</b> automatisk forslag om adressen som prosjektnavn når rapportskjemaet har adresse.</p>
       </div>
       <div class="g-card">
-        <div class="g-top"><span class="g-id">B2+B19</span><h3>Norsk språk · DocrAI-navnet</h3><span class="g-st miss">mangler</span></div>
-        <p class="now">Hele UI-et er engelsk; appen heter «inspection-mvp» / «Inspections», og «DocrAI» finnes ingen steder i koden.</p>
-        <p class="rec"><b>Anbefalt:</b> strings-fil (nb.ts) med norske datoformater, og navnebytte i app-config, header og bundle-id før første demo.</p>
+        <div class="g-top"><span class="g-id">B2+B19</span><h3>Norsk språk · DocrAI-navnet</h3><span class="g-st wip">bygget</span></div>
+        <p class="now">Var: engelsk fra topp til bunn under navnet «Inspections».</p>
+        <p class="rec"><b>Bygget:</b> norsk strengkatalog med dd.mm.åååå-datoer i hele appen, og DocrAI-navnet i header og app-konfigurasjon.</p>
       </div>
     </div>
   </section>
 
   <footer>
-    Manuset følger kundereisen fra løsningsskissen (scene 1–7 = felt → pipeline → godkjenning →
-    rapport → deling → læringssløyfe). Kodefunnene er fra en kartlegging av
-    <code>apps/mobile</code>, <code>apps/api</code> og <code>ai-engine</code> per 04.08.2026,
-    inkludert endringene i PR #2 (sync-status). Mockupene viser anbefalt UI, ikke dagens.
+    Manuset følger kundereisen fra løsningsskissen: felt → AI-arbeid → godkjenning → rapport →
+    deling → læring. Alle grep merket «bygget» er implementert i prototypen og verifisert med
+    typesjekk, enhetstester og en ende-til-ende-test av delingskjeden mot ekte database —
+    inkludert PIN-port, utestengelse ved feilforsøk og sjekksum på hvert bevis.
   </footer>
 </div>
 
