@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import { getApiBaseUrl } from '@/src/config/api';
 import apiFetch, { UnauthorizedError, getCachedTesterToken } from '@/src/lib/apiFetch';
 import { Note, Photo, Project } from '@/src/features/projects/types';
-import { updateProject as updateProjectInStorage } from '@/src/storage/projectsStorage';
+import { updateProject as updateProjectInStorage, getProject } from '@/src/storage/projectsStorage';
 import {
   setSyncState,
   setMediaUploadFailures,
@@ -30,8 +30,7 @@ const pendingPushTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingProjects = new Map<string, Project>();
 let syncDisabled = false;
 
-// Deletes that could not reach the server yet (offline). Persisted so a
-// pull never resurrects a project the user deleted on this device.
+const pushMutex = new Map<string, Promise<void>>();
 const PENDING_DELETES_KEY = '@inspection_pending_deletes';
 
 async function getPendingDeletes(): Promise<string[]> {
@@ -150,6 +149,21 @@ const uploadsInFlight = new Map<string, Promise<string | null>>();
 // URIs permanently rejected by the server (FILE_TOO_LARGE). Never retried.
 const oversizedUris = new Set<string>();
 
+/**
+ * Clear all in-memory upload state for a URI so the sync engine will treat
+ * the next upload attempt for that URI as a fresh start.  Call this before
+ * replacing a stalled/failed video with a newly-selected file.
+ *
+ * Note: removing a URI from uploadsInFlight does NOT cancel the underlying
+ * XHR — the request may still complete.  The stale-completion race is handled
+ * separately by applyRemoteIds() in pushProject.
+ */
+export function clearVideoRetryState(uri: string | undefined): void {
+  if (!uri) return;
+  oversizedUris.delete(uri);
+  uploadedByUri.delete(uri);
+  uploadsInFlight.delete(uri);
+}
 async function uploadMedia(
   uri: string,
   kind: 'photo' | 'audio' | 'video',
@@ -480,84 +494,160 @@ function stripLocalUrisForServer(project: Project): Project {
   return next;
 }
 
+/**
+ * Merge only the remote IDs learned from a just-completed upload back onto
+ * the freshly re-read stored project.  A remote ID is applied only when the
+ * note/photo URI in storage still matches the URI that was uploaded — if the
+ * user replaced the video while the upload was in flight the URIs will differ
+ * and the stale remote ID is silently dropped, preventing it from being
+ * committed over the replacement.
+ */
+function applyRemoteIds(stored: Project, uploaded: Project): Project {
+  const uploadedNoteMap = new Map<string, Note>(
+    (uploaded.notes || []).map((n) => [n.id, n]),
+  );
+
+  const notes = (stored.notes || []).map((note) => {
+    const up = uploadedNoteMap.get(note.id);
+    if (!up) return note;
+
+    let next = note;
+
+    // Audio
+    if (up.audioRemoteId && note.audioUri === up.audioUri) {
+      next = { ...next, audioRemoteId: up.audioRemoteId };
+    }
+
+    // Photos
+    if (up.photos && note.photos) {
+      const upPhotoMap = new Map<string, Photo>(up.photos.map((p) => [p.id, p]));
+      const photos = note.photos.map((p) => {
+        const upPhoto = upPhotoMap.get(p.id);
+        if (upPhoto?.remoteId && p.uri === upPhoto.uri) {
+          return { ...p, remoteId: upPhoto.remoteId };
+        }
+        return p;
+      });
+      next = { ...next, photos };
+    }
+
+    // Video — only commit the remote ID if the local URI hasn't been replaced.
+    if (up.videoRemoteId && note.videoUri === up.videoUri) {
+      next = { ...next, videoRemoteId: up.videoRemoteId };
+    }
+
+    return next;
+  });
+
+  let next: Project = { ...stored, notes };
+
+  // Project description audio
+  if (
+    uploaded.projectDescriptionAudioRemoteId &&
+    stored.projectDescriptionAudioUri === uploaded.projectDescriptionAudioUri
+  ) {
+    next = { ...next, projectDescriptionAudioRemoteId: uploaded.projectDescriptionAudioRemoteId };
+  }
+
+  return next;
+}
 export async function pushProject(project: Project): Promise<Project> {
   if (syncDisabled) return project;
 
-  setSyncState('syncing');
+  // Serialise all pushes for this project so the latestForPut re-read and the
+  // PUT are never interleaved with a concurrent push that writes different
+  // remote IDs.  Without this, two pushes running in parallel could each read
+  // storage, one PUT with remoteId2, and then the other PUT without it.
+  return withPushMutex(project.id, async () => {
+    setSyncState('syncing');
 
-  try {
-    const { project: withMedia, changed, failedCount, idbUrisToCleanup } = await uploadPendingMedia(project);
-    let toPush = withMedia;
+    try {
+      const { project: withMedia, changed, failedCount, idbUrisToCleanup } = await uploadPendingMedia(project);
+      let toPush = withMedia;
 
-    // Track consecutive push cycles that had media upload failures so we can
-    // surface a non-blocking warning to the inspector after the threshold.
-    if (failedCount > 0) {
-      const prev = consecutiveMediaFailures.get(project.id) ?? 0;
-      const next = prev + 1;
-      consecutiveMediaFailures.set(project.id, next);
-      if (next >= MEDIA_FAILURE_THRESHOLD) {
-        setMediaUploadFailures(project.id, next);
+      // Track consecutive push cycles that had media upload failures so we can
+      // surface a non-blocking warning to the inspector after the threshold.
+      if (failedCount > 0) {
+        const prev = consecutiveMediaFailures.get(project.id) ?? 0;
+        const next = prev + 1;
+        consecutiveMediaFailures.set(project.id, next);
+        if (next >= MEDIA_FAILURE_THRESHOLD) {
+          setMediaUploadFailures(project.id, next);
+        }
+      } else {
+        consecutiveMediaFailures.delete(project.id);
+        clearMediaUploadFailures(project.id);
       }
-    } else {
-      consecutiveMediaFailures.delete(project.id);
-      clearMediaUploadFailures(project.id);
-    }
 
-    if (changed) {
-      // Persist the remote IDs locally so we don't re-upload next time.
-      // Keep the same updatedAt to avoid endless sync loops.
-      await updateProjectInStorage(toPush);
+      if (changed) {
+        // Re-read storage before committing remote IDs.  If the user replaced a
+        // stalled video while this upload was in flight, the stored note will
+        // have a different videoUri.  applyRemoteIds() only copies a remote ID
+        // when the URI in storage still matches — so a stale push can never
+        // overwrite a replacement the inspector just picked.
+        const storedProject = await getProject(project.id);
+        const safeProject = storedProject ? applyRemoteIds(storedProject, toPush) : toPush;
+        await updateProjectInStorage(safeProject);
+        toPush = safeProject;
 
-      // Notify any subscribed UI screens immediately so they can re-render
-      // with the new remote IDs (e.g. videoRemoteId → "✓ Uploaded to server")
-      // without waiting for the next pull cycle.
-      notifyProjectUpdate(toPush);
+        // Notify any subscribed UI screens immediately so they can re-render
+        // with the new remote IDs (e.g. videoRemoteId → "✓ Uploaded to server")
+        // without waiting for the next pull cycle.
+        notifyProjectUpdate(toPush);
 
-      // Now that videoRemoteId is durable on this device, it is safe to
-      // remove the IndexedDB blobs — if a refresh occurs here the note
-      // already has a remoteId and the sync will use the server copy.
-      for (const idbUri of idbUrisToCleanup) {
-        deleteVideoFromIdb(noteIdFromIdbUri(idbUri)).catch(() => {});
+        // Now that videoRemoteId is durable on this device, it is safe to
+        // remove the IndexedDB blobs — if a refresh occurs here the note
+        // already has a remoteId and the sync will use the server copy.
+        // idbUrisToCleanup contains URIs from the uploaded snapshot; any entry
+        // whose note URI changed (replacement picked) is now an orphaned blob
+        // and is equally safe to remove.
+        for (const idbUri of idbUrisToCleanup) {
+          deleteVideoFromIdb(noteIdFromIdbUri(idbUri)).catch(() => {});
+        }
       }
-    }
 
-    const response = await apiFetch(projectsUrl(`/${encodeURIComponent(project.id)}`), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: stripLocalUrisForServer(toPush) }),
-      skipAuthHandling: true,
-    });
+      // Re-read storage immediately before the PUT so we always send the
+      // freshest authoritative state to the server.  Combined with the mutex,
+      // this guarantees no other push can land between this read and the PUT.
+      const latestForPut = (await getProject(project.id)) ?? toPush;
+      const response = await apiFetch(projectsUrl(`/${encodeURIComponent(project.id)}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project: stripLocalUrisForServer(latestForPut) }),
+        skipAuthHandling: true,
+      });
 
-    // 503 = backend has the code but no DATABASE_URL; 404 = backend not yet
-    // redeployed with the sync routes. Either way, cloud sync is unavailable.
-    if (response.status === 503 || response.status === 404) {
-      syncDisabled = true;
-      setSyncState('disabled');
-      return toPush;
-    }
+      // 503 = backend has the code but no DATABASE_URL; 404 = backend not yet
+      // redeployed with the sync routes. Either way, cloud sync is unavailable.
+      if (response.status === 503 || response.status === 404) {
+        syncDisabled = true;
+        setSyncState('disabled');
+        return latestForPut;
+      }
 
-    if (response.status === 401) {
-      // No valid token — show a soft "not configured" indicator, not a red error.
-      setSyncState('disabled');
-      return toPush;
-    }
+      if (response.status === 401) {
+        // No valid token — show a soft "not configured" indicator, not a red error.
+        setSyncState('disabled');
+        return latestForPut;
+      }
 
-    if (!response.ok) {
-      setSyncState('error');
-      return toPush;
-    }
+      if (!response.ok) {
+        setSyncState('error');
+        return latestForPut;
+      }
 
-    setSyncState('synced');
-    return toPush;
-  } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      // Auth failure during fetch — same soft treatment.
-      setSyncState('disabled');
-    } else {
-      setSyncState('offline');
+      setSyncState('synced');
+      return latestForPut;
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        // Auth failure during fetch — same soft treatment.
+        setSyncState('disabled');
+      } else {
+        setSyncState('offline');
+      }
+      return project;
     }
-    return project;
-  }
+  });
 }
 
 /**
@@ -869,4 +959,23 @@ export async function syncNow(localProjects: Project[]): Promise<Project[] | nul
   }
 
   return pullAndMerge(localProjects);
+}
+
+async function withPushMutex<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+  // Chain onto whatever promise is currently holding the lock for this project.
+  const current = pushMutex.get(projectId) ?? Promise.resolve();
+  let release!: () => void;
+  const slot = new Promise<void>((r) => { release = r; });
+  // Register our slot as the new tail so the next caller chains after us.
+  pushMutex.set(projectId, slot);
+  try {
+    await current; // wait for the previous push to finish
+    return await fn();
+  } finally {
+    release();
+    // Clean up the map only when no other push queued behind us.
+    if (pushMutex.get(projectId) === slot) {
+      pushMutex.delete(projectId);
+    }
+  }
 }
