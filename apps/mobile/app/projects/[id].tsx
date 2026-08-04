@@ -3,7 +3,7 @@ import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Linking, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Linking, Modal, Platform, ScrollView, Share, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 
 import { getApiBaseUrl } from '@/src/config/api';
@@ -14,8 +14,9 @@ import apiFetch, {
   UnauthorizedError,
   validateTesterToken,
 } from '@/src/lib/apiFetch';
+import { getCurrentGeo } from '@/src/lib/geo';
 import { logError, logAction } from '@/src/lib/logger';
-import { NO_DATE_SET, Note, Project, ReportMeta, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
+import { GeoPoint, NO_DATE_SET, Note, Project, ReportMeta, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
 import { ReportDetailsSection } from '@/src/features/projects/ReportDetailsSection';
 import { ReportGeneratingOverlay } from '@/src/features/projects/ReportGeneratingOverlay';
 import { applyNoteChanges } from '@/src/features/projects/noteChanges';
@@ -128,6 +129,8 @@ export default function ProjectDetailScreen() {
   const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
   const [isGeneratingGoogleDoc, setIsGeneratingGoogleDoc] = useState(false);
   const [googleDocUrl, setGoogleDocUrl] = useState<string | null>(null);
+  const [shareInfo, setShareInfo] = useState<{ url: string; pin: string; expiresAt: string } | null>(null);
+  const [isCreatingShare, setIsCreatingShare] = useState(false);
   const [activeTab, setActiveTab] = useState<ProjectTab>('notes');
   const [describingPhotos, setDescribingPhotos] = useState<Set<string>>(new Set());
   const [editingPhotos, setEditingPhotos] = useState<Record<string, { editing: boolean; caption: string }>>({});
@@ -805,6 +808,10 @@ export default function ProjectDetailScreen() {
       return;
     }
 
+    // B9: start geo-innhenting med en gang — den løper mens brukeren er i
+    // kameraet/bildevelgeren og blokkerer aldri lagringen (null ved avslag).
+    const geoPromise = getCurrentGeo();
+
     const pickPhoto = async (fromLibrary: boolean) => {
       if (fromLibrary) {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -851,6 +858,7 @@ export default function ProjectDetailScreen() {
       const trimmed = noteText.trim();
       const textForNote = trimmed || 'Bildenotat (ingen tekst ennå)';
 
+      const geo = await geoPromise;
       const newNote: Note = {
         id: Date.now().toString(),
         text: textForNote,
@@ -860,6 +868,8 @@ export default function ProjectDetailScreen() {
           uri,
           caption: '',
           aiGenerated: false,
+          capturedAt: new Date().toISOString(),
+          ...(geo ? { geo } : {}),
         }],
       };
 
@@ -888,6 +898,9 @@ export default function ProjectDetailScreen() {
       toast.show({ message: 'Vent til prosjektet er lastet inn.', variant: 'info' });
       return;
     }
+
+    // B9: samme mønster som foto — geo hentes parallelt med opptaket.
+    const geoPromise = getCurrentGeo();
 
     const pickVideo = async (fromLibrary: boolean) => {
       try {
@@ -959,11 +972,14 @@ export default function ProjectDetailScreen() {
         const trimmed = noteText.trim();
         const textForNote = trimmed || 'Videonotat (ingen tekst ennå)';
 
+        const geo = await geoPromise;
         const newNote: Note = {
           id: Date.now().toString(),
           text: textForNote,
           createdAt: new Date().toISOString(),
           videoUri: uri,
+          videoCapturedAt: new Date().toISOString(),
+          ...(geo ? { videoGeo: geo } : {}),
         };
 
         const newNotes = [newNote, ...(project.notes || [])];
@@ -1126,6 +1142,65 @@ export default function ProjectDetailScreen() {
     }
   };
 
+  // B7/B10: kontoløs delingslenke med PIN og utløp (Wenn-mønsteret, hardnet).
+  // PIN-koden vises kun her — den legges aldri i delingsmeldingen (nb.share.hint).
+  const createShare = async () => {
+    if (!project || isCreatingShare) return;
+    try {
+      setIsCreatingShare(true);
+      const response = await apiFetch(`${getApiBaseUrl()}/api/share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project.id }),
+      });
+      if (!response.ok) {
+        toast.show({ message: nb.share.failed, variant: 'error' });
+        return;
+      }
+      const data: any = await response.json();
+      if (typeof data.path !== 'string' || typeof data.pin !== 'string') {
+        toast.show({ message: nb.share.failed, variant: 'error' });
+        return;
+      }
+      // Samme-origin-bygg (base '') må få absolutt lenke — mottakeren skal
+      // kunne lime den inn hvor som helst.
+      const linkBase =
+        getApiBaseUrl() ||
+        (Platform.OS === 'web' ? ((globalThis as any)?.location?.origin ?? '') : '');
+      setShareInfo({
+        url: `${linkBase}${data.path}`,
+        pin: data.pin,
+        expiresAt: typeof data.expiresAt === 'string' ? data.expiresAt : '',
+      });
+      logAction('create-share', 0).catch(() => {});
+    } catch (error) {
+      logError(error, 'create-share').catch(() => {});
+      if (await handleApiError(error)) return;
+      toast.show({ message: nb.share.failed, variant: 'error' });
+    } finally {
+      setIsCreatingShare(false);
+    }
+  };
+
+  const copyShareLink = async () => {
+    if (!shareInfo) return;
+    const clipboard = (globalThis as any)?.navigator?.clipboard;
+    if (Platform.OS === 'web' && clipboard?.writeText) {
+      try {
+        await clipboard.writeText(shareInfo.url);
+        toast.show({ message: nb.share.copied, variant: 'success' });
+      } catch {
+        toast.show({ message: nb.share.failed, variant: 'error' });
+      }
+      return;
+    }
+    try {
+      await Share.share({ message: shareInfo.url });
+    } catch {
+      // brukeren avbrøt delingsarket — ikke en feil
+    }
+  };
+
   const handleApiError = async (error: unknown) => {
     if (error instanceof UnauthorizedError || (error as any)?.status === 401) {
       await handleUnauthorized();
@@ -1180,6 +1255,26 @@ export default function ProjectDetailScreen() {
     </Modal>
   );
 
+  // B9/B11: diskret bevislinje — tid, posisjon og sjekksum når de finnes.
+  // Rå hash vises aldri i sin helhet i appen; delingssiden viser den fullt ut.
+  const renderEvidenceMeta = (capturedAt?: string, geo?: GeoPoint, sha256?: string) => {
+    if (!capturedAt && !geo && !sha256) return null;
+    const parts: string[] = [];
+    if (capturedAt) parts.push(formatDateTime(capturedAt));
+    if (geo) parts.push(`${geo.lat.toFixed(4)}°N ${geo.lng.toFixed(4)}°Ø`);
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: theme.spacing.xs }}>
+        {parts.length > 0 && <Caption muted>{parts.join(' · ')}</Caption>}
+        {sha256 ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            <Ionicons name="shield-checkmark-outline" size={12} color={theme.colors.accent} />
+            <Caption muted>{`SHA-256 ${sha256.slice(0, 12)}…`}</Caption>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
   const renderNoteItem = ({ item, index }: { item: Note; index: number }) => (
     <Animated.View entering={FadeInDown.duration(300).delay(index * 40)}>
       <GlassCard style={{ marginBottom: theme.spacing.sm, gap: theme.spacing.xs }}>
@@ -1210,6 +1305,7 @@ export default function ProjectDetailScreen() {
                   </View>
                 )
                 : <VideoUploadStatus videoUri={item.videoUri} />}
+              {renderEvidenceMeta(item.videoCapturedAt, item.videoGeo, item.videoSha256)}
             </View>
           </View>
         )}
@@ -1229,6 +1325,7 @@ export default function ProjectDetailScreen() {
                     source={{ uri: displayMediaUri(photo.uri, photo.remoteId) }}
                     style={{ width: 82, height: 82, borderRadius: theme.radii.sm }}
                   />
+                  {renderEvidenceMeta(photo.capturedAt, photo.geo, photo.sha256)}
 
                   {isEditingCaption ? (
                     <>
@@ -1428,6 +1525,62 @@ export default function ProjectDetailScreen() {
             </View>
           </GlassCard>
         )}
+
+        {/* B7/B10: kontoløs deling med PIN + utløp */}
+        <GlassCard style={{ gap: theme.spacing.sm }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+            <Ionicons name="share-outline" size={18} color={theme.colors.accent} />
+            <Title style={{ fontSize: 18 }}>{nb.share.title}</Title>
+          </View>
+          <Caption muted>{nb.share.hint}</Caption>
+
+          {shareInfo ? (
+            <View style={{ gap: theme.spacing.sm }}>
+              <View style={{ gap: 2 }}>
+                <Caption muted>{nb.share.linkLabel}</Caption>
+                <Body selectable style={{ color: theme.colors.accent }}>{shareInfo.url}</Body>
+              </View>
+              <View style={{ gap: 2 }}>
+                <Caption muted>{nb.share.pinLabel}</Caption>
+                <Title
+                  selectable
+                  style={{
+                    fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
+                    letterSpacing: 6,
+                  }}
+                >
+                  {shareInfo.pin}
+                </Title>
+              </View>
+              {shareInfo.expiresAt ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="lock-closed-outline" size={13} color={theme.colors.muted} />
+                  <Caption muted>{`${nb.share.statusPrefix} ${formatDate(shareInfo.expiresAt)}`}</Caption>
+                </View>
+              ) : null}
+              <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+                <SecondaryButton
+                  style={{ flex: 1 }}
+                  onPress={copyShareLink}
+                  icon={<Ionicons name="copy-outline" size={16} color={theme.colors.foreground} />}
+                >
+                  {Platform.OS === 'web' ? nb.share.copyLink : nb.share.shareVia}
+                </SecondaryButton>
+              </View>
+            </View>
+          ) : (
+            <PrimaryButton
+              style={{ minHeight: 56 }}
+              onPress={createShare}
+              loading={isCreatingShare}
+              disabled={!isTokenValid || isCreatingShare}
+              icon={<Ionicons name="share-outline" size={18} color="#fff" />}
+            >
+              {isCreatingShare ? nb.share.creating : nb.share.create}
+            </PrimaryButton>
+          )}
+          {!isTokenValid && <Caption muted>{nb.share.requiresToken}</Caption>}
+        </GlassCard>
       </View>
     );
   };

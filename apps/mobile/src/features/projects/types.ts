@@ -42,6 +42,12 @@ export type ReportMeta = {
   summaryText?: string;
 };
 
+/** Posisjon fanget i felt (B9). Bevis uten geo er fortsatt gyldige. */
+export type GeoPoint = {
+  lat: number;
+  lng: number;
+};
+
 export type Photo = {
   id: string;
   uri: string;
@@ -49,6 +55,11 @@ export type Photo = {
   aiGenerated?: boolean;
   /** ID of the durable copy stored on the backend (set after upload). */
   remoteId?: string;
+  /** SHA-256 satt av serveren ved opplasting (B11). */
+  sha256?: string;
+  geo?: GeoPoint;
+  /** ISO-tidspunkt for fangst i felt. */
+  capturedAt?: string;
 };
 
 export type Note = {
@@ -60,6 +71,8 @@ export type Note = {
   audioUri?: string;
   /** ID of the durable audio copy stored on the backend (set after upload). */
   audioRemoteId?: string;
+  /** SHA-256 satt av serveren ved opplasting (B11). */
+  audioSha256?: string;
   transcription?: string;
   images?: string[];
   photos?: Photo[];
@@ -67,6 +80,11 @@ export type Note = {
   videoUri?: string;
   /** ID of the durable video copy stored on the backend (set after upload). */
   videoRemoteId?: string;
+  /** SHA-256 satt av serveren ved opplasting (B11). */
+  videoSha256?: string;
+  videoGeo?: GeoPoint;
+  /** ISO-tidspunkt for video-fangst i felt. */
+  videoCapturedAt?: string;
 };
 
 export type Project = {
