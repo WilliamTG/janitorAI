@@ -29,6 +29,7 @@ type AddressHit = {
   postnummer?: string;
   poststed?: string;
   kommunenavn?: string;
+  kommunenummer?: string;
   gnr?: number;
   bnr?: number;
   lat?: number;
@@ -349,6 +350,7 @@ export default function Index() {
         postCode: hit.postnummer,
         postPlace: tidyPlace(hit.poststed),
         municipality: tidyPlace(hit.kommunenavn),
+        municipalityNumber: hit.kommunenummer,
         gnr: hit.gnr,
         bnr: hit.bnr,
         lat: hit.lat,

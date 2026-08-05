@@ -54,6 +54,8 @@ export type CaseFile = {
   postCode?: string;
   postPlace?: string;
   municipality?: string;
+  /** Firesifret kommunenummer (f.eks. «0301») — trengs for eiendomsoppslag. */
+  municipalityNumber?: string;
   gnr?: number;
   bnr?: number;
   lat: number;

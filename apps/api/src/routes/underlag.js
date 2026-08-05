@@ -35,6 +35,7 @@ router.get("/adresse", async (req, res) => {
       postnummer: a.postnummer,
       poststed: a.poststed,
       kommunenavn: a.kommunenavn,
+      kommunenummer: a.kommunenummer,
       gnr: a.gardsnummer,
       bnr: a.bruksnummer,
       lat: a.representasjonspunkt && a.representasjonspunkt.lat,

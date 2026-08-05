@@ -159,6 +159,7 @@ export default function ProjectDetailScreen() {
     kulturminne: boolean;
     bygningsnummer: string | null;
   } | null>(null);
+  const [showMoreUnderlag, setShowMoreUnderlag] = useState(false);
   const [casePlace, setCasePlace] = useState<{
     moh: number | null;
     terreng: string | null;
@@ -1932,6 +1933,95 @@ export default function ProjectDetailScreen() {
             <Caption muted>{nb.underlag.sourceLine}</Caption>
           </View>
         </View>
+
+        {/* «Se mer»: dyplenker til alt vannskade-relevant offentlig innsyn */}
+        <TouchableOpacity
+          onPress={() => setShowMoreUnderlag((v) => !v)}
+          accessibilityRole="button"
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40 }}
+        >
+          <Ionicons
+            name={showMoreUnderlag ? 'chevron-up-outline' : 'chevron-down-outline'}
+            size={16}
+            color={theme.colors.accent}
+          />
+          <Body style={{ color: theme.colors.accent, fontWeight: '600' }}>
+            {showMoreUnderlag ? nb.underlag.seeLess : nb.underlag.seeMore}
+          </Body>
+        </TouchableOpacity>
+        {showMoreUnderlag && (
+          <View style={{ gap: 2 }}>
+            {[
+              cf.municipalityNumber && cf.gnr != null && cf.bnr != null
+                ? {
+                    icon: 'home-outline' as const,
+                    label: nb.underlag.linkSeeiendom,
+                    sub: nb.underlag.linkSeeiendomSub,
+                    url: `https://seeiendom.kartverket.no/eiendom/${cf.municipalityNumber}/${cf.gnr}/${cf.bnr}/0/0`,
+                  }
+                : null,
+              {
+                icon: 'layers-outline' as const,
+                label: nb.underlag.linkPlan,
+                sub: nb.underlag.linkPlanSub,
+                url: 'https://arealplaner.no/',
+              },
+              {
+                icon: 'water-outline' as const,
+                label: nb.underlag.linkNve,
+                sub: nb.underlag.linkNveSub,
+                url: 'https://temakart.nve.no/tema/flomaktsomhet',
+              },
+              {
+                icon: 'earth-outline' as const,
+                label: nb.underlag.linkNgu,
+                sub: nb.underlag.linkNguSub,
+                url: 'https://geo.ngu.no/kart/losmasse_mobil/',
+              },
+              {
+                icon: 'thermometer-outline' as const,
+                label: nb.underlag.linkSeklima,
+                sub: nb.underlag.linkSeklimaSub,
+                url: 'https://seklima.met.no/observations/',
+              },
+              {
+                icon: 'camera-outline' as const,
+                label: nb.underlag.linkFlyfoto,
+                sub: nb.underlag.linkFlyfotoSub,
+                url: 'https://norgeibilder.no/',
+              },
+              {
+                icon: 'folder-open-outline' as const,
+                label: nb.underlag.linkBoligmappa,
+                sub: nb.underlag.linkBoligmappaSub,
+                url: 'https://www.boligmappa.no/',
+              },
+            ]
+              .filter((link): link is NonNullable<typeof link> => link !== null)
+              .map((link) => (
+                <TouchableOpacity
+                  key={link.url}
+                  onPress={() => Linking.openURL(link.url)}
+                  accessibilityRole="link"
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: theme.spacing.sm,
+                    paddingVertical: 8,
+                    minHeight: 44,
+                  }}
+                >
+                  <Ionicons name={link.icon} size={17} color={theme.colors.accent} />
+                  <View style={{ flex: 1 }}>
+                    <Body style={{ fontWeight: '600' }}>{link.label}</Body>
+                    <Caption muted>{link.sub}</Caption>
+                  </View>
+                  <Ionicons name="open-outline" size={14} color={theme.colors.muted} />
+                </TouchableOpacity>
+              ))}
+            <Caption muted style={{ marginTop: 4 }}>{nb.underlag.municipalHint}</Caption>
+          </View>
+        )}
       </GlassCard>
     );
   };
