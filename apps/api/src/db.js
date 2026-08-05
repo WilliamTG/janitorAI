@@ -3,7 +3,11 @@
 
 const { Pool } = require("pg");
 
-const DATABASE_URL = process.env.DATABASE_URL;
+// Prefer RENDER_DATABASE_URL when set (lets the Replit dev environment point
+// directly at the Render Postgres DB without touching the runtime-managed
+// DATABASE_URL that Replit provisions for its own local database).
+// Falls back to DATABASE_URL so production Render deployments keep working.
+const DATABASE_URL = process.env.RENDER_DATABASE_URL || process.env.DATABASE_URL;
 
 let pool = null;
 let initPromise = null;
