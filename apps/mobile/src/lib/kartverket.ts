@@ -1,5 +1,8 @@
-// kartverket.ts – kartutsnitt uten avhengigheter: én WMTS-flis fra Kartverkets
-// åpne cache (topo/webmercator) + markørposisjon som brøk innenfor flisen.
+// kartverket.ts – kartutsnitt uten avhengigheter: én WMTS-flis (Kartverket
+// topo/webmercator, proxyet gjennom vårt API) + markørposisjon som brøk
+// innenfor flisen. Proxyen gjør at klienten aldri kaller tredjepart direkte.
+
+import { getApiBaseUrl } from '@/src/config/api';
 
 export type TilePin = {
   url: string;
@@ -16,7 +19,7 @@ export function tileForCoordinate(lat: number, lon: number, zoom = 16): TilePin 
   const tileX = Math.floor(x);
   const tileY = Math.floor(y);
   return {
-    url: `https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/${zoom}/${tileY}/${tileX}.png`,
+    url: `${getApiBaseUrl()}/api/flis/${zoom}/${tileY}/${tileX}`,
     fx: x - tileX,
     fy: y - tileY,
   };

@@ -116,6 +116,9 @@ app.use("/api/media", mediaRouter);
 const shareRouter = require("./routes/share");
 app.use("/api/share", shareRouter);
 
+// ---------- KARTFLIS-PROXY (public: <img> kan ikke sette headere) ----------
+app.get("/api/flis/:z/:y/:x", require("./routes/underlag").tileHandler);
+
 // ---------- ADMIN (own auth: x-admin-secret header) ----------
 // Mounted before the global tester-token guard so it uses its own middleware.
 const adminRouter = require("./routes/admin");

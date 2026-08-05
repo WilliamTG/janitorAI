@@ -14,6 +14,8 @@ import apiFetch, {
   UnauthorizedError,
   validateTesterToken,
 } from '@/src/lib/apiFetch';
+import { Image as ExpoImage } from 'expo-image';
+
 import { getCurrentGeo } from '@/src/lib/geo';
 import { tileForCoordinate } from '@/src/lib/kartverket';
 import { logError, logAction } from '@/src/lib/logger';
@@ -1777,9 +1779,10 @@ export default function ProjectDetailScreen() {
               borderColor: theme.colors.border,
             }}
           >
-            <Image
+            <ExpoImage
               source={{ uri: pin.url }}
               style={{ width: MAP, height: MAP }}
+              contentFit="cover"
               accessibilityLabel={nb.underlag.mapAlt}
             />
             <View

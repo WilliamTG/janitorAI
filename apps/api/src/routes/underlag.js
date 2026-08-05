@@ -119,4 +119,39 @@ router.get("/vaer", async (req, res) => {
   }
 });
 
+// ── Kartflis-proxy (Kartverket åpen WMTS) ────────────────────────────────────
+// Egen handler som mountes UTEN tester-token: <img>-elementer kan ikke sette
+// headere, og flisene er åpne data. Streng validering hindrer misbruk som
+// generell proxy; zoom er avgrenset og målet er låst til Kartverkets cache.
+async function tileHandler(req, res) {
+  const z = Number(req.params.z);
+  const y = Number(req.params.y);
+  const x = Number(req.params.x);
+  const max = 2 ** z;
+  if (
+    !Number.isInteger(z) || !Number.isInteger(y) || !Number.isInteger(x) ||
+    z < 3 || z > 18 || y < 0 || x < 0 || y >= max || x >= max
+  ) {
+    return res.status(400).json({ error: "Ugyldig flis" });
+  }
+
+  try {
+    const response = await fetch(
+      `https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/${z}/${y}/${x}.png`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!response.ok) {
+      return res.status(502).json({ error: "Kartverket svarte ikke" });
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    res.type("png");
+    res.set("Cache-Control", "public, max-age=86400");
+    res.send(buffer);
+  } catch (err) {
+    console.error("GET /api/flis error:", sanitizeError(err));
+    res.status(502).json({ error: "Fikk ikke kontakt med Kartverket" });
+  }
+}
+
 module.exports = router;
+module.exports.tileHandler = tileHandler;
