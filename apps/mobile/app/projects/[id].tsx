@@ -153,6 +153,12 @@ export default function ProjectDetailScreen() {
   const [shareInfo, setShareInfo] = useState<{ url: string; pin: string; expiresAt: string } | null>(null);
   const [isCreatingShare, setIsCreatingShare] = useState(false);
   const [caseWeather, setCaseWeather] = useState<{ station: string; totalMm: number } | null>(null);
+  const [caseBuilding, setCaseBuilding] = useState<{
+    type: string;
+    status: string;
+    kulturminne: boolean;
+    bygningsnummer: string | null;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<ProjectTab>('notes');
   const [describingPhotos, setDescribingPhotos] = useState<Set<string>>(new Set());
   const [editingPhotos, setEditingPhotos] = useState<Record<string, { editing: boolean; caption: string }>>({});
@@ -1198,6 +1204,37 @@ export default function ProjectDetailScreen() {
     };
   }, [project?.caseFile, project?.reportMeta?.damageDate, isTokenValid]);
 
+  // Bygningsdata fra den åpne matrikkelen (Geonorge) — type, status og
+  // kulturminne-flagg for nærmeste bygning til adressepunktet.
+  useEffect(() => {
+    const cf = project?.caseFile;
+    if (!cf || !isTokenValid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await apiFetch(
+          `${getApiBaseUrl()}/api/underlag/bygg?lat=${cf.lat}&lon=${cf.lon}`,
+          { skipAuthHandling: true },
+        );
+        if (cancelled || !response.ok) return;
+        const data: any = await response.json();
+        if (!cancelled && data.bygning) {
+          setCaseBuilding({
+            type: String(data.bygning.type),
+            status: String(data.bygning.status),
+            kulturminne: Boolean(data.bygning.kulturminne),
+            bygningsnummer: data.bygning.bygningsnummer ? String(data.bygning.bygningsnummer) : null,
+          });
+        }
+      } catch {
+        // åpen-matrikkel-oppslaget er en berikelse — stille feil
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [project?.caseFile, isTokenValid]);
+
   const createShare = async () => {
     if (!project || isCreatingShare) return;
     try {
@@ -1811,6 +1848,17 @@ export default function ProjectDetailScreen() {
               <Caption muted>{`${nb.underlag.cadastre}: ${cf.gnr}/${cf.bnr}`}</Caption>
             ) : null}
             <Caption muted>{`${nb.underlag.coordinates}: ${cf.lat.toFixed(5)}°N ${cf.lon.toFixed(5)}°Ø`}</Caption>
+            {caseBuilding ? (
+              <Caption muted>
+                {`${nb.underlag.buildingType}: ${caseBuilding.type} · ${caseBuilding.status}`}
+              </Caption>
+            ) : null}
+            {caseBuilding?.kulturminne ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="ribbon-outline" size={13} color={theme.colors.accent} />
+                <Caption style={{ color: theme.colors.accent }}>{nb.underlag.heritage}</Caption>
+              </View>
+            ) : null}
             {caseWeather ? (
               <Caption muted>
                 {`${nb.underlag.rainAroundDamage}: ${caseWeather.totalMm} mm (${nb.underlag.rainStation} ${caseWeather.station})`}

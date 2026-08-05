@@ -135,7 +135,11 @@ export const nb = {
     mapAlt: 'Kartutsnitt over eiendommen',
     rainAroundDamage: 'Nedbør rundt skadedato',
     rainStation: 'målt ved',
-    sourceLine: 'Kilde: Kartverket (åpne data)',
+    buildingType: 'Bygningstype',
+    buildingStatus: 'Bygningsstatus',
+    heritage: 'Kulturminne/SEFRAK-registrert',
+    buildingNumber: 'Bygningsnr.',
+    sourceLine: 'Kilde: Kartverket og åpen matrikkel (Geonorge)',
   },
 
   share: {
