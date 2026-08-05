@@ -77,7 +77,9 @@ function sendPresentationPage(res, filename) {
   });
 }
 
-app.get("/pitch", (req, res) => sendPresentationPage(res, "pitch.html"));
+app.get("/kundereisen", (req, res) => sendPresentationPage(res, "kundereisen.html"));
+// Gammelt navn på kundereise-siden — behold som alias.
+app.get("/pitch", (req, res) => sendPresentationPage(res, "kundereisen.html"));
 app.get("/losningsskisse", (req, res) => sendPresentationPage(res, "losningsskisse.html"));
 app.get("/ui-endringer", (req, res) => sendPresentationPage(res, "ui-endringer.html"));
 app.get("/underlag-demo", (req, res) => sendPresentationPage(res, "underlag-demo.html"));
