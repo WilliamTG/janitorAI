@@ -2045,6 +2045,41 @@ export default function ProjectDetailScreen() {
   // B16: fast topprad (scroller ikke) — synk-status + tilgangskode.
   // Prosjektnavnet vises i navigasjonsheaderen (Stack.Screen), ikke her —
   // ellers står tittelen dobbelt og trunkeres ved siden av synk-pillen.
+  // Saksunderlaget i «basics»: én kompakt linje som alltid er synlig øverst —
+  // essensen av underlaget uten å flytte fangst-knappene (B13).
+  const renderUnderlagStrip = () => {
+    const cf = project?.caseFile;
+    if (!cf) return null;
+    const bits = [
+      cf.municipality || null,
+      cf.gnr != null && cf.bnr != null ? `gnr/bnr ${cf.gnr}/${cf.bnr}` : null,
+      caseBuilding ? caseBuilding.type : null,
+      casePlace?.moh != null ? `${casePlace.moh} moh.` : null,
+      casePlace?.tempC != null
+        ? `${casePlace.tempC}°${casePlace.beskrivelse ? ` ${casePlace.beskrivelse}` : ''}`
+        : null,
+    ].filter(Boolean);
+    if (bits.length === 0) return null;
+    return (
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+          paddingVertical: 4,
+          paddingHorizontal: theme.spacing.sm,
+          backgroundColor: theme.colors.surfaceSecondary,
+          borderRadius: theme.radii.pill,
+        }}
+      >
+        <Ionicons name="map-outline" size={13} color={theme.colors.accent} />
+        <Caption muted numberOfLines={1} style={{ flex: 1 }}>
+          {bits.join(' · ')}
+        </Caption>
+      </View>
+    );
+  };
+
   const renderTopBar = () => (
     <View style={{ gap: theme.spacing.sm }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: theme.spacing.sm }}>
@@ -2053,6 +2088,7 @@ export default function ProjectDetailScreen() {
           <Ionicons name="key-outline" size={18} color={theme.colors.foreground} />
         </IconButton>
       </View>
+      {renderUnderlagStrip()}
 
       <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
         <SecondaryButton
