@@ -31,7 +31,7 @@ import {
   getProject,
   updateProject as updateProjectInStorage,
 } from '@/src/storage/projectsStorage';
-import { pullAndMerge, schedulePush, subscribeToProjectUpdates, touchProject } from '@/src/sync/projectSync';
+import { pullAndMerge, schedulePush, subscribeToProjectUpdates, touchProject, clearVideoRetryState } from '@/src/sync/projectSync';
 import { persistMediaLocally } from '@/src/sync/persistMedia';
 import { displayMediaUri } from '@/src/sync/mediaUri';
 import { useVideoUploadProgress } from '@/src/sync/syncStatus';
@@ -54,7 +54,13 @@ import {
 // Defined outside ProjectDetailScreen so it can call hooks at the top level.
 // Shows a live progress bar while a video is uploading, and a spinner for the
 // brief "preparing" (blob fetch) and "processing" (server response) phases.
-function VideoUploadStatus({ videoUri }: { videoUri: string | undefined }) {
+function VideoUploadStatus({
+  videoUri,
+  onReselect,
+}: {
+  videoUri: string | undefined;
+  onReselect?: () => void;
+}) {
   const theme = useAppTheme();
   const pct = useVideoUploadProgress(videoUri);
   // Track how many seconds we've been stuck at pct===null so we can show
@@ -71,17 +77,35 @@ function VideoUploadStatus({ videoUri }: { videoUri: string | undefined }) {
   }, [pct]);
 
   if (pct === null) {
-    const label =
-      stallSeconds >= 35
-        ? 'Upload stalled — remove and re-add the video to retry'
-        : stallSeconds >= 15
-        ? 'Still preparing… (this can take a moment)'
-        : 'Preparing…';
+    const isStalled = stallSeconds >= 35;
+    const label = isStalled
+      ? 'Upload stalled'
+      : stallSeconds >= 15
+      ? 'Still preparing… (this can take a moment)'
+      : 'Preparing…';
 
     return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <ActivityIndicator size="small" color={theme.colors.accent} />
-        <Caption muted>Forbereder …</Caption>
+      <View style={{ gap: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <ActivityIndicator size="small" color={isStalled ? 'orange' : theme.colors.accent} />
+          <Caption muted style={isStalled ? { color: 'orange' } : undefined}>{label}</Caption>
+        </View>
+        {isStalled && onReselect && (
+          <TouchableOpacity
+            onPress={onReselect}
+            style={{
+              alignSelf: 'flex-start',
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: 'orange',
+            }}
+            accessibilityLabel="Re-select file to retry upload"
+          >
+            <Caption style={{ color: 'orange' }}>Re-select file</Caption>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -1047,7 +1071,84 @@ export default function ProjectDetailScreen() {
     ]);
   };
 
+  /**
+   * Let the inspector pick a replacement video for a note whose upload stalled.
+   * Only the videoUri is replaced — all other note content (text, photos, audio)
+   * is left untouched.  The old URI's in-memory upload state is cleared so the
+   * sync engine treats the new URI as a fresh upload.
+   */
+  const reSelectVideoForNote = async (noteId: string, oldVideoUri: string | undefined) => {
+    if (!project) return;
 
+    const pickReplacement = async () => {
+      try {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Photo library access is required to pick videos.');
+          return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+          videoMaxDuration: MAX_VIDEO_DURATION_SECONDS,
+        });
+
+        if (result.canceled || !result.assets || result.assets.length === 0) return;
+
+        const asset = result.assets[0];
+
+        if (asset.duration && asset.duration > MAX_VIDEO_DURATION_SECONDS * 1000) {
+          Alert.alert(
+            'Video too long',
+            `Please select a video shorter than ${MAX_VIDEO_DURATION_SECONDS} seconds (2 minutes).`,
+          );
+          return;
+        }
+
+        const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
+        if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
+          Alert.alert(
+            'Video too large',
+            `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 200 MB.`,
+          );
+          return;
+        }
+
+        // Persist the new file under a fresh IDB key so the replacement gets a
+        // URI that is distinct from the stalled upload's URI.  If the same key
+        // were reused, uploadMedia() would find the old in-flight promise in
+        // uploadsInFlight and join it instead of starting a fresh upload.
+        const idbKey = `${noteId}-r${Date.now()}`;
+        const newUri = await persistMediaLocally(asset.uri, idbKey);
+
+        // Clear the old URI from the sync engine's deduplication / quarantine maps
+        // so the next push treats the new URI as a fresh upload.
+        clearVideoRetryState(oldVideoUri);
+
+        // Replace only the video fields on the matching note.
+        const newNotes = (project.notes || []).map((n) =>
+          n.id === noteId
+            ? { ...n, videoUri: newUri, videoRemoteId: undefined }
+            : n,
+        );
+        await updateProjectNotes(newNotes);
+      } catch (error) {
+        console.error('[reSelectVideoForNote] Unexpected error', error);
+        Alert.alert('Could not pick video', 'Something went wrong. Please try again.');
+      }
+    };
+
+    // On web Alert.alert is a no-op — go straight to library picker.
+    if (Platform.OS === 'web') {
+      await pickReplacement();
+      return;
+    }
+
+    Alert.alert('Replace video', 'Choose a replacement video', [
+      { text: 'Choose from library', onPress: pickReplacement },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   const downloadReport = async (format: 'pdf' | 'docx') => {
     const reportUrl = googleDocUrl || project?.reportUrl;
@@ -1434,7 +1535,12 @@ export default function ProjectDetailScreen() {
                     <Caption muted>{nb.detail.uploaded}</Caption>
                   </View>
                 )
-                : <VideoUploadStatus videoUri={item.videoUri} />}
+                : (
+                  <VideoUploadStatus
+                    videoUri={item.videoUri}
+                    onReselect={() => reSelectVideoForNote(item.id, item.videoUri)}
+                  />
+                )}
               {renderEvidenceMeta(item.videoCapturedAt, item.videoGeo, item.videoSha256)}
             </View>
           </View>
