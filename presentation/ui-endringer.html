@@ -1,0 +1,296 @@
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DocrAI — UI-endringer vs. eksisterende løsning</title>
+<style>
+  :root {
+    --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
+    --border: #DDE4EB; --accent: #3D5A80; --accent-fill: #3D5A80; --accent-pale: #E8F0F7;
+    --amber: #A8681F; --amber-pale: #F7EEDD; --ok: #2E7D4F; --bad: #A6453A;
+    --before-bg: #FAF6F3; --after-bg: #F3F8F5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #131920; --surface: #0F141A; --ink: #E4EAF1; --muted: #97A6B5;
+      --border: #2A3542; --accent: #94B9DE; --accent-fill: #3D5A80; --accent-pale: #1B2634;
+      --amber: #D69A4E; --amber-pale: #2B2214; --ok: #5CB884; --bad: #D3766B;
+      --before-bg: #1B1614; --after-bg: #131C16;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
+    --border: #DDE4EB; --accent: #3D5A80; --accent-fill: #3D5A80; --accent-pale: #E8F0F7;
+    --amber: #A8681F; --amber-pale: #F7EEDD; --ok: #2E7D4F; --bad: #A6453A;
+    --before-bg: #FAF6F3; --after-bg: #F3F8F5;
+  }
+  :root[data-theme="dark"] {
+    --paper: #131920; --surface: #0F141A; --ink: #E4EAF1; --muted: #97A6B5;
+    --border: #2A3542; --accent: #94B9DE; --accent-fill: #3D5A80; --accent-pale: #1B2634;
+    --amber: #D69A4E; --amber-pale: #2B2214; --ok: #5CB884; --bad: #D3766B;
+    --before-bg: #1B1614; --after-bg: #131C16;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface); color: var(--ink);
+    font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.55;
+  }
+  .page { max-width: 920px; margin: 0 auto; padding: 48px 24px 72px; display: flex; flex-direction: column; gap: 44px; }
+
+  header { display: flex; flex-direction: column; gap: 12px; }
+  .brand-row { display: flex; align-items: center; gap: 12px; }
+  .brand-sq { width: 22px; height: 22px; background: var(--accent-fill); flex: none; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+  .lede { margin: 0; max-width: 64ch; color: var(--muted); font-size: 15.5px; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill { font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+  .pill.ok   { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
+  .pill.part { color: var(--amber); background: var(--amber-pale); }
+  .pill.todo { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+  .legend .exp { font-size: 12.5px; color: var(--muted); align-self: center; }
+
+  section { display: flex; flex-direction: column; gap: 14px; }
+  .sec-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  .sec-head .eyebrow { color: var(--muted); }
+  h2 { margin: 0; font-size: 20px; font-weight: 700; }
+  section > p { margin: 0; max-width: 68ch; color: var(--muted); }
+
+  .item { background: var(--paper); border: 1px solid var(--border); }
+  .i-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .i-id { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; color: var(--accent); border: 1px solid var(--accent); padding: 1px 7px; flex: none; }
+  .i-head h3 { margin: 0; font-size: 15px; font-weight: 700; flex: 1; }
+  .i-head .pill { flex: none; }
+  .i-body { display: grid; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 640px) { .i-body { grid-template-columns: 1fr; } }
+  .cell { padding: 12px 16px 14px; font-size: 13.5px; }
+  .cell .lbl { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+  .before { background: var(--before-bg); }
+  .before .lbl { color: var(--bad); }
+  .after { background: var(--after-bg); }
+  .after .lbl { color: var(--ok); }
+  .cell p { margin: 0; color: var(--ink); }
+  .cell p .m { color: var(--muted); }
+
+  .todo-list { display: flex; flex-direction: column; gap: 10px; }
+  .todo-item { display: flex; gap: 12px; align-items: baseline; background: var(--paper); border: 1px solid var(--border); padding: 12px 16px; }
+  .todo-item .i-id { align-self: center; }
+  .todo-item p { margin: 0; font-size: 14px; }
+  .todo-item p b { font-weight: 600; }
+
+  footer { border-top: 1px solid var(--border); padding-top: 16px; font-size: 12.5px; color: var(--muted); max-width: 70ch; }
+</style>
+
+<div class="page">
+
+  <header>
+    <div class="brand-row">
+      <div class="brand-sq"></div>
+      <span class="eyebrow">DocrAI · UI-endringer · 04.08.2026</span>
+    </div>
+    <h1>Endringene i UI — mot eksisterende løsning</h1>
+    <p class="lede">
+      Sammenstilling av hvert grep fra backloggen: hva den eksisterende løsningen gjorde, og hva
+      som er endret. Alt merket <strong>bygget</strong> er implementert i prototypen og verifisert
+      med typesjekk, tester og kjøring i nettleser.
+    </p>
+    <div class="legend">
+      <span class="pill ok">bygget</span>
+      <span class="pill part">delvis</span>
+      <span class="pill todo">gjenstår</span>
+      <span class="exp">— status per grep</span>
+    </div>
+  </header>
+
+  <!-- ══ Prosjektlisten ══ -->
+  <section>
+    <div class="sec-head"><span class="eyebrow">01</span><h2>Prosjektlisten</h2></div>
+
+    <div class="item">
+      <div class="i-head"><span class="i-id">B14</span><h3>Prosjektkortet</h3><span class="pill ok">bygget</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>Stort kort der bare «Open project →»-knappen kunne trykkes; tre statistikk-piller; innholdet strukket i full bredde på store skjermer.</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>Hele kortet er én trykkflate. Kompakt metadatalinje <span class="m">(dd.mm.åååå · takstperson)</span>, tellere som diskret tekst, 840 px maksbredde.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="i-head"><span class="i-id">B15</span><h3>Sletting</h3><span class="pill ok">bygget</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>Synlig søppelbøtte rett på hvert kort. Notatsletting skjedde helt uten bekreftelse.</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>Sletting bak ⋯-meny med bekreftelse som inneholder prosjektnavnet. Notatsletting har fått egen bekreftelsesdialog.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="i-head"><span class="i-id">B20</span><h3>Status og feilhåndtering</h3><span class="pill ok">bygget</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>13 px farget statustekst med ned mot 2:1-kontrast. «Failed» ga bare en «View Error»-dialog uten handling.</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>Statuschip som består WCAG AA i begge temaer. «Prøv igjen» på feilede kort åpner prosjektet og starter genereringen på nytt.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="i-head"><span class="i-id">B16</span><h3>Synkstatus</h3><span class="pill ok">bygget</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>Indikator lå i den scrollende listetoppen og forsvant ved scrolling; fantes ikke på detaljskjermen.</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>Fast topprad på begge skjermer: «Lagret i skyen» / «Venter på nett — lagret lokalt», med varsel ved feilede opplastinger.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="i-head"><span class="i-id">B2 + B19</span><h3>Språk og navn</h3><span class="pill ok">bygget</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>Engelsk i hele flyten («Projects», «Save note», «Failed») under navnet «Inspections» / «inspection-mvp».</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>Norsk strengkatalog <span class="m">(nb.ts)</span> med dd.mm.åååå-datoer, «DocrAI»-header og visningsnavn. Tilgangskode-modalen sier «Skriv inn tilgangskoden fra DocrAI».</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="i-head"><span class="i-id">B17 + B18</span><h3>Opprettelses-veiviseren</h3><span class="pill part">delvis</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>Fritekstnavn uten duplikatsjekk («e.g. Main lobby walkthrough»), avbrytende dialog ved manglende navn, tekstpiler «→» i knappene.</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>Inline duplikatvarsel og valideringsfeil, adresse-eksempel som ledetekst, ikonpiler. <span class="m">Gjenstår: adressen foreslås automatisk som prosjektnavn.</span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ Prosjektdetaljen ══ -->
+  <section>
+    <div class="sec-head"><span class="eyebrow">02</span><h2>Prosjektdetaljen</h2></div>
+
+    <div class="item">
+      <div class="i-head"><span class="i-id">B13</span><h3>Fangst i felt</h3><span class="pill ok">bygget</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>Fire knapper på ~42 px i 2×2-rutenett med emoji (📷 🎬), som scrollet bort med resten av siden.</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>Tre fullbredde-knapper på minst 56 px — Lydnotat · Bilde · Video — med ikoner og tydelig opptakstilstand. Laget for våte hansker.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="i-head"><span class="i-id">B13</span><h3>«Se rapport»</h3><span class="pill ok">bygget</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>Lå inne i det scrollende innholdet og forsvant ut av syne.</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>Fast forankret i bunnen av skjermen — alltid ett trykk unna, skjult når rapportfanen alt er åpen.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="i-head"><span class="i-id">B18</span><h3>Varsler</h3><span class="pill ok">bygget</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>57 avbrytende systemdialoger — også for suksess («Transcription ready»).</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>Stille kvitteringer med AA-kontrast som bekrefter i forbifarten. Dialog kun ved sletting og kildevalg.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="i-head"><span class="i-id">B20</span><h3>Rapportfeil</h3><span class="pill ok">bygget</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>Rød feilboks uten handling. En utløpt tilgangskode kunne låse prosjektet i «Behandler …» for alltid.</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>«Feilet»-chip med «Prøv igjen» (sperret uten gyldig kode); avviste kall rydder alltid opp i statusen.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="i-head"><span class="i-id">B9 + B11</span><h3>Bevisets opprinnelse</h3><span class="pill ok">bygget</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>Foto og video uten sporbarhet — ingen posisjon, intet fangsttidspunkt, ingen sjekksum.</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>Tid og posisjon stemples ved fangst (uten å blokkere flyten), og serveren setter SHA-256 ved opplasting — synlig som metadatalinje med skjold-merke.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="i-head"><span class="i-id">B7 + B10</span><h3>Deling</h3><span class="pill ok">bygget</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>Rå Google Doc-lenke; bevisbildene i dokumentet ble delt offentlig («anyone»). Ingen delingsfunksjon i API-et.</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>Delingskort med lenke + sekssifret PIN og «PIN-beskyttet · utløper …». Kopier på web, delingsark på mobil — PIN-koden holdes utenfor delingsmeldingen.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ Mottakersiden ══ -->
+  <section>
+    <div class="sec-head"><span class="eyebrow">03</span><h2>Mottakersiden — helt ny flate</h2></div>
+    <div class="item">
+      <div class="i-head"><span class="i-id">B7 + B10</span><h3>/share/…</h3><span class="pill ok">bygget</span></div>
+      <div class="i-body">
+        <div class="cell before"><span class="lbl">Eksisterende</span>
+          <p>Fantes ikke. Mottakeren måtte ha Google-tilgang og fikk et rådokument uten struktur eller tilgangskontroll.</p>
+        </div>
+        <div class="cell after"><span class="lbl">Endring</span>
+          <p>Kontoløs side med PIN-port og synlig utløpsstatus (fem feilforsøk gir kvarters pause). Bak porten: forensisk rapport — saksfakta, skade og årsak, bevisgalleri med fangsttid, posisjon og full sjekksum, og notater fra befaringen.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ Gjenstår ══ -->
+  <section>
+    <div class="sec-head"><span class="eyebrow">04</span><h2>Fortsatt bare forslag</h2></div>
+    <p>Neste byggetrinn — beskrevet i løsningsskissen og backloggen, men ikke implementert ennå.</p>
+    <div class="todo-list">
+      <div class="todo-item"><span class="i-id">B17</span><p><b>Adresse som prosjektnavn:</b> adressen fra rapportskjemaet foreslås automatisk ved opprettelse (duplikatvarselet er på plass).</p></div>
+      <div class="todo-item"><span class="i-id">B8</span><p><b>Auto-forslag på skadetype:</b> vann / brann / fukt / råte foreslås fra videoen — takstpersonen bekrefter eller endrer.</p></div>
+      <div class="todo-item"><span class="i-id">B6</span><p><b>Demo-modus:</b> ferdig demoprosjekt fra video til rapport, uten innlogging.</p></div>
+      <div class="todo-item"><span class="i-id">B12</span><p><b>EU/EØS-databehandling:</b> AI-kjøring i EU-region og docx-nedlasting uten Google-konto — i dag går rapporten via Google Docs og Gemini.</p></div>
+      <div class="todo-item"><span class="i-id">B1 + B4</span><p><b>Transkripsjonsflyten:</b> backend leser lyd via mediaId med norsk språkhint; auto-transkribering ved opptaksstopp.</p></div>
+      <div class="todo-item"><span class="i-id">—</span><p><b>Godkjenningsstempel og Byggforsk-RAG:</b> synlig takstperson-godkjenning i rapporten og verifiserte kildesitater — kjernen i løsningsskissens neste fase.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    Grunnlag: backloggen (B1–B20), kartleggingen av <code>apps/mobile</code>, <code>apps/api</code>
+    og <code>ai-engine</code>, og endringene på branchen <code>claude/visualisering-losning-xa7udi</code>
+    per 04.08.2026 — verifisert med typesjekk, enhetstester og ende-til-ende-test av delingskjeden.
+  </footer>
+</div>

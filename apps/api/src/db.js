@@ -97,11 +97,27 @@ CREATE TABLE IF NOT EXISTS user_actions (
 CREATE INDEX IF NOT EXISTS error_logs_created_at_idx  ON error_logs  (created_at DESC);
 CREATE INDEX IF NOT EXISTS user_actions_created_at_idx ON user_actions (created_at DESC);
 
+-- PIN-protected, expiring share links (B10). pin_hash doubles as the HMAC key
+-- for stateless view tokens, so no session table is needed.
+CREATE TABLE IF NOT EXISTS shares (
+  id            VARCHAR     PRIMARY KEY,
+  project_id    TEXT        NOT NULL,
+  tester_token  VARCHAR     NOT NULL,
+  pin_hash      TEXT        NOT NULL,
+  pin_salt      TEXT        NOT NULL,
+  expires_at    TIMESTAMPTZ NOT NULL,
+  revoked       BOOLEAN     NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS shares_project_id_idx ON shares (project_id);
+
 -- Incremental migrations for pre-existing deployments
 ALTER TABLE projects        ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
 ALTER TABLE deleted_projects ADD COLUMN IF NOT EXISTS tester_token   VARCHAR;
 ALTER TABLE media           ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
 ALTER TABLE media           ADD COLUMN IF NOT EXISTS unreferenced_at TIMESTAMPTZ;
+ALTER TABLE media           ADD COLUMN IF NOT EXISTS sha256          TEXT;
 ALTER TABLE tester_tokens   ADD COLUMN IF NOT EXISTS email           TEXT;
 ALTER TABLE user_actions    ADD COLUMN IF NOT EXISTS device_info    JSONB;
 `;

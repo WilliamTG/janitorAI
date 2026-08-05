@@ -66,6 +66,31 @@ app.get("/presentation", (req, res) => {
   res.sendFile(path.join(__dirname, "../../../presentation/index.html"));
 });
 
+// Pitch-, skisse- og sammenstillings-sidene er skrevet uten dokumentskall
+// (de publiseres også som artifacts); pakk dem inn her så nettleseren
+// rendrer i standards mode.
+function sendPresentationPage(res, filename) {
+  const file = path.join(__dirname, "../../../presentation", filename);
+  fs.readFile(file, "utf8", (err, html) => {
+    if (err) return res.status(404).json({ error: "Not found" });
+    res.type("html").send('<!DOCTYPE html>\n<html lang="nb">\n' + html + "\n</html>");
+  });
+}
+
+app.get("/pitch", (req, res) => sendPresentationPage(res, "pitch.html"));
+app.get("/losningsskisse", (req, res) => sendPresentationPage(res, "losningsskisse.html"));
+app.get("/ui-endringer", (req, res) => sendPresentationPage(res, "ui-endringer.html"));
+app.get("/underlag-demo", (req, res) => sendPresentationPage(res, "underlag-demo.html"));
+app.get("/totalbilde", (req, res) => sendPresentationPage(res, "totalbilde.html"));
+app.get("/ui-total", (req, res) => sendPresentationPage(res, "ui-total.html"));
+
+// ---------- SHARE PAGE (public HTML shell; data endpoints gate on PIN) ------
+// Registered before the static/SPA fallback so /share/:id is never swallowed
+// by the web app's index.html.
+app.get("/share/:id", (req, res) => {
+  res.sendFile(path.join(__dirname, "share-page.html"));
+});
+
 if (fs.existsSync(STATIC_DIR)) {
   app.use(express.static(STATIC_DIR, { extensions: ["html"] }));
   app.use((req, res, next) => {
@@ -89,6 +114,14 @@ if (fs.existsSync(STATIC_DIR)) {
 const mediaRouter = require("./routes/media");
 app.use("/api/media", mediaRouter);
 
+// ---------- SHARE LINKS (mixed auth: create/revoke need tester token, the
+// recipient endpoints gate on PIN + view token) ----------
+const shareRouter = require("./routes/share");
+app.use("/api/share", shareRouter);
+
+// ---------- KARTFLIS-PROXY (public: <img> kan ikke sette headere) ----------
+app.get("/api/flis/:z/:y/:x", require("./routes/underlag").tileHandler);
+
 // ---------- ADMIN (own auth: x-admin-secret header) ----------
 // Mounted before the global tester-token guard so it uses its own middleware.
 const adminRouter = require("./routes/admin");
@@ -109,6 +142,10 @@ app.use(requireTesterToken);
 // ---------- PROJECT PERSISTENCE (PROTECTED) ----------
 const projectsRouter = require("./routes/projects");
 app.use("/api/projects", projectsRouter);
+
+// ---------- SAKSUNDERLAG (PROTECTED, proxyer offentlige API-er) ----------
+const underlagRouter = require("./routes/underlag");
+app.use("/api/underlag", underlagRouter);
 
 // ---------- WHOAMI (PROTECTED) ----------
 app.get("/whoami", (req, res) => {
@@ -276,11 +313,16 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     if (project?.projectDescriptionTranscription) projectContext.projectDescriptionTranscription = project.projectDescriptionTranscription;
     if (enrichedNotes.length > 0) projectContext.notes = enrichedNotes;
 
+    // Use the dedicated service-to-service secret for the AI engine call.
+    // This is separate from the user's tester token (which is validated against
+    // the DB) — the AI engine authenticates against its own TESTER_TOKEN env var,
+    // so the backend needs AI_ENGINE_TOKEN set to that same value.
+    const aiToken = process.env.AI_ENGINE_TOKEN || "";
     const response = await fetch(`${aiEngineUrl}/api/report`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-tester-token": token || "",
+        "x-tester-token": aiToken,
       },
       body: JSON.stringify({
         video_url: videoUrl,
@@ -335,11 +377,10 @@ app.get("/api/projects/:id/download/:format", async (req, res) => {
   }
 
   try {
-    // Use the validated token set by middleware — not the raw header.
-    const token = req.testerToken || "";
+    const aiToken = process.env.AI_ENGINE_TOKEN || "";
     const aiRes = await fetch(
       `${aiEngineUrl}/api/export/${encodeURIComponent(docId)}?format=${format}`,
-      { headers: { "x-tester-token": token } }
+      { headers: { "x-tester-token": aiToken } }
     );
 
     if (!aiRes.ok) {

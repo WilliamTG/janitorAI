@@ -11,17 +11,22 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { nb } from '@/src/i18n/nb';
 import { Body, Caption, useAppTheme } from '@/src/ui';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
-type Step = { icon: string; label: string; durationMs: number };
+type Step = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  durationMs: number;
+};
 
 const STEPS: Step[] = [
-  { icon: '🎬', label: 'Analyzing video', durationMs: 3000 },
-  { icon: '🗣️', label: 'Transcribing content', durationMs: 4500 },
-  { icon: '🧠', label: 'Collecting knowledge', durationMs: 3000 },
-  { icon: '📄', label: 'Generating document', durationMs: 99999 },
+  { icon: 'videocam-outline', label: nb.report.generatingSteps[0], durationMs: 3000 },
+  { icon: 'mic-outline', label: nb.report.generatingSteps[1], durationMs: 4500 },
+  { icon: 'sparkles-outline', label: nb.report.generatingSteps[2], durationMs: 3000 },
+  { icon: 'document-text-outline', label: nb.report.generatingSteps[3], durationMs: 99999 },
 ];
 
 // ─── Pulsing orb ─────────────────────────────────────────────────────────────
@@ -109,12 +114,21 @@ function AnimatedDots() {
     return () => clearInterval(id);
   }, []);
 
-  const dots = '●'.repeat(count) + '○'.repeat(3 - count);
-
   return (
-    <Body style={{ color: theme.colors.accent, letterSpacing: 3, fontSize: 10 }}>
-      {dots}
-    </Body>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+      {[0, 1, 2].map(i => (
+        <View
+          key={i}
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: theme.colors.accent,
+            opacity: i < count ? 1 : 0.25,
+          }}
+        />
+      ))}
+    </View>
   );
 }
 
@@ -145,9 +159,12 @@ function StepRow({ step, state, index }: { step: Step; state: StepState; index: 
         {isDone ? (
           <Ionicons name="checkmark-circle" size={22} color={theme.colors.accent} />
         ) : (
-          <Body style={{ fontSize: 18, lineHeight: 24, opacity: isActive ? 1 : 0.3 }}>
-            {step.icon}
-          </Body>
+          <Ionicons
+            name={step.icon}
+            size={20}
+            color={isActive ? theme.colors.foreground : theme.colors.muted}
+            style={{ opacity: isActive ? 1 : 0.4 }}
+          />
         )}
       </View>
 
@@ -166,7 +183,7 @@ function StepRow({ step, state, index }: { step: Step; state: StepState; index: 
       {/* Right side */}
       {isActive && <AnimatedDots />}
       {isDone && (
-        <Caption style={{ color: theme.colors.accent, opacity: 0.65 }}>done</Caption>
+        <Caption style={{ color: theme.colors.accent, opacity: 0.65 }}>{nb.common.done}</Caption>
       )}
     </Animated.View>
   );
@@ -240,10 +257,10 @@ export function ReportGeneratingOverlay({ visible }: Props) {
           <PulsingOrb />
 
           <Body style={{ fontWeight: '700', fontSize: 18, textAlign: 'center', marginBottom: 6 }}>
-            Generating Google Doc
+            {nb.report.generating}
           </Body>
           <Caption muted style={{ textAlign: 'center', marginBottom: 22 }}>
-            The AI is working on it — this may take a moment.
+            KI-en jobber med rapporten — dette kan ta litt tid.
           </Caption>
 
           <View style={{ gap: 2 }}>

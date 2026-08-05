@@ -42,6 +42,26 @@ export type ReportMeta = {
   summaryText?: string;
 };
 
+/** Posisjon fanget i felt (B9). Bevis uten geo er fortsatt gyldige. */
+export type GeoPoint = {
+  lat: number;
+  lng: number;
+};
+
+/** Saksunderlag hentet fra offentlige API-er ved adressevalg (Kartverket). */
+export type CaseFile = {
+  addressText: string;
+  postCode?: string;
+  postPlace?: string;
+  municipality?: string;
+  /** Firesifret kommunenummer (f.eks. «0301») — trengs for eiendomsoppslag. */
+  municipalityNumber?: string;
+  gnr?: number;
+  bnr?: number;
+  lat: number;
+  lon: number;
+};
+
 export type Photo = {
   id: string;
   uri: string;
@@ -49,6 +69,11 @@ export type Photo = {
   aiGenerated?: boolean;
   /** ID of the durable copy stored on the backend (set after upload). */
   remoteId?: string;
+  /** SHA-256 satt av serveren ved opplasting (B11). */
+  sha256?: string;
+  geo?: GeoPoint;
+  /** ISO-tidspunkt for fangst i felt. */
+  capturedAt?: string;
 };
 
 export type Note = {
@@ -60,6 +85,8 @@ export type Note = {
   audioUri?: string;
   /** ID of the durable audio copy stored on the backend (set after upload). */
   audioRemoteId?: string;
+  /** SHA-256 satt av serveren ved opplasting (B11). */
+  audioSha256?: string;
   transcription?: string;
   images?: string[];
   photos?: Photo[];
@@ -67,6 +94,11 @@ export type Note = {
   videoUri?: string;
   /** ID of the durable video copy stored on the backend (set after upload). */
   videoRemoteId?: string;
+  /** SHA-256 satt av serveren ved opplasting (B11). */
+  videoSha256?: string;
+  videoGeo?: GeoPoint;
+  /** ISO-tidspunkt for video-fangst i felt. */
+  videoCapturedAt?: string;
 };
 
 export type Project = {
@@ -91,6 +123,8 @@ export type Project = {
   deletedNotes?: Record<string, string>;
   /** Per-project metadata used to populate Google Doc template placeholders. */
   reportMeta?: ReportMeta;
+  /** Saksunderlag fra adressevalget i veiviseren (Kartverket m.fl.). */
+  caseFile?: CaseFile;
   /** URL of the generated Google Doc (persisted after successful generation). */
   reportUrl?: string;
   /** Lifecycle status of the most recent report generation attempt. */
@@ -100,3 +134,9 @@ export type Project = {
 };
 
 export const PROJECT_STORAGE_KEY = '@inspection_projects';
+
+// Sentinel-verdier som lagres i prosjektdata når felt står tomme. De er
+// engelske av historiske grunner og må aldri vises rått — begge skjermene
+// oversetter dem ved visning (nb.projects.dateNotSet/unknownInspector).
+export const UNKNOWN_INSPECTOR = 'Unknown inspector';
+export const NO_DATE_SET = 'No date set';

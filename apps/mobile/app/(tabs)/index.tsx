@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
@@ -13,13 +13,33 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import {
+import apiFetch, {
   clearTesterToken,
   loadTesterToken,
   setTesterToken,
   validateTesterToken,
 } from '@/src/lib/apiFetch';
-import { Project } from '@/src/features/projects/types';
+import { formatDate, nb } from '@/src/i18n/nb';
+import { getApiBaseUrl } from '@/src/config/api';
+import { CaseFile, NO_DATE_SET, Project, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
+
+// Treff fra Kartverkets adresse-API, via /api/underlag/adresse.
+type AddressHit = {
+  adressetekst: string;
+  postnummer?: string;
+  poststed?: string;
+  kommunenavn?: string;
+  kommunenummer?: string;
+  gnr?: number;
+  bnr?: number;
+  lat?: number;
+  lon?: number;
+};
+
+function tidyPlace(value?: string): string {
+  if (!value) return '';
+  return value.charAt(0) + value.slice(1).toLowerCase();
+}
 import { loadProfile } from '@/src/storage/profileStorage';
 import {
   loadProjects,
@@ -46,9 +66,11 @@ import {
   PrimaryButton,
   Screen,
   SecondaryButton,
+  StatusChip,
   TextField,
   Title,
   useAppTheme,
+  useToast,
 } from '@/src/ui';
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -62,19 +84,8 @@ function getProjectStatus(project: Project): ProjectStatus {
   return 'draft';
 }
 
-const STATUS_LABEL: Record<ProjectStatus, string> = {
-  draft: 'Draft',
-  processing: 'Processing AI…',
-  ready: 'Ready',
-  failed: 'Failed',
-};
-
-const STATUS_ICON: Record<Exclude<ProjectStatus, 'processing'>, keyof typeof Ionicons.glyphMap> = {
-  draft: 'ellipse-outline',
-  ready: 'checkmark-circle',
-  failed: 'warning',
-};
-
+// Kun til filterchips (kant/bakgrunn) — selve statusvisningen på kortet
+// bruker StatusChip med WCAG AA-fargepar (B20).
 const STATUS_COLOR: Record<ProjectStatus, string> = {
   draft: '#94a3b8',
   processing: '#60a5fa',
@@ -82,16 +93,18 @@ const STATUS_COLOR: Record<ProjectStatus, string> = {
   failed: '#ef4444',
 };
 
+const UNKNOWN_INSPECTOR_LABEL = nb.projects.unknownInspector;
+
 // ── Filter helpers ────────────────────────────────────────────────────────────
 
 type FilterStatus = 'all' | ProjectStatus;
 
 const FILTER_CHIPS: { value: FilterStatus; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'processing', label: 'Processing' },
-  { value: 'ready', label: 'Ready' },
-  { value: 'failed', label: 'Failed' },
+  { value: 'all', label: nb.projects.filterAll },
+  { value: 'draft', label: nb.status.draft },
+  { value: 'processing', label: nb.status.processing },
+  { value: 'ready', label: nb.status.ready },
+  { value: 'failed', label: nb.status.failed },
 ];
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -99,6 +112,7 @@ const FILTER_CHIPS: { value: FilterStatus; label: string }[] = [
 export default function Index() {
   const theme = useAppTheme();
   const router = useRouter();
+  const toast = useToast();
 
   // Projects
   const [projects, setProjects] = useState<Project[]>([]);
@@ -118,6 +132,11 @@ export default function Index() {
   // Creation wizard: 0 = closed, 1/2/3 = active step
   const [wizardStep, setWizardStep] = useState<0 | 1 | 2 | 3>(0);
   const [wizardName, setWizardName] = useState('');
+  const [wizardNameError, setWizardNameError] = useState<string | null>(null);
+  // Saksunderlag: adresseforslag fra Kartverket mens man skriver (B17).
+  const [addressHits, setAddressHits] = useState<AddressHit[]>([]);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const [wizardCaseFile, setWizardCaseFile] = useState<CaseFile | null>(null);
   const [wizardDate, setWizardDate] = useState(() => localDateString(new Date()));
   const [wizardInspector, setWizardInspector] = useState('');
   const [wizardDescription, setWizardDescription] = useState('');
@@ -129,7 +148,7 @@ export default function Index() {
   const handleUnauthorized = async (showModal = true) => {
     await clearTesterToken();
     setTokenStatus('invalid');
-    setTokenError('Invalid access token. Please enter a valid token to continue.');
+    setTokenError('Ugyldig tilgangskode. Skriv inn en gyldig kode for å fortsette.');
     if (showModal) setShowTokenModal(true);
   };
 
@@ -149,14 +168,13 @@ export default function Index() {
         await handleUnauthorized(false);
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const saveToken = async () => {
     setTokenError(null);
     const trimmedToken = tokenInput.trim();
     if (!trimmedToken) {
-      setTokenError('Token required. Please enter the tester token to continue.');
+      setTokenError(nb.auth.accessMissing);
       return;
     }
     setIsValidatingToken(true);
@@ -215,7 +233,7 @@ export default function Index() {
                 ? touchProject({
                     ...p,
                     reportStatus: 'failed' as const,
-                    reportError: 'Generation was interrupted — please try again.',
+                    reportError: nb.report.interrupted,
                   })
                 : p
             );
@@ -224,7 +242,7 @@ export default function Index() {
             // Push each reset project so the server copy is also corrected.
             for (const p of reset) {
               if (p.reportStatus === 'failed' &&
-                  p.reportError === 'Generation was interrupted — please try again.') {
+                  p.reportError === nb.report.interrupted) {
                 schedulePush(p);
               }
             }
@@ -256,15 +274,18 @@ export default function Index() {
       toSave = newProjects.map((p) => (p.id === touched!.id ? touched! : p));
     }
     setProjects(toSave);
+    let saved = true;
     try {
       await saveProjects(toSave);
     } catch {
       console.warn('Failed to save projects');
-      Alert.alert('Warning', 'Could not save projects to your device.');
+      saved = false;
+      toast.show({ message: 'Kunne ikke lagre prosjektene på enheten', variant: 'error', durationMs: 4200 });
     }
     if (touched) {
       schedulePush(touched);
     }
+    return saved;
   };
 
   // ── Project CRUD ────────────────────────────────────────────────────────────
@@ -272,10 +293,72 @@ export default function Index() {
   const resetWizard = () => {
     setWizardStep(0);
     setWizardName('');
+    setWizardNameError(null);
     setWizardDate(localDateString(new Date()));
     setWizardInspector('');
     setWizardDescription('');
     setWizardMediaFiles([]);
+    setWizardCaseFile(null);
+    setAddressHits([]);
+    pickedAddressRef.current = null;
+  };
+
+  // ── Saksunderlag: adressesøk mot Kartverket mens man skriver ────────────────
+  const pickedAddressRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const query = wizardName.trim();
+    if (wizardStep !== 1 || query.length < 4 || query === pickedAddressRef.current) {
+      setAddressHits([]);
+      setIsSearchingAddress(false);
+      return;
+    }
+    let cancelled = false;
+    setIsSearchingAddress(true);
+    const timer = setTimeout(async () => {
+      try {
+        const response = await apiFetch(
+          `${getApiBaseUrl()}/api/underlag/adresse?sok=${encodeURIComponent(query)}`,
+          { skipAuthHandling: true },
+        );
+        if (cancelled || !response.ok) return;
+        const data: any = await response.json();
+        if (!cancelled) {
+          setAddressHits(Array.isArray(data.adresser) ? data.adresser.slice(0, 4) : []);
+        }
+      } catch {
+        // Adressesøket er en berikelse — feil skal aldri stoppe veiviseren.
+      } finally {
+        if (!cancelled) setIsSearchingAddress(false);
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [wizardName, wizardStep]);
+
+  const pickAddress = (hit: AddressHit) => {
+    const label = hit.poststed ? `${hit.adressetekst}, ${tidyPlace(hit.poststed)}` : hit.adressetekst;
+    pickedAddressRef.current = label;
+    setWizardName(label);
+    setWizardNameError(null);
+    setAddressHits([]);
+    if (typeof hit.lat === 'number' && typeof hit.lon === 'number') {
+      setWizardCaseFile({
+        addressText: hit.adressetekst,
+        postCode: hit.postnummer,
+        postPlace: tidyPlace(hit.poststed),
+        municipality: tidyPlace(hit.kommunenavn),
+        municipalityNumber: hit.kommunenummer,
+        gnr: hit.gnr,
+        bnr: hit.bnr,
+        lat: hit.lat,
+        lon: hit.lon,
+      });
+    } else {
+      setWizardCaseFile(null);
+    }
   };
 
   const createProject = async () => {
@@ -285,7 +368,8 @@ export default function Index() {
     const description = wizardDescription.trim();
 
     if (!name) {
-      Alert.alert('Missing name', 'Please give the project a name.');
+      setWizardStep(1);
+      setWizardNameError('Gi prosjektet et navn');
       return;
     }
 
@@ -294,13 +378,19 @@ export default function Index() {
     const newProject: Project = {
       id: Date.now().toString(),
       name,
-      inspectionDate: date || 'No date set',
-      inspector: inspector || 'Unknown inspector',
+      inspectionDate: date || NO_DATE_SET,
+      inspector: inspector || UNKNOWN_INSPECTOR,
       notes: [],
       ...(description ? { projectDescriptionText: description } : {}),
+      ...(wizardCaseFile ? { caseFile: wizardCaseFile } : {}),
       reportMeta: {
         contributors: [{}],
         buildings: [{}],
+        // Saksunderlaget forhåndsutfyller rapportskjemaet (B17-sporet).
+        addressStreet: wizardCaseFile?.addressText || undefined,
+        addressPostcodeCity: wizardCaseFile
+          ? [wizardCaseFile.postCode, wizardCaseFile.postPlace].filter(Boolean).join(' ') || undefined
+          : undefined,
         inspectionDoneByName: profile.name || undefined,
         inspectionDoneByPhone: profile.phone || undefined,
         inspectionDoneByCompany: profile.company || undefined,
@@ -308,33 +398,52 @@ export default function Index() {
     };
 
     const newProjects = [newProject, ...projects];
-    await saveProjectsToStorage(newProjects, newProject);
+    const saved = await saveProjectsToStorage(newProjects, newProject);
     resetWizard();
+    // Ikke overskriv lagringsfeil-toasten med en suksessmelding (én toast vises om gangen).
+    if (saved) {
+      toast.show({ message: nb.projects.created, variant: 'success' });
+    }
   };
 
-  const deleteProject = async (id: string) => {
+  // B15: bekreftelse før sletting — Alert beholdes (destruktiv bekreftelse).
+  const confirmDeleteProject = (project: Project) => {
     const doDelete = async () => {
-      const newProjects = await deleteProjectFromStorage(id);
+      const newProjects = await deleteProjectFromStorage(project.id);
       setProjects(newProjects);
-      deleteProjectRemote(id).catch(() => {});
+      deleteProjectRemote(project.id).catch(() => {});
+      toast.show({ message: nb.projects.deleted, variant: 'success' });
     };
 
     // Alert.alert is a silent no-op on web — use window.confirm instead.
     if (Platform.OS === 'web') {
-      if (window.confirm('Delete this project and all its notes? This cannot be undone.')) {
-        await doDelete();
+      if (window.confirm(`${nb.projects.deleteTitle}\n\n${nb.projects.deleteMessage(project.name)}`)) {
+        void doDelete();
       }
       return;
     }
 
     Alert.alert(
-      'Delete project',
-      'This will permanently delete this project and all its notes. This cannot be undone.',
+      nb.projects.deleteTitle,
+      nb.projects.deleteMessage(project.name),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: doDelete },
+        { text: nb.common.cancel, style: 'cancel' },
+        { text: nb.projects.deleteConfirm, style: 'destructive', onPress: () => void doDelete() },
       ]
     );
+  };
+
+  // B15: diskret meny på kortet — valg-dialog via Alert er OK.
+  const showProjectMenu = (project: Project) => {
+    // På web er Alert med flere valg en no-op — gå rett til slettebekreftelsen.
+    if (Platform.OS === 'web') {
+      confirmDeleteProject(project);
+      return;
+    }
+    Alert.alert(nb.projects.projectMenu, project.name, [
+      { text: nb.common.cancel, style: 'cancel' },
+      { text: nb.common.delete, style: 'destructive', onPress: () => confirmDeleteProject(project) },
+    ]);
   };
 
   // ── Render: token modal ─────────────────────────────────────────────────────
@@ -350,30 +459,30 @@ export default function Index() {
       }}>
         <GlassCard style={{ width: '100%', gap: theme.spacing.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Title>Enter tester token</Title>
+            <Title>{nb.auth.accessTitle}</Title>
             <TouchableOpacity
               onPress={() => setShowTokenModal(false)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               disabled={isValidatingToken}
-              accessibilityLabel="Close"
+              accessibilityLabel={nb.common.close}
             >
               <Ionicons name="close" size={22} color={theme.colors.muted} />
             </TouchableOpacity>
           </View>
-          <Body muted>Access is restricted. Enter your tester token to continue.</Body>
+          <Body muted>{nb.auth.accessMessage}</Body>
           {tokenError && <Caption style={{ color: theme.colors.danger }}>{tokenError}</Caption>}
           <TextField
             value={tokenInput}
             onChangeText={(value) => { setTokenInput(value); setTokenError(null); }}
-            placeholder="Tester token"
+            placeholder={nb.auth.accessPlaceholder}
             autoCapitalize="none"
             autoCorrect={false}
           />
           <PrimaryButton onPress={saveToken} loading={isValidatingToken}>
-            Validate & Save
+            {nb.auth.accessSave}
           </PrimaryButton>
           <SecondaryButton onPress={handleRemoveToken} disabled={isValidatingToken}>
-            Remove token
+            Fjern koden
           </SecondaryButton>
         </GlassCard>
       </View>
@@ -381,6 +490,12 @@ export default function Index() {
   );
 
   // ── Render: 3-step creation wizard ─────────────────────────────────────────
+
+  const trimmedWizardName = wizardName.trim().toLowerCase();
+  // B17: case-insensitiv duplikatsjekk — varsler, men blokkerer ikke.
+  const isDuplicateName =
+    trimmedWizardName.length > 0 &&
+    projects.some((p) => p.name.trim().toLowerCase() === trimmedWizardName);
 
   const renderWizardModal = () => (
     <Modal
@@ -400,8 +515,8 @@ export default function Index() {
         }}>
           {/* Step label + close */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Caption muted style={{ fontWeight: '600' }}>Step {wizardStep} of 3</Caption>
-            <IconButton onPress={resetWizard}>
+            <Caption muted style={{ fontWeight: '600' }}>{`Steg ${wizardStep} av 3`}</Caption>
+            <IconButton onPress={resetWizard} accessibilityLabel={nb.common.close}>
               <Ionicons name="close" size={20} color={theme.colors.muted} />
             </IconButton>
           </View>
@@ -424,31 +539,86 @@ export default function Index() {
           {/* Step 1 — Details */}
           {wizardStep === 1 && (
             <>
-              <Title style={{ fontSize: 20 }}>Inspection details</Title>
+              <Title style={{ fontSize: 20 }}>Befaringsdetaljer</Title>
               <TextField
-                label="Project name *"
+                label={`${nb.projects.nameLabel} *`}
                 value={wizardName}
-                onChangeText={setWizardName}
-                placeholder="e.g. Main lobby walkthrough"
+                onChangeText={(value) => {
+                  setWizardName(value);
+                  if (wizardNameError) setWizardNameError(null);
+                }}
+                placeholder={nb.projects.namePlaceholder}
                 autoFocus
+                error={wizardNameError ?? undefined}
               />
-              <DateField label="Inspection date" value={wizardDate} onChange={setWizardDate} />
+              {/* Saksunderlag: adresseforslag fra Kartverket */}
+              {isSearchingAddress && <Caption muted>{nb.underlag.searching}</Caption>}
+              {addressHits.length > 0 && (
+                <View style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radii.md, overflow: 'hidden' }}>
+                  {addressHits.map((hit, index) => (
+                    <Pressable
+                      key={`${hit.adressetekst}-${hit.postnummer}-${index}`}
+                      onPress={() => pickAddress(hit)}
+                      accessibilityRole="button"
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: theme.spacing.sm,
+                        paddingVertical: theme.spacing.sm,
+                        paddingHorizontal: theme.spacing.md,
+                        borderTopWidth: index === 0 ? 0 : 1,
+                        borderTopColor: theme.colors.border,
+                        backgroundColor: theme.colors.surfaceSecondary,
+                      }}
+                    >
+                      <Ionicons name="location-outline" size={16} color={theme.colors.accent} />
+                      <View style={{ flex: 1 }}>
+                        <Body style={{ fontWeight: '600' }}>{hit.adressetekst}</Body>
+                        <Caption muted>
+                          {[hit.postnummer, tidyPlace(hit.poststed), tidyPlace(hit.kommunenavn)]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </Caption>
+                      </View>
+                    </Pressable>
+                  ))}
+                  <View style={{ paddingVertical: 6, paddingHorizontal: theme.spacing.md, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
+                    <Caption muted>{nb.underlag.pickHint}</Caption>
+                  </View>
+                </View>
+              )}
+              {wizardCaseFile && addressHits.length === 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+                  <Ionicons name="checkmark-circle-outline" size={14} color={theme.colors.accent} />
+                  <Caption muted>{`${nb.underlag.title}: ${nb.underlag.cadastre} ${wizardCaseFile.gnr}/${wizardCaseFile.bnr} · ${wizardCaseFile.municipality}`}</Caption>
+                </View>
+              )}
+              {/* B17: inline duplikatvarsel — ikke blokkerende */}
+              {isDuplicateName && !wizardNameError && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+                  <Ionicons name="alert-circle-outline" size={14} color={theme.colors.danger} />
+                  <Caption style={{ color: theme.colors.danger }}>{nb.projects.duplicateName}</Caption>
+                </View>
+              )}
+              <DateField label="Befaringsdato" value={wizardDate} onChange={setWizardDate} />
               <TextField
-                label="Inspector name"
+                label={nb.projects.inspectorLabel}
                 value={wizardInspector}
                 onChangeText={setWizardInspector}
-                placeholder="Your name"
+                placeholder="Navnet ditt"
               />
               <PrimaryButton
+                style={{ minHeight: 56 }}
+                icon={<Ionicons name="arrow-forward" size={18} color="#fff" />}
                 onPress={() => {
                   if (!wizardName.trim()) {
-                    Alert.alert('Missing name', 'Please enter a project name to continue.');
+                    setWizardNameError('Gi prosjektet et navn');
                     return;
                   }
                   setWizardStep(2);
                 }}
               >
-                Next →
+                {nb.common.next}
               </PrimaryButton>
             </>
           )}
@@ -456,9 +626,9 @@ export default function Index() {
           {/* Step 2 — Media Upload */}
           {wizardStep === 2 && (
             <>
-              <Title style={{ fontSize: 20 }}>Add media</Title>
+              <Title style={{ fontSize: 20 }}>Legg til medier</Title>
               <Caption muted>
-                Select photos and videos for this inspection. You can also add more after the project is created.
+                Velg bilder og videoer fra befaringen. Du kan legge til flere etter at prosjektet er opprettet.
               </Caption>
 
               {/* Drop zone — triggers the hidden file input */}
@@ -484,9 +654,9 @@ export default function Index() {
                   color={wizardMediaFiles.length > 0 ? theme.colors.accent : theme.colors.muted}
                 />
                 <Body style={{ color: wizardMediaFiles.length > 0 ? theme.colors.accent : theme.colors.muted, fontWeight: '600' }}>
-                  {wizardMediaFiles.length > 0 ? 'Tap to change selection' : 'Tap to select files'}
+                  {wizardMediaFiles.length > 0 ? 'Trykk for å endre utvalget' : 'Trykk for å velge filer'}
                 </Body>
-                <Caption muted>Photos & videos · Optional</Caption>
+                <Caption muted>Bilder og videoer · Valgfritt</Caption>
               </Pressable>
 
               {/* Hidden file input (web only) */}
@@ -512,7 +682,7 @@ export default function Index() {
               {wizardMediaFiles.length > 0 && (
                 <GlassCard style={{ gap: theme.spacing.xs }}>
                   <Caption muted style={{ fontWeight: '600' }}>
-                    {wizardMediaFiles.length} file{wizardMediaFiles.length !== 1 ? 's' : ''} selected
+                    {wizardMediaFiles.length === 1 ? '1 fil valgt' : `${wizardMediaFiles.length} filer valgt`}
                   </Caption>
                   {wizardMediaFiles.map((f, i) => (
                     <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
@@ -529,11 +699,19 @@ export default function Index() {
               )}
 
               <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-                <SecondaryButton style={{ flex: 1 }} onPress={() => setWizardStep(1)}>
-                  ← Back
+                <SecondaryButton
+                  style={{ flex: 1, minHeight: 56 }}
+                  icon={<Ionicons name="arrow-back" size={18} color={theme.colors.foreground} />}
+                  onPress={() => setWizardStep(1)}
+                >
+                  {nb.common.back}
                 </SecondaryButton>
-                <PrimaryButton style={{ flex: 1 }} onPress={() => setWizardStep(3)}>
-                  Next →
+                <PrimaryButton
+                  style={{ flex: 1, minHeight: 56 }}
+                  icon={<Ionicons name="arrow-forward" size={18} color="#fff" />}
+                  onPress={() => setWizardStep(3)}
+                >
+                  {nb.common.next}
                 </PrimaryButton>
               </View>
             </>
@@ -542,46 +720,50 @@ export default function Index() {
           {/* Step 3 — Notes & Review */}
           {wizardStep === 3 && (
             <>
-              <Title style={{ fontSize: 20 }}>Notes & review</Title>
+              <Title style={{ fontSize: 20 }}>Notater og oppsummering</Title>
 
               {/* Initial notes / description */}
               <TextField
-                label="Initial notes (optional)"
+                label="Innledende notater (valgfritt)"
                 multiline
                 value={wizardDescription}
                 onChangeText={setWizardDescription}
-                placeholder="Describe the damage, location, client context, special considerations…"
+                placeholder={nb.detail.descriptionPlaceholder}
                 style={{ minHeight: 90, textAlignVertical: 'top' }}
               />
 
               {/* Review summary */}
               <GlassCard style={{ gap: theme.spacing.sm }}>
                 <View style={{ gap: theme.spacing.xs }}>
-                  <Caption muted>Project name</Caption>
+                  <Caption muted>{nb.projects.nameLabel}</Caption>
                   <Body>{wizardName}</Body>
                 </View>
                 <View style={{ gap: theme.spacing.xs }}>
-                  <Caption muted>Inspection date</Caption>
-                  <Body>{wizardDate || 'Not set'}</Body>
+                  <Caption muted>Befaringsdato</Caption>
+                  <Body>{formatDate(wizardDate) || 'Ikke angitt'}</Body>
                 </View>
                 <View style={{ gap: theme.spacing.xs }}>
-                  <Caption muted>Inspector</Caption>
-                  <Body>{wizardInspector.trim() || 'Unknown inspector'}</Body>
+                  <Caption muted>{nb.projects.inspectorLabel}</Caption>
+                  <Body>{wizardInspector.trim() || UNKNOWN_INSPECTOR_LABEL}</Body>
                 </View>
                 {wizardMediaFiles.length > 0 && (
                   <View style={{ gap: theme.spacing.xs }}>
-                    <Caption muted>Media selected</Caption>
-                    <Body>{wizardMediaFiles.length} file{wizardMediaFiles.length !== 1 ? 's' : ''}</Body>
+                    <Caption muted>Valgte medier</Caption>
+                    <Body>{wizardMediaFiles.length === 1 ? '1 fil' : `${wizardMediaFiles.length} filer`}</Body>
                   </View>
                 )}
               </GlassCard>
 
               <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-                <SecondaryButton style={{ flex: 1 }} onPress={() => setWizardStep(2)}>
-                  ← Back
+                <SecondaryButton
+                  style={{ flex: 1, minHeight: 56 }}
+                  icon={<Ionicons name="arrow-back" size={18} color={theme.colors.foreground} />}
+                  onPress={() => setWizardStep(2)}
+                >
+                  {nb.common.back}
                 </SecondaryButton>
-                <PrimaryButton style={{ flex: 1 }} onPress={createProject}>
-                  Create project
+                <PrimaryButton style={{ flex: 1, minHeight: 56 }} onPress={createProject}>
+                  Opprett prosjekt
                 </PrimaryButton>
               </View>
             </>
@@ -638,18 +820,23 @@ export default function Index() {
         <Ionicons name="clipboard-outline" size={40} color={theme.colors.accent} />
       </View>
       <View style={{ alignItems: 'center', gap: theme.spacing.sm }}>
-        <Title style={{ textAlign: 'center' }}>No reports yet</Title>
+        <Title style={{ textAlign: 'center' }}>{nb.projects.empty}</Title>
         <Body muted style={{ textAlign: 'center', maxWidth: 280 }}>
-          No inspection reports generated yet. Click below to start your first inspection!
+          {nb.projects.emptyHint}
         </Body>
       </View>
-      <PrimaryButton onPress={() => setWizardStep(1)} width={240}>
-        + Create first inspection
+      <PrimaryButton
+        onPress={() => setWizardStep(1)}
+        width={260}
+        style={{ minHeight: 56 }}
+        icon={<Ionicons name="add" size={20} color="#fff" />}
+      >
+        {nb.projects.newProject}
       </PrimaryButton>
     </View>
   );
 
-  // ── Render: project card ────────────────────────────────────────────────────
+  // ── Render: project card (B14: hele kortet er klikkbart) ────────────────────
 
   const renderProjectCard = ({ item, index }: { item: Project; index: number }) => {
     const notes = item.notes || [];
@@ -658,109 +845,80 @@ export default function Index() {
     const photoCount = notes.reduce((sum, n) => sum + (n.photos?.length || 0), 0);
     const status = getProjectStatus(item);
 
+    const dateText = formatDate(item.inspectionDate);
+    const inspectorText = item.inspector === UNKNOWN_INSPECTOR ? UNKNOWN_INSPECTOR_LABEL : item.inspector;
+    const metaText = dateText ? `${dateText} · ${inspectorText}` : inspectorText;
+
+    const openProject = () => router.push(`/projects/${item.id}`);
+    // «Prøv igjen» skal faktisk prøve igjen: detaljskjermen leser retry-parameteren,
+    // åpner rapport-fanen og starter genereringen på nytt.
+    const retryReport = () => router.push(`/projects/${item.id}?retry=1`);
+
     return (
       <Animated.View entering={FadeInDown.springify().delay(index * 50)}>
-        <GlassCard style={{ marginBottom: theme.spacing.md, gap: theme.spacing.sm }}>
-          {/* Name + delete */}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: theme.spacing.sm }}>
-            <View style={{ flex: 1, gap: theme.spacing.xs }}>
-              <Title numberOfLines={1}>{item.name}</Title>
-              <Caption muted>{item.inspectionDate}</Caption>
-              <Caption muted>Inspector: {item.inspector}</Caption>
-            </View>
-            <IconButton
-              accessibilityLabel="Delete project"
-              onPress={() => deleteProject(item.id)}
-              style={{ backgroundColor: theme.colors.surfaceSecondary }}
-            >
-              <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
-            </IconButton>
-          </View>
-
-          {/* Status badge */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, flexWrap: 'wrap' }}>
-            {status === 'processing' ? (
-              <ActivityIndicator size="small" color={STATUS_COLOR.processing} />
-            ) : (
-              <Ionicons
-                name={STATUS_ICON[status as Exclude<ProjectStatus, 'processing'>]}
-                size={15}
-                color={STATUS_COLOR[status]}
-              />
-            )}
-            <Caption style={{ color: STATUS_COLOR[status], fontWeight: '600' }}>
-              {STATUS_LABEL[status]}
-            </Caption>
-            {status === 'failed' && (
-              <SecondaryButton
-                onPress={() =>
-                  Alert.alert(
-                    'Report error',
-                    item.reportError || 'An error occurred during report generation.'
-                  )
-                }
-                width={96}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${nb.projects.openProject}: ${item.name}`}
+          onPress={() => {
+            Haptics.selectionAsync();
+            openProject();
+          }}
+          style={{ marginBottom: theme.spacing.md }}
+        >
+          <GlassCard style={{ gap: theme.spacing.sm }}>
+            {/* Name + meta + menu */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: theme.spacing.sm }}>
+              <View style={{ flex: 1, gap: theme.spacing.xs }}>
+                <Title numberOfLines={1}>{item.name}</Title>
+                <Caption muted>{metaText}</Caption>
+              </View>
+              <IconButton
+                accessibilityLabel={nb.projects.projectMenu}
+                onPress={() => showProjectMenu(item)}
+                style={{ width: 34, height: 34, backgroundColor: theme.colors.surfaceSecondary }}
               >
-                View Error
-              </SecondaryButton>
-            )}
-          </View>
+                <Ionicons name="ellipsis-horizontal" size={18} color={theme.colors.muted} />
+              </IconButton>
+            </View>
 
-          {/* Stats */}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
-            <StatPill icon="document-text-outline" label={`${noteCount} notes`} />
-            <StatPill icon="mic-outline" label={`${audioCount} audio`} />
-            <StatPill icon="camera-outline" label={`${photoCount} photos`} />
-          </View>
-
-          {/* CTA */}
-          <PrimaryButton
-            width="100%"
-            onPress={() => router.push(`/projects/${item.id}`)}
-          >
-            Open project →
-          </PrimaryButton>
-        </GlassCard>
+            {/* Status + tellere */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+              <StatusChip status={status} onRetry={status === 'failed' ? retryReport : undefined} />
+              <Caption muted>
+                {`${noteCount} ${nb.projects.notesCount} · ${photoCount} ${nb.projects.photosCount} · ${audioCount} ${nb.projects.audioCount}`}
+              </Caption>
+            </View>
+          </GlassCard>
+        </Pressable>
       </Animated.View>
     );
   };
 
-  // ── Render: list header ─────────────────────────────────────────────────────
+  // ── Render: scrollable list header (søk + filter + ny) ──────────────────────
 
   const renderListHeader = () => (
     <View style={{ gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <View>
-          <Caption muted>Inspections</Caption>
-          <Title>Projects</Title>
-        </View>
-        <IconButton onPress={() => setShowTokenModal(true)}>
-          <Ionicons name="key-outline" size={18} color={theme.colors.foreground} />
-        </IconButton>
-      </View>
-
       {tokenStatus !== 'valid' && (
         <GlassCard style={{ gap: theme.spacing.xs }}>
-          <Title muted>Access needed</Title>
-          <Body muted>Enter your tester token to unlock report generation.</Body>
-          <PrimaryButton onPress={() => setShowTokenModal(true)}>Enter token</PrimaryButton>
+          <Title muted>{nb.auth.accessTitle}</Title>
+          <Body muted>{nb.auth.accessMessage}</Body>
+          <PrimaryButton onPress={() => setShowTokenModal(true)}>Skriv inn kode</PrimaryButton>
         </GlassCard>
       )}
 
-      <MediaUploadErrorBanner />
-
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.sm }}>
-        <SyncStatusIndicator onSyncNow={handleSyncNow} />
-        <SecondaryButton onPress={() => setWizardStep(1)}>
-          + New project
-        </SecondaryButton>
-      </View>
+      <PrimaryButton
+        style={{ minHeight: 56 }}
+        icon={<Ionicons name="add" size={20} color="#fff" />}
+        onPress={() => setWizardStep(1)}
+      >
+        {nb.projects.newProject}
+      </PrimaryButton>
 
       {/* Search input */}
       <TextField
         value={searchQuery}
         onChangeText={setSearchQuery}
-        placeholder="Search projects…"
+        placeholder={nb.projects.searchPlaceholder}
         autoCapitalize="none"
         autoCorrect={false}
         clearButtonMode="while-editing"
@@ -818,6 +976,24 @@ export default function Index() {
     <Screen scrollable={false} style={{ flex: 1 }}>
       {renderTokenModal()}
       {renderWizardModal()}
+
+      {/* B16: fast topprad som ikke scroller — tittel, synk-status og medievarsel */}
+      <View style={{ gap: theme.spacing.sm, marginBottom: theme.spacing.md }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View>
+            <Title>{nb.common.appName}</Title>
+            <Caption muted>{nb.projects.subtitle}</Caption>
+          </View>
+          <IconButton accessibilityLabel={nb.auth.accessTitle} onPress={() => setShowTokenModal(true)}>
+            <Ionicons name="key-outline" size={18} color={theme.colors.foreground} />
+          </IconButton>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <SyncStatusIndicator onSyncNow={handleSyncNow} />
+        </View>
+        <MediaUploadErrorBanner />
+      </View>
+
       <FlatList
         data={isLoading ? [] : filteredProjects}
         keyExtractor={(item) => item.id}
@@ -837,10 +1013,10 @@ export default function Index() {
                 }}>
                   <Ionicons name="search-outline" size={40} color={theme.colors.muted} />
                   <Body muted style={{ textAlign: 'center' }}>
-                    No projects match your filter.
+                    Ingen prosjekter samsvarer med filteret.
                   </Body>
                   <SecondaryButton onPress={() => { setFilterStatus('all'); setSearchQuery(''); }}>
-                    Clear filters
+                    Nullstill filtrene
                   </SecondaryButton>
                 </View>
               )
@@ -852,32 +1028,3 @@ export default function Index() {
     </Screen>
   );
 }
-
-// ── StatPill ──────────────────────────────────────────────────────────────────
-
-type StatPillProps = {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-};
-
-const StatPill = ({ icon, label }: StatPillProps) => {
-  const theme = useAppTheme();
-  return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        flexBasis: '48%',
-        flexGrow: 1,
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: theme.spacing.xs,
-        backgroundColor: theme.colors.surfaceSecondary,
-        borderRadius: theme.radii.pill,
-        gap: theme.spacing.xs,
-      }}
-    >
-      <Ionicons name={icon} size={16} color={theme.colors.accentStrong} />
-      <Caption>{label}</Caption>
-    </View>
-  );
-};

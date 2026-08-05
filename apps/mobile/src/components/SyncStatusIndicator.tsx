@@ -2,16 +2,17 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, View } from 'react-native';
 
+import { nb } from '@/src/i18n/nb';
 import { useSyncStatus, useMediaUploadError, SyncState } from '@/src/sync/syncStatus';
 import { Caption, useAppTheme } from '@/src/ui';
 
 const LABELS: Record<SyncState, string> = {
-  idle: 'Cloud sync',
-  syncing: 'Syncing…',
-  synced: 'Saved to cloud',
-  offline: 'Offline — saved on device',
-  error: 'Sync error',
-  disabled: 'Saved on device',
+  idle: nb.sync.idle,
+  syncing: nb.sync.syncing,
+  synced: nb.sync.synced,
+  offline: nb.sync.offline,
+  error: nb.sync.error,
+  disabled: nb.sync.disabled,
 };
 
 const ICONS: Record<SyncState, keyof typeof Ionicons.glyphMap> = {
@@ -48,14 +49,14 @@ export default function SyncStatusIndicator({ onSyncNow }: Props) {
 
   const label =
     hasMediaError && status === 'synced'
-      ? 'Media not synced'
+      ? nb.sync.mediaNotSynced
       : LABELS[status];
 
   return (
     <Pressable
       onPress={onSyncNow}
       disabled={!onSyncNow || status === 'syncing'}
-      accessibilityLabel="Sync now"
+      accessibilityLabel={nb.sync.syncNow}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
