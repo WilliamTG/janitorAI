@@ -122,6 +122,21 @@ export const nb = {
     unauthorized: 'Tilgangskoden er ugyldig eller utløpt.',
     details: 'Rapportdetaljer',
     approvedBy: 'Godkjent av takstperson',
+    draftBadge: 'AI-utkast — ikke godkjent',
+    approvalHint:
+      'AI-en har laget et utkast. Du står faglig ansvarlig for innholdet — les gjennom rapporten, kontroller årsak og om skaden er akutt eller gradvis, og godkjenn før deling.',
+    approve: 'Godkjenn rapport',
+    approveConfirmTitle: 'Godkjenn rapporten?',
+    approveConfirmMessage:
+      'Du bekrefter at du har lest rapporten og faglig vurdert innholdet, inkludert årsak og om skaden er akutt eller gradvis. Godkjenningen stemples i rapporten med navn og tidspunkt.',
+    approvedToast: 'Rapporten er godkjent',
+    approvedStamp: (name: string, when: string) => `Godkjent av ${name} · ${when}`,
+    withdraw: 'Trekk tilbake godkjenningen',
+    withdrawConfirmTitle: 'Trekke tilbake godkjenningen?',
+    withdrawConfirmMessage:
+      'Rapporten markeres som utkast igjen, og nye delingslenker kan ikke lages før den godkjennes på nytt.',
+    withdrawnToast: 'Godkjenningen er trukket tilbake',
+    approverNameMissing: 'Legg inn navnet ditt under Guide → Takstperson før du godkjenner.',
   },
 
   underlag: {
@@ -175,6 +190,7 @@ export const nb = {
     hint: 'Mottakeren åpner lenken uten konto og låser opp med PIN-koden. Send PIN-koden i en annen kanal enn selve lenken.',
     failed: 'Kunne ikke lage delingslenke',
     requiresToken: 'Skriv inn en gyldig tilgangskode for å dele.',
+    requiresApproval: 'Rapporten må godkjennes av takstperson før den kan deles.',
   },
 
   auth: {

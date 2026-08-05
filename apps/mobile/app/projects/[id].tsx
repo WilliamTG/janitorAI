@@ -17,6 +17,7 @@ import apiFetch, {
 import { Image as ExpoImage } from 'expo-image';
 
 import { getCurrentGeo } from '@/src/lib/geo';
+import { loadProfile } from '@/src/storage/profileStorage';
 import { tileForCoordinate } from '@/src/lib/kartverket';
 import { logError, logAction } from '@/src/lib/logger';
 import { GeoPoint, NO_DATE_SET, Note, Project, ReportMeta, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
@@ -1093,7 +1094,15 @@ export default function ProjectDetailScreen() {
     try {
       setIsGeneratingGoogleDoc(true);
       setGoogleDocUrl(null);
-      await updateProjectLocally({ ...snap, reportStatus: 'processing', reportError: undefined });
+      // Ny generering gir en ny rapportversjon — godkjenningen gjelder den
+      // gamle og nullstilles. Feiler genereringen, gjenoppretter feilbanene
+      // (...snap) både forrige rapport og stempelet dens.
+      await updateProjectLocally({
+        ...snap,
+        reportStatus: 'processing',
+        reportError: undefined,
+        reportApproval: undefined,
+      });
 
       // Require an uploaded video — no demo fallback
       const videoNote = (snap.notes || []).find(n => n.videoRemoteId);
@@ -1158,7 +1167,14 @@ export default function ProjectDetailScreen() {
       if (data.url) {
         logAction('generate-google-doc', Date.now() - t0).catch(() => {});
         setGoogleDocUrl(data.url);
-        await updateProjectLocally({ ...snap, reportUrl: data.url, reportStatus: 'ready', reportError: undefined });
+        await updateProjectLocally({
+          ...snap,
+          reportUrl: data.url,
+          reportStatus: 'ready',
+          reportError: undefined,
+          // Ny rapport er et nytt AI-utkast — aldri arv forrige godkjenning.
+          reportApproval: undefined,
+        });
         toast.show({ message: nb.report.ready, variant: 'success' });
       } else {
         const errMsg = 'Fikk ingen dokumentlenke fra AI-motoren.';
@@ -1274,8 +1290,65 @@ export default function ProjectDetailScreen() {
     };
   }, [project?.caseFile, isTokenValid]);
 
+  // Godkjenningsflyt: takstpersonen leser AI-utkastet og stempler det med navn
+  // og tidspunkt. Uten stempel nekter både appen og serveren å dele rapporten.
+  const stampApproval = async () => {
+    if (!project) return;
+    const profile = await loadProfile();
+    const name =
+      profile.name.trim() ||
+      (project.inspector && project.inspector !== UNKNOWN_INSPECTOR ? project.inspector : '');
+    if (!name) {
+      toast.show({ message: nb.report.approverNameMissing, variant: 'error', durationMs: 4500 });
+      return;
+    }
+    await updateProjectLocally({
+      ...project,
+      reportApproval: { approvedBy: name, approvedAt: new Date().toISOString() },
+    });
+    logAction('approve-report', 0).catch(() => {});
+    toast.show({ message: nb.report.approvedToast, variant: 'success' });
+  };
+
+  const confirmApproveReport = () => {
+    if (Platform.OS === 'web') {
+      // Alert.alert er no-op på web — bruk window.confirm i stedet.
+      if (window.confirm(`${nb.report.approveConfirmTitle}\n\n${nb.report.approveConfirmMessage}`)) {
+        void stampApproval();
+      }
+      return;
+    }
+    Alert.alert(nb.report.approveConfirmTitle, nb.report.approveConfirmMessage, [
+      { text: nb.common.cancel, style: 'cancel' },
+      { text: nb.report.approve, onPress: () => void stampApproval() },
+    ]);
+  };
+
+  const removeApproval = async () => {
+    if (!project) return;
+    await updateProjectLocally({ ...project, reportApproval: undefined });
+    toast.show({ message: nb.report.withdrawnToast, variant: 'success' });
+  };
+
+  const confirmWithdrawApproval = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${nb.report.withdrawConfirmTitle}\n\n${nb.report.withdrawConfirmMessage}`)) {
+        void removeApproval();
+      }
+      return;
+    }
+    Alert.alert(nb.report.withdrawConfirmTitle, nb.report.withdrawConfirmMessage, [
+      { text: nb.common.cancel, style: 'cancel' },
+      { text: nb.report.withdraw, style: 'destructive', onPress: () => void removeApproval() },
+    ]);
+  };
+
   const createShare = async () => {
     if (!project || isCreatingShare) return;
+    if (!project.reportApproval) {
+      toast.show({ message: nb.share.requiresApproval, variant: 'error', durationMs: 4500 });
+      return;
+    }
     try {
       setIsCreatingShare(true);
       const response = await apiFetch(`${getApiBaseUrl()}/api/share`, {
@@ -1284,7 +1357,10 @@ export default function ProjectDetailScreen() {
         body: JSON.stringify({ projectId: project.id }),
       });
       if (!response.ok) {
-        toast.show({ message: nb.share.failed, variant: 'error' });
+        // 409: serveren har ikke fått synket godkjenningen ennå (eller den er
+        // trukket tilbake fra en annen enhet) — si hvorfor, ikke bare «feilet».
+        const message = response.status === 409 ? nb.share.requiresApproval : nb.share.failed;
+        toast.show({ message, variant: 'error', durationMs: 4500 });
         return;
       }
       const data: any = await response.json();
@@ -1656,6 +1732,41 @@ export default function ProjectDetailScreen() {
           </GlassCard>
         )}
 
+        {/* Godkjenningsflyt: AI-en foreslår, takstpersonen står ansvarlig.
+            Rapporten er et utkast til den aktivt stemples — og uten stempel
+            nekter både appen og serveren å dele den. */}
+        {displayUrl && (
+          <GlassCard style={{ gap: theme.spacing.sm }}>
+            {project?.reportApproval ? (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+                  <Ionicons name="shield-checkmark" size={18} color={theme.colors.accent} />
+                  <Body style={{ fontWeight: '600', flex: 1 }}>
+                    {nb.report.approvedStamp(
+                      project.reportApproval.approvedBy,
+                      formatDateTime(project.reportApproval.approvedAt)
+                    )}
+                  </Body>
+                </View>
+                <SecondaryButton onPress={confirmWithdrawApproval}>
+                  {nb.report.withdraw}
+                </SecondaryButton>
+              </>
+            ) : (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+                  <Ionicons name="alert-circle-outline" size={18} color={theme.colors.danger} />
+                  <Body style={{ fontWeight: '600' }}>{nb.report.draftBadge}</Body>
+                </View>
+                <Caption muted>{nb.report.approvalHint}</Caption>
+                <PrimaryButton style={{ minHeight: 56 }} onPress={confirmApproveReport}>
+                  {nb.report.approve}
+                </PrimaryButton>
+              </>
+            )}
+          </GlassCard>
+        )}
+
         {/* B7/B10: kontoløs deling med PIN + utløp */}
         <GlassCard style={{ gap: theme.spacing.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
@@ -1703,13 +1814,16 @@ export default function ProjectDetailScreen() {
               style={{ minHeight: 56 }}
               onPress={createShare}
               loading={isCreatingShare}
-              disabled={!isTokenValid || isCreatingShare}
+              disabled={!isTokenValid || isCreatingShare || !project?.reportApproval}
               icon={<Ionicons name="share-outline" size={18} color="#fff" />}
             >
               {isCreatingShare ? nb.share.creating : nb.share.create}
             </PrimaryButton>
           )}
           {!isTokenValid && <Caption muted>{nb.share.requiresToken}</Caption>}
+          {isTokenValid && !shareInfo && !project?.reportApproval && (
+            <Caption muted>{nb.share.requiresApproval}</Caption>
+          )}
         </GlassCard>
       </View>
     );

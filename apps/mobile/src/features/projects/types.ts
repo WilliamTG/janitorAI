@@ -48,6 +48,18 @@ export type GeoPoint = {
   lng: number;
 };
 
+/**
+ * Godkjenningsstempel: takstpersonen har lest AI-utkastet og står faglig
+ * ansvarlig for innholdet. Uten stempel er rapporten et utkast og kan ikke
+ * deles. Ny generering nullstiller stempelet — det gjelder alltid den
+ * konkrete rapportversjonen som forelå ved godkjenning.
+ */
+export type ReportApproval = {
+  approvedBy: string;
+  /** ISO-tidspunkt for godkjenningen. */
+  approvedAt: string;
+};
+
 /** Saksunderlag hentet fra offentlige API-er ved adressevalg (Kartverket). */
 export type CaseFile = {
   addressText: string;
@@ -129,6 +141,8 @@ export type Project = {
   reportUrl?: string;
   /** Lifecycle status of the most recent report generation attempt. */
   reportStatus?: 'processing' | 'ready' | 'failed';
+  /** Takstpersonens godkjenning av gjeldende rapport; kreves før deling. */
+  reportApproval?: ReportApproval;
   /** Human-readable error from the last failed generation (shown on the project card). */
   reportError?: string;
 };

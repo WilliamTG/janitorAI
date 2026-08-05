@@ -101,6 +101,7 @@
   <div id="report" class="hidden" style="display: flex; flex-direction: column; gap: 20px;">
     <div class="card">
       <h1 id="rTitle"></h1>
+      <div id="rStamp" class="hidden" style="margin: 4px 0 10px;"></div>
       <dl class="kv" id="rFacts"></dl>
     </div>
     <div class="card hidden" id="rDamageCard">
@@ -219,6 +220,19 @@
     var meta = r.reportMeta || {};
 
     $('rTitle').textContent = r.name || 'Skaderapport';
+
+    // Godkjenningsstempelet: hvem som står faglig ansvarlig, og når.
+    if (r.approval && r.approval.approvedAt) {
+      var stamp = document.createElement('span');
+      stamp.className = 'badge-ok';
+      stamp.textContent =
+        'Faglig vurdert og godkjent av ' +
+        (r.approval.approvedBy || 'takstperson') +
+        ' · ' + fmtDate(r.approval.approvedAt);
+      $('rStamp').appendChild(stamp);
+      show('rStamp');
+    }
+
     kvRows($('rFacts'), [
       ['Adresse', [meta.addressStreet, meta.addressPostcodeCity].filter(Boolean).join(', ')],
       ['Befaringsdato', fmtDate(meta.inspectionDate || r.inspectionDate)],

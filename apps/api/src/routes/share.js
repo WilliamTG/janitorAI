@@ -102,6 +102,13 @@ function buildReportPayload(project, mediaById) {
     descriptionTranscription: project.projectDescriptionTranscription || null,
     reportMeta: project.reportMeta || {},
     reportStatus: project.reportStatus || null,
+    approval:
+      project.reportApproval && project.reportApproval.approvedAt
+        ? {
+            approvedBy: String(project.reportApproval.approvedBy || ""),
+            approvedAt: project.reportApproval.approvedAt,
+          }
+        : null,
     notes,
   };
 }
@@ -122,11 +129,21 @@ router.post("/", requireTesterToken, async (req, res) => {
 
     const pool = getPool();
     const owned = await pool.query(
-      "SELECT 1 FROM projects WHERE id = $1 AND tester_token = $2",
+      "SELECT data FROM projects WHERE id = $1 AND tester_token = $2",
       [projectId, req.testerToken]
     );
     if (owned.rows.length === 0) {
       return res.status(404).json({ error: "Project not found" });
+    }
+
+    // Godkjenningsport: bare rapporter takstpersonen aktivt har godkjent kan
+    // deles — AI-utkast skal aldri nå en mottaker. Håndheves her (ikke bare i
+    // appen) så porten holder uansett klient.
+    const approval = (owned.rows[0].data || {}).reportApproval;
+    if (!approval || !approval.approvedAt) {
+      return res
+        .status(409)
+        .json({ error: "Report not approved", code: "REPORT_NOT_APPROVED" });
     }
 
     const id = generateShareId();

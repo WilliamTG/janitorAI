@@ -81,6 +81,15 @@ PROJECT_FINAL=${PROJECT/__MEDIA__/$MEDIA_ID}
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE/api/projects/p1" -H "x-tester-token: $TOKEN" -H 'Content-Type: application/json' -d "$PROJECT_FINAL")
 check "project upsert" "200" "$STATUS"
 
+# ── Approval gate ────────────────────────────────────────────────────────────
+# Uten godkjenningsstempel er rapporten et AI-utkast og kan ikke deles.
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/share" -H "x-tester-token: $TOKEN" -H 'Content-Type: application/json' -d '{"projectId":"p1"}')
+check "share for unapproved report rejected" "409" "$STATUS"
+
+PROJECT_APPROVED=$(echo "$PROJECT_FINAL" | jq -c '.project.reportApproval={"approvedBy":"Kari Nordmann","approvedAt":"2026-08-04T11:00:00Z"} | .project.updatedAt="2026-08-04T11:00:00Z"')
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE/api/projects/p1" -H "x-tester-token: $TOKEN" -H 'Content-Type: application/json' -d "$PROJECT_APPROVED")
+check "project upsert with approval" "200" "$STATUS"
+
 # ── Create shares ────────────────────────────────────────────────────────────
 SHARE=$(curl -s -X POST "$BASE/api/share" -H "x-tester-token: $TOKEN" -H 'Content-Type: application/json' -d '{"projectId":"p1"}')
 SHARE_ID=$(echo "$SHARE" | jq -r '.shareId'); PIN=$(echo "$SHARE" | jq -r '.pin')
@@ -116,6 +125,7 @@ check "correct pin unlocks" "true" "$([ -n "$VT" ] && [ "$VT" != "null" ] && ech
 # ── Recipient endpoints ──────────────────────────────────────────────────────
 REPORT=$(curl -s "$BASE/api/share/$SHARE_ID/report?vt=$VT")
 check "report name" "Solbergveien 14, Rykkinn" "$(echo "$REPORT" | jq -r '.report.name')"
+check "report carries approval stamp" "Kari Nordmann" "$(echo "$REPORT" | jq -r '.report.approval.approvedBy')"
 check "report photo media id" "$MEDIA_ID" "$(echo "$REPORT" | jq -r '.report.notes[0].photos[0].mediaId')"
 check "report geo flows through" "59.94" "$(echo "$REPORT" | jq -r '.report.notes[0].photos[0].geo.lat')"
 check "report never leaks tester token" "" "$(echo "$REPORT" | grep -o "$TOKEN")"
