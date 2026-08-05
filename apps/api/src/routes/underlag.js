@@ -201,6 +201,90 @@ router.get("/bygg", async (req, res) => {
   }
 });
 
+// ── Stedsinfo: terrenghøyde (Kartverket) + værvarsel (MET, nøkkelfritt) ──────
+// Begge er åpne tjenester; MET krever kun identifiserende User-Agent.
+
+const MET_USER_AGENT = "DocrAI/0.1 github.com/fdalen97-ui/janitorai";
+
+const SYMBOL_NB = {
+  clearsky: "klarvær", fair: "lettskyet", partlycloudy: "delvis skyet",
+  cloudy: "skyet", fog: "tåke", lightrain: "lett regn", rain: "regn",
+  heavyrain: "kraftig regn", lightrainshowers: "lette regnbyger",
+  rainshowers: "regnbyger", heavyrainshowers: "kraftige regnbyger",
+  sleet: "sludd", snow: "snø", lightsnow: "lett snø",
+};
+
+function symbolToNb(code) {
+  if (!code) return null;
+  const base = String(code).split("_")[0];
+  return SYMBOL_NB[base] || base;
+}
+
+router.get("/stedsinfo", async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lon = Number(req.query.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return res.status(400).json({ error: "lat og lon kreves" });
+  }
+
+  const result = { hoyde: null, vaer: null };
+
+  try {
+    const response = await fetch(
+      `https://ws.geonorge.no/hoydedata/v1/punkt?nord=${lat}&ost=${lon}&koordsys=4258&geojson=false`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (response.ok) {
+      const data = await response.json();
+      const punkt = data.punkter && data.punkter[0];
+      if (punkt && Number.isFinite(punkt.z)) {
+        result.hoyde = {
+          moh: Math.round(punkt.z),
+          terreng: punkt.terreng || null,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("hoydedata error:", sanitizeError(err));
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`,
+      { headers: { "user-agent": MET_USER_AGENT }, signal: AbortSignal.timeout(8000) }
+    );
+    if (response.ok) {
+      const data = await response.json();
+      const series = (data.properties && data.properties.timeseries) || [];
+      if (series.length > 0) {
+        const now = series[0].data;
+        const temp = now.instant && now.instant.details
+          ? now.instant.details.air_temperature
+          : null;
+        let precip = 0;
+        for (const entry of series.slice(0, 24)) {
+          const next = entry.data && entry.data.next_1_hours;
+          if (next && next.details && Number.isFinite(next.details.precipitation_amount)) {
+            precip += next.details.precipitation_amount;
+          }
+        }
+        const symbol =
+          (now.next_12_hours && now.next_12_hours.summary && now.next_12_hours.summary.symbol_code) ||
+          (now.next_1_hours && now.next_1_hours.summary && now.next_1_hours.summary.symbol_code);
+        result.vaer = {
+          tempC: Number.isFinite(temp) ? Math.round(temp) : null,
+          beskrivelse: symbolToNb(symbol),
+          nedborNeste24tMm: Math.round(precip * 10) / 10,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("locationforecast error:", sanitizeError(err));
+  }
+
+  res.json(result);
+});
+
 // ── Kartflis-proxy (Kartverket åpen WMTS) ────────────────────────────────────
 // Egen handler som mountes UTEN tester-token: <img>-elementer kan ikke sette
 // headere, og flisene er åpne data. Streng validering hindrer misbruk som

@@ -159,6 +159,13 @@ export default function ProjectDetailScreen() {
     kulturminne: boolean;
     bygningsnummer: string | null;
   } | null>(null);
+  const [casePlace, setCasePlace] = useState<{
+    moh: number | null;
+    terreng: string | null;
+    tempC: number | null;
+    beskrivelse: string | null;
+    nedborMm: number | null;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<ProjectTab>('notes');
   const [describingPhotos, setDescribingPhotos] = useState<Set<string>>(new Set());
   const [editingPhotos, setEditingPhotos] = useState<Record<string, { editing: boolean; caption: string }>>({});
@@ -1204,6 +1211,37 @@ export default function ProjectDetailScreen() {
     };
   }, [project?.caseFile, project?.reportMeta?.damageDate, isTokenValid]);
 
+  // Terrenghøyde (Kartverket) og værvarsel (MET) for adressepunktet.
+  useEffect(() => {
+    const cf = project?.caseFile;
+    if (!cf || !isTokenValid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await apiFetch(
+          `${getApiBaseUrl()}/api/underlag/stedsinfo?lat=${cf.lat}&lon=${cf.lon}`,
+          { skipAuthHandling: true },
+        );
+        if (cancelled || !response.ok) return;
+        const data: any = await response.json();
+        if (!cancelled && (data.hoyde || data.vaer)) {
+          setCasePlace({
+            moh: data.hoyde?.moh ?? null,
+            terreng: data.hoyde?.terreng ?? null,
+            tempC: data.vaer?.tempC ?? null,
+            beskrivelse: data.vaer?.beskrivelse ?? null,
+            nedborMm: data.vaer?.nedborNeste24tMm ?? null,
+          });
+        }
+      } catch {
+        // stedsinfo er en berikelse — stille feil
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [project?.caseFile, isTokenValid]);
+
   // Bygningsdata fra den åpne matrikkelen (Geonorge) — type, status og
   // kulturminne-flagg for nærmeste bygning til adressepunktet.
   useEffect(() => {
@@ -1857,6 +1895,25 @@ export default function ProjectDetailScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Ionicons name="ribbon-outline" size={13} color={theme.colors.accent} />
                 <Caption style={{ color: theme.colors.accent }}>{nb.underlag.heritage}</Caption>
+              </View>
+            ) : null}
+            {casePlace?.moh != null ? (
+              <Caption muted>
+                {`${nb.underlag.elevation}: ${casePlace.moh} ${nb.underlag.metersAboveSea}${casePlace.terreng ? ` · ${casePlace.terreng.toLowerCase()}` : ''}`}
+              </Caption>
+            ) : null}
+            {casePlace?.tempC != null || casePlace?.beskrivelse ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="rainy-outline" size={13} color={theme.colors.muted} />
+                <Caption muted>
+                  {`${nb.underlag.weather24}: ${[
+                    casePlace.tempC != null ? `${casePlace.tempC}°` : null,
+                    casePlace.beskrivelse,
+                    casePlace.nedborMm != null && casePlace.nedborMm > 0 ? `${String(casePlace.nedborMm).replace('.', ',')} mm` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}`}
+                </Caption>
               </View>
             ) : null}
             {caseWeather ? (
