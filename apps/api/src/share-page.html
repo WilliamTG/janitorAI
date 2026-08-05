@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>DocrAI — Delt skaderapport</title>
+<style>
+  :root {
+    --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
+    --border: #DDE4EB; --accent: #3D5A80; --accent-pale: #E8F0F7;
+    --ok: #14532D; --ok-bg: #DCFCE7; --ok-border: #86EFAC;
+    --warn: #7F5A1D; --warn-bg: #FCF3DC; --warn-border: #E3C98A;
+    --bad: #7F1D1D; --bad-bg: #FEE2E2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #131920; --surface: #0F141A; --ink: #E4EAF1; --muted: #97A6B5;
+      --border: #2A3542; --accent: #94B9DE; --accent-pale: #1B2634;
+      --ok: #86EFAC; --ok-bg: #103524; --ok-border: #166534;
+      --warn: #E3C08A; --warn-bg: #2B2214; --warn-border: #4A3A20;
+      --bad: #FCA5A5; --bad-bg: #3B1513;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface); color: var(--ink);
+    font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.55;
+  }
+  .page { max-width: 840px; margin: 0 auto; padding: 32px 18px 64px; display: flex; flex-direction: column; gap: 20px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .sq { width: 20px; height: 20px; background: #3D5A80; flex: none; }
+  .brand b { font-size: 15px; letter-spacing: 0.02em; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600;
+    padding: 4px 12px; border-radius: 999px; border: 1px solid var(--warn-border);
+    color: var(--warn); background: var(--warn-bg); width: fit-content;
+  }
+  .card { background: var(--paper); border: 1px solid var(--border); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+  h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+  h2 { margin: 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--accent); }
+  .muted { color: var(--muted); }
+  .kv { display: grid; grid-template-columns: minmax(130px, 180px) 1fr; gap: 6px 14px; font-size: 14.5px; }
+  .kv dt { color: var(--muted); margin: 0; } .kv dd { margin: 0; }
+  .badge-ok {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
+    color: var(--ok); background: var(--ok-bg); border: 1px solid var(--ok-border);
+    border-radius: 999px; padding: 2px 9px;
+  }
+  .evidence { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+  .ev { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--paper); display: flex; flex-direction: column; }
+  .ev img, .ev video { width: 100%; aspect-ratio: 4/3; object-fit: cover; background: #0b1020; display: block; }
+  .ev .meta { padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+  .ev .cap { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 11px; color: var(--muted); word-break: break-all; }
+  .note { border-left: 3px solid var(--accent); background: var(--accent-pale); padding: 10px 14px; border-radius: 0 8px 8px 0; }
+  .note .when { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  audio { width: 100%; margin-top: 6px; }
+  footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 14px; }
+
+  /* PIN-port */
+  .gate { max-width: 420px; margin: 8vh auto 0; }
+  .gate input {
+    font-size: 26px; letter-spacing: 0.45em; text-align: center; padding: 12px;
+    border: 1px solid var(--border); border-radius: 8px; width: 100%;
+    background: var(--surface); color: var(--ink);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+  .gate button {
+    font-size: 15px; font-weight: 600; padding: 13px; border: 0; border-radius: 8px;
+    background: #3D5A80; color: #fff; cursor: pointer; width: 100%; min-height: 52px;
+  }
+  .gate button:disabled { opacity: 0.6; cursor: default; }
+  .error { color: var(--bad); background: var(--bad-bg); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+  .hidden { display: none !important; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="brand"><span class="sq"></span><b>DocrAI</b><span class="muted">· delt skaderapport</span></div>
+  <div class="pill" id="statusPill">Laster …</div>
+
+  <!-- PIN-port -->
+  <div class="card gate" id="gate">
+    <h1 style="font-size: 20px;">Skriv inn PIN-koden</h1>
+    <p class="muted" style="margin: 0;">Du har fått en PIN-kode av avsenderen sammen med lenken.</p>
+    <input id="pinInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-label="PIN-kode" />
+    <div class="error hidden" id="gateError"></div>
+    <button id="unlockBtn">Lås opp rapporten</button>
+  </div>
+
+  <!-- Utilgjengelig -->
+  <div class="card hidden" id="gone">
+    <h1 style="font-size: 20px;">Lenken er ikke tilgjengelig</h1>
+    <p class="muted" style="margin: 0;">Delingen er utløpt eller trukket tilbake. Be avsenderen om en ny lenke.</p>
+  </div>
+
+  <!-- Rapport -->
+  <div id="report" class="hidden" style="display: flex; flex-direction: column; gap: 20px;">
+    <div class="card">
+      <h1 id="rTitle"></h1>
+      <dl class="kv" id="rFacts"></dl>
+    </div>
+    <div class="card hidden" id="rDamageCard">
+      <h2>Skade og årsak</h2>
+      <dl class="kv" id="rDamage"></dl>
+    </div>
+    <div class="card hidden" id="rDescCard">
+      <h2>Befaringsbeskrivelse</h2>
+      <p id="rDesc" style="margin: 0;"></p>
+    </div>
+    <div class="card hidden" id="rEvidenceCard">
+      <h2>Bevis</h2>
+      <p class="muted" style="margin: 0; font-size: 13px;">
+        Hvert bevis bærer opplastingstidspunkt og en SHA-256-sjekksum satt av serveren ved mottak —
+        innholdet kan verifiseres uendret.
+      </p>
+      <div class="evidence" id="rEvidence"></div>
+    </div>
+    <div class="card hidden" id="rNotesCard">
+      <h2>Notater fra befaringen</h2>
+      <div id="rNotes" style="display: flex; flex-direction: column; gap: 10px;"></div>
+    </div>
+    <footer id="rFooter"></footer>
+  </div>
+</div>
+
+<script>
+(function () {
+  var shareId = location.pathname.split('/').filter(Boolean).pop();
+  var api = '/api/share/' + encodeURIComponent(shareId);
+  var viewToken = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var show = function (id) { $(id).classList.remove('hidden'); };
+  var hide = function (id) { $(id).classList.add('hidden'); };
+
+  function fmtDate(value) {
+    if (!value) return '';
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+    if (m) return m[3] + '.' + m[2] + '.' + m[1];
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return String(value);
+    return ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+  }
+
+  function daysLeft(iso) {
+    var ms = new Date(iso).getTime() - Date.now();
+    return Math.max(0, Math.ceil(ms / 86400000));
+  }
+
+  function setPill(text) { $('statusPill').textContent = text; }
+
+  function kvRows(el, pairs) {
+    el.innerHTML = '';
+    var any = false;
+    pairs.forEach(function (pair) {
+      if (!pair[1]) return;
+      any = true;
+      var dt = document.createElement('dt'); dt.textContent = pair[0];
+      var dd = document.createElement('dd'); dd.textContent = pair[1];
+      el.appendChild(dt); el.appendChild(dd);
+    });
+    return any;
+  }
+
+  function mediaUrl(mediaId) {
+    return api + '/media/' + encodeURIComponent(mediaId) + '?vt=' + encodeURIComponent(viewToken);
+  }
+
+  function evidenceCard(item, kind) {
+    var div = document.createElement('div');
+    div.className = 'ev';
+    if (kind === 'photo') {
+      var img = document.createElement('img');
+      img.src = mediaUrl(item.mediaId);
+      img.alt = item.caption || 'Bevisbilde';
+      img.loading = 'lazy';
+      div.appendChild(img);
+    } else if (kind === 'video') {
+      var vid = document.createElement('video');
+      vid.src = mediaUrl(item.mediaId);
+      vid.controls = true; vid.preload = 'metadata';
+      div.appendChild(vid);
+    }
+    var meta = document.createElement('div');
+    meta.className = 'meta';
+    if (item.caption) {
+      var cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = item.caption;
+      meta.appendChild(cap);
+    }
+    var when = document.createElement('div'); when.className = 'muted';
+    var whenText = [];
+    if (item.capturedAt) whenText.push('Tatt ' + fmtDate(item.capturedAt));
+    if (item.uploadedAt) whenText.push('Lastet opp ' + fmtDate(item.uploadedAt));
+    if (item.geo && typeof item.geo.lat === 'number') {
+      whenText.push(item.geo.lat.toFixed(4) + '°N ' + item.geo.lng.toFixed(4) + '°Ø');
+    }
+    when.textContent = whenText.join(' · ');
+    if (whenText.length) meta.appendChild(when);
+    if (item.sha256) {
+      var badge = document.createElement('span');
+      badge.className = 'badge-ok';
+      badge.textContent = 'SHA-256 registrert ved opplasting';
+      meta.appendChild(badge);
+      var hash = document.createElement('div');
+      hash.className = 'mono';
+      hash.textContent = item.sha256;
+      meta.appendChild(hash);
+    }
+    div.appendChild(meta);
+    return div;
+  }
+
+  function renderReport(payload) {
+    var r = payload.report;
+    var meta = r.reportMeta || {};
+
+    $('rTitle').textContent = r.name || 'Skaderapport';
+    kvRows($('rFacts'), [
+      ['Adresse', [meta.addressStreet, meta.addressPostcodeCity].filter(Boolean).join(', ')],
+      ['Befaringsdato', fmtDate(meta.inspectionDate || r.inspectionDate)],
+      ['Skadedato', fmtDate(meta.damageDate)],
+      ['Saksnummer', meta.caseNumber],
+      ['Takstperson', r.inspector && r.inspector !== 'Unknown inspector' ? r.inspector : ''],
+    ]);
+
+    var damageAny = kvRows($('rDamage'), [
+      ['Skadet område', meta.damagedAreaDescription || (meta.buildings && meta.buildings[0] && meta.buildings[0].damagedAreaDescription)],
+      ['Mulig regress', meta.possibleRecourse],
+      ['Tiltak mot ny skade', meta.measuresToPreventFutureDamage],
+      ['Påbegynte utbedringer', meta.startedRepairs],
+      ['Oppsummering', meta.summaryText],
+    ]);
+    if (damageAny) show('rDamageCard');
+
+    var desc = r.description || r.descriptionTranscription;
+    if (desc) { $('rDesc').textContent = desc; show('rDescCard'); }
+
+    var evidence = $('rEvidence');
+    var evCount = 0;
+    (r.notes || []).forEach(function (note) {
+      (note.photos || []).forEach(function (p) { evidence.appendChild(evidenceCard(p, 'photo')); evCount++; });
+      if (note.video) { evidence.appendChild(evidenceCard(note.video, 'video')); evCount++; }
+    });
+    if (evCount) show('rEvidenceCard');
+
+    var notesHost = $('rNotes');
+    var noteCount = 0;
+    (r.notes || []).forEach(function (note) {
+      if (!note.text && !note.audio) return;
+      var div = document.createElement('div');
+      div.className = 'note';
+      var body = document.createElement('div'); body.textContent = note.text || 'Lydnotat';
+      div.appendChild(body);
+      if (note.createdAt) {
+        var when = document.createElement('div'); when.className = 'when';
+        when.textContent = fmtDate(note.createdAt);
+        div.appendChild(when);
+      }
+      if (note.audio) {
+        var audio = document.createElement('audio');
+        audio.controls = true; audio.preload = 'none';
+        audio.src = mediaUrl(note.audio.mediaId);
+        div.appendChild(audio);
+      }
+      notesHost.appendChild(div);
+      noteCount++;
+    });
+    if (noteCount) show('rNotesCard');
+
+    $('rFooter').textContent =
+      'Delt via DocrAI · PIN-beskyttet lenke · utløper ' + fmtDate(payload.expiresAt) +
+      ' · Rapportinnholdet er godkjent av takstperson før deling.';
+
+    hide('gate');
+    show('report');
+  }
+
+  function unlock() {
+    var pin = $('pinInput').value.trim();
+    hide('gateError');
+    if (!pin) return;
+    $('unlockBtn').disabled = true;
+    fetch(api + '/unlock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: pin }),
+    })
+      .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, status: res.status, body: body }; }); })
+      .then(function (result) {
+        if (!result.ok) {
+          if (result.status === 410) { hide('gate'); show('gone'); setPill('Lenken er utløpt'); return; }
+          $('gateError').textContent = result.body.error || 'Feil PIN-kode';
+          show('gateError');
+          return;
+        }
+        viewToken = result.body.viewToken;
+        return fetch(api + '/report?vt=' + encodeURIComponent(viewToken))
+          .then(function (res) { if (!res.ok) throw new Error('report'); return res.json(); })
+          .then(renderReport);
+      })
+      .catch(function () {
+        $('gateError').textContent = 'Noe gikk galt — prøv igjen.';
+        show('gateError');
+      })
+      .then(function () { $('unlockBtn').disabled = false; });
+  }
+
+  $('unlockBtn').addEventListener('click', unlock);
+  $('pinInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') unlock(); });
+
+  fetch(api + '/meta')
+    .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+    .then(function (result) {
+      if (!result.ok || result.body.state !== 'active') {
+        hide('gate'); show('gone'); setPill('Lenken er utløpt');
+        return;
+      }
+      setPill('PIN-beskyttet · utløper om ' + daysLeft(result.body.expiresAt) + ' dager');
+      $('pinInput').focus();
+    })
+    .catch(function () { setPill('Fikk ikke kontakt med serveren'); });
+})();
+</script>
+</body>
+</html>

@@ -38,5 +38,6 @@ export const Screen = ({ children, style, scrollable = true }: PropsWithChildren
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { flexGrow: 1 },
+  // B14: innhold sentreres med maks-bredde så web/nettbrett ikke strekker kortene.
+  content: { flexGrow: 1, width: '100%', maxWidth: 840, alignSelf: 'center' },
 });

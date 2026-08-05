@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { TouchableOpacity, View } from 'react-native';
 
+import { nb } from '@/src/i18n/nb';
 import {
   Body,
   Caption,
@@ -94,7 +95,10 @@ export function ReportDetailsSection({ meta, onChange, onSave, isOpen, onToggle,
         activeOpacity={0.7}
         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
       >
-        <Body style={{ fontWeight: '600', fontSize: 17 }}>📋 Report details</Body>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+          <Ionicons name="clipboard-outline" size={18} color={theme.colors.accent} />
+          <Body style={{ fontWeight: '600', fontSize: 17 }}>{nb.report.details}</Body>
+        </View>
         <Ionicons
           name={isOpen ? 'chevron-up-outline' : 'chevron-down-outline'}
           size={20}
@@ -104,40 +108,40 @@ export function ReportDetailsSection({ meta, onChange, onSave, isOpen, onToggle,
 
       {!isOpen && (
         <Caption muted>
-          Tap to fill in case info, inspector, buildings and contributors for the report.
+          Trykk for å fylle inn saksinfo, takstperson, bygninger og medvirkende til rapporten.
         </Caption>
       )}
 
       {isOpen && (
         <View style={{ gap: theme.spacing.md }}>
 
-          {/* ── Case info ── */}
-          {sectionLabel('Case info')}
-          {inputField('Case number', meta.caseNumber, v => setField('caseNumber', v))}
-          {inputField('Working number', meta.workingNumber, v => setField('workingNumber', v))}
-          {inputField('Damage date', meta.damageDate, v => setField('damageDate', v))}
-          {inputField('Inspection date', meta.inspectionDate, v => setField('inspectionDate', v))}
-          {inputField('Inspection object / room type', meta.pictureObject, v => setField('pictureObject', v))}
+          {/* ── Saksinfo ── */}
+          {sectionLabel('Saksinfo')}
+          {inputField('Saksnummer', meta.caseNumber, v => setField('caseNumber', v))}
+          {inputField('Arbeidsnummer', meta.workingNumber, v => setField('workingNumber', v))}
+          {inputField('Skadedato', meta.damageDate, v => setField('damageDate', v))}
+          {inputField('Befaringsdato', meta.inspectionDate, v => setField('inspectionDate', v))}
+          {inputField('Befaringsobjekt / romtype', meta.pictureObject, v => setField('pictureObject', v))}
 
-          {/* ── Inspector ── */}
-          {sectionLabel('Inspector')}
-          {inputField('Name', meta.inspectionDoneByName, v => setField('inspectionDoneByName', v))}
-          {inputField('Phone', meta.inspectionDoneByPhone, v => setField('inspectionDoneByPhone', v))}
-          {inputField('Company', meta.inspectionDoneByCompany, v => setField('inspectionDoneByCompany', v))}
+          {/* ── Takstperson ── */}
+          {sectionLabel(nb.projects.inspectorLabel)}
+          {inputField(nb.guide.nameLabel, meta.inspectionDoneByName, v => setField('inspectionDoneByName', v))}
+          {inputField(nb.guide.phoneLabel, meta.inspectionDoneByPhone, v => setField('inspectionDoneByPhone', v))}
+          {inputField(nb.guide.companyLabel, meta.inspectionDoneByCompany, v => setField('inspectionDoneByCompany', v))}
 
-          {/* ── Insurance ── */}
-          {sectionLabel('Insurance')}
-          {inputField('Insurance company', meta.insuranceCompany, v => setField('insuranceCompany', v))}
-          {inputField('Claims handler', meta.insuranceAgent, v => setField('insuranceAgent', v))}
+          {/* ── Forsikring ── */}
+          {sectionLabel('Forsikring')}
+          {inputField('Forsikringsselskap', meta.insuranceCompany, v => setField('insuranceCompany', v))}
+          {inputField('Skadebehandler', meta.insuranceAgent, v => setField('insuranceAgent', v))}
 
-          {/* ── Customer ── */}
-          {sectionLabel('Customer')}
-          {inputField('Customer name', meta.customerName, v => setField('customerName', v))}
-          {inputField('Street address', meta.addressStreet, v => setField('addressStreet', v))}
-          {inputField('Postcode and city', meta.addressPostcodeCity, v => setField('addressPostcodeCity', v))}
+          {/* ── Kunde ── */}
+          {sectionLabel('Kunde')}
+          {inputField('Kundenavn', meta.customerName, v => setField('customerName', v))}
+          {inputField('Gateadresse', meta.addressStreet, v => setField('addressStreet', v))}
+          {inputField('Postnummer og sted', meta.addressPostcodeCity, v => setField('addressPostcodeCity', v))}
 
-          {/* ── Contributors ── */}
-          {sectionLabel('Contributors')}
+          {/* ── Medvirkende ── */}
+          {sectionLabel('Medvirkende')}
           {contributors.map((c, i) => (
             <View
               key={i}
@@ -149,23 +153,23 @@ export function ReportDetailsSection({ meta, onChange, onSave, isOpen, onToggle,
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Caption style={{ fontWeight: '600' }}>Contributor {i + 1}</Caption>
+                <Caption style={{ fontWeight: '600' }}>Medvirkende {i + 1}</Caption>
                 {contributors.length > 1 && (
                   <SecondaryButton onPress={() => removeContributor(i)} width={80}>
-                    Remove
+                    Fjern
                   </SecondaryButton>
                 )}
               </View>
-              {inputField('Name', c.name, v => updateContributor(i, 'name', v))}
-              {inputField('Role', c.role, v => updateContributor(i, 'role', v))}
-              {inputField('Phone', c.phone, v => updateContributor(i, 'phone', v))}
-              {inputField('Email (optional)', c.email, v => updateContributor(i, 'email', v))}
+              {inputField(nb.guide.nameLabel, c.name, v => updateContributor(i, 'name', v))}
+              {inputField('Rolle', c.role, v => updateContributor(i, 'role', v))}
+              {inputField(nb.guide.phoneLabel, c.phone, v => updateContributor(i, 'phone', v))}
+              {inputField('E-post (valgfritt)', c.email, v => updateContributor(i, 'email', v))}
             </View>
           ))}
-          <SecondaryButton onPress={addContributor}>+ Add contributor</SecondaryButton>
+          <SecondaryButton onPress={addContributor}>Legg til medvirkende</SecondaryButton>
 
-          {/* ── Buildings ── */}
-          {sectionLabel('Buildings')}
+          {/* ── Bygninger ── */}
+          {sectionLabel('Bygninger')}
           {buildings.map((b, i) => (
             <View
               key={i}
@@ -177,39 +181,39 @@ export function ReportDetailsSection({ meta, onChange, onSave, isOpen, onToggle,
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Caption style={{ fontWeight: '600' }}>Building {i + 1}</Caption>
+                <Caption style={{ fontWeight: '600' }}>Bygning {i + 1}</Caption>
                 {buildings.length > 1 && (
                   <SecondaryButton onPress={() => removeBuilding(i)} width={80}>
-                    Remove
+                    Fjern
                   </SecondaryButton>
                 )}
               </View>
-              {inputField('Building type', b.type, v => updateBuilding(i, 'type', v))}
-              {inputField('Size (m²)', b.size, v => updateBuilding(i, 'size', v))}
-              {inputField('Year built', b.buildingYear, v => updateBuilding(i, 'buildingYear', v))}
-              {inputField('Renovations done', b.renovationsDone, v => updateBuilding(i, 'renovationsDone', v), true)}
-              {inputField('Other info', b.otherInfo, v => updateBuilding(i, 'otherInfo', v), true)}
-              {inputField('Damaged area – description', b.damagedAreaDescription, v => updateBuilding(i, 'damagedAreaDescription', v), true)}
-              {inputField('Damaged area – estimated value', b.damagedAreaEstimatedValue, v => updateBuilding(i, 'damagedAreaEstimatedValue', v))}
+              {inputField('Bygningstype', b.type, v => updateBuilding(i, 'type', v))}
+              {inputField('Areal (m²)', b.size, v => updateBuilding(i, 'size', v))}
+              {inputField('Byggeår', b.buildingYear, v => updateBuilding(i, 'buildingYear', v))}
+              {inputField('Utførte oppgraderinger', b.renovationsDone, v => updateBuilding(i, 'renovationsDone', v), true)}
+              {inputField('Annen informasjon', b.otherInfo, v => updateBuilding(i, 'otherInfo', v), true)}
+              {inputField('Skadet område – beskrivelse', b.damagedAreaDescription, v => updateBuilding(i, 'damagedAreaDescription', v), true)}
+              {inputField('Skadet område – anslått verdi', b.damagedAreaEstimatedValue, v => updateBuilding(i, 'damagedAreaEstimatedValue', v))}
             </View>
           ))}
-          <SecondaryButton onPress={addBuilding}>+ Add building</SecondaryButton>
+          <SecondaryButton onPress={addBuilding}>Legg til bygning</SecondaryButton>
 
-          {/* ── Damage & status ── */}
-          {sectionLabel('Damage & status')}
-          {inputField('Possible recourse', meta.possibleRecourse, v => setField('possibleRecourse', v), true)}
-          {inputField('Measures to prevent future damage', meta.measuresToPreventFutureDamage, v => setField('measuresToPreventFutureDamage', v), true)}
-          {inputField('Started repairs', meta.startedRepairs, v => setField('startedRepairs', v), true)}
-          {inputField('Value loss per month (NOK)', meta.habitableValueLossPerMonth, v => setField('habitableValueLossPerMonth', v))}
-          {inputField('Habitable – other info', meta.habitableOtherInfo, v => setField('habitableOtherInfo', v), true)}
-          {inputField('Summary', meta.summaryText, v => setField('summaryText', v), true)}
+          {/* ── Skade og status ── */}
+          {sectionLabel('Skade og status')}
+          {inputField('Mulig regress', meta.possibleRecourse, v => setField('possibleRecourse', v), true)}
+          {inputField('Tiltak for å hindre fremtidig skade', meta.measuresToPreventFutureDamage, v => setField('measuresToPreventFutureDamage', v), true)}
+          {inputField('Påbegynte utbedringer', meta.startedRepairs, v => setField('startedRepairs', v), true)}
+          {inputField('Verditap per måned (kr)', meta.habitableValueLossPerMonth, v => setField('habitableValueLossPerMonth', v))}
+          {inputField('Beboelighet – annen info', meta.habitableOtherInfo, v => setField('habitableOtherInfo', v), true)}
+          {inputField('Sammendrag', meta.summaryText, v => setField('summaryText', v), true)}
 
           {/* Save button */}
           {saveError ? (
-            <Caption style={{ color: 'red', textAlign: 'center' }}>{saveError}</Caption>
+            <Caption style={{ color: theme.colors.danger, textAlign: 'center' }}>{saveError}</Caption>
           ) : null}
           <PrimaryButton onPress={onSave} loading={saving} disabled={saving}>
-            Save report details
+            Lagre rapportdetaljer
           </PrimaryButton>
         </View>
       )}

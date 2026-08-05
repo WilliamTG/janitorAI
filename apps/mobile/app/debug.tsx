@@ -105,7 +105,7 @@ export default function DebugScreen() {
 
           {healthStatus === 'ok' && (
             <View style={styles.statusContainer}>
-              <Text style={styles.statusSuccess}>✓ API is healthy</Text>
+              <Text style={styles.statusSuccess}>API-et svarer</Text>
               {healthData && (
                 <View style={styles.codeBlock}>
                   <Text style={styles.codeText}>{JSON.stringify(healthData, null, 2)}</Text>

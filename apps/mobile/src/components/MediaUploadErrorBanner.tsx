@@ -65,12 +65,12 @@ export default function MediaUploadErrorBanner() {
         >
           <Ionicons name="alert-circle-outline" size={18} color={AMBER_TEXT} />
           <Caption style={{ flex: 1, color: AMBER_TEXT }}>
-            One or more files are too large to upload (max 50 MB). Please trim your videos or
-            export at a lower resolution.
+            Én eller flere filer er for store til å lastes opp (maks 50 MB). Kort ned videoene
+            eller eksporter i lavere oppløsning.
           </Caption>
           <Pressable
             onPress={() => setOversizedDismissed(true)}
-            accessibilityLabel="Dismiss file size error"
+            accessibilityLabel="Lukk varsel om filstørrelse"
             hitSlop={8}
           >
             <Ionicons name="close-outline" size={18} color={AMBER_TEXT} />
@@ -95,12 +95,12 @@ export default function MediaUploadErrorBanner() {
         >
           <Ionicons name="cloud-offline-outline" size={18} color={theme.colors.danger} />
           <Caption style={{ flex: 1, color: theme.colors.danger }}>
-            Photos and videos couldn't sync to the server. Your data is saved on this device. We'll
-            keep retrying in the background.
+            Bilder og videoer ble ikke synkronisert til serveren. Dataene er lagret på denne
+            enheten. Vi prøver igjen automatisk i bakgrunnen.
           </Caption>
           <Pressable
             onPress={() => setGenericDismissed(true)}
-            accessibilityLabel="Dismiss media upload error"
+            accessibilityLabel="Lukk varsel om medieopplasting"
             hitSlop={8}
           >
             <Ionicons name="close-outline" size={18} color={theme.colors.danger} />

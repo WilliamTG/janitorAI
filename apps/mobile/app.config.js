@@ -29,7 +29,7 @@ module.exports = ({ config }) => {
     // start from existing Expo config (important!)
     ...config,
 
-    name: "inspection-mvp",
+    name: "DocrAI",
     slug: "inspection-mvp",
     version: "1.0.0",
     orientation: "portrait",

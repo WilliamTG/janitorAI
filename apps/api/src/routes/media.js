@@ -140,6 +140,22 @@ async function rejectWhenDiskFull(req, res, next) {
   next();
 }
 
+// Stream-hash the uploaded file (B11: tamper-evident media). Never buffers the
+// whole file — videos can be 200 MB. Returns null instead of failing the
+// upload if hashing goes wrong; the checksum is provenance, not a gate.
+function sha256OfFile(filePath) {
+  return new Promise((resolve) => {
+    const hash = crypto.createHash("sha256");
+    const stream = fs.createReadStream(filePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+    stream.on("error", (err) => {
+      console.error("media sha256 error:", sanitizeError(err));
+      resolve(null);
+    });
+  });
+}
+
 router.post("/", rejectWhenDiskFull, upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
@@ -151,11 +167,12 @@ router.post("/", rejectWhenDiskFull, upload.single("file"), async (req, res) => 
     const id = path.basename(filePath, path.extname(filePath));
     const projectId = req.body && req.body.projectId ? String(req.body.projectId) : null;
     const kind = req.body && req.body.kind ? String(req.body.kind) : null;
+    const sha256 = await sha256OfFile(filePath);
 
     const pool = getPool();
     await pool.query(
-      `INSERT INTO media (id, project_id, kind, mime_type, original_name, size_bytes, file_path, tester_token)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `INSERT INTO media (id, project_id, kind, mime_type, original_name, size_bytes, file_path, tester_token, sha256)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         id,
         projectId,
@@ -165,10 +182,11 @@ router.post("/", rejectWhenDiskFull, upload.single("file"), async (req, res) => 
         req.file.size || null,
         filePath,
         req.testerToken,
+        sha256,
       ]
     );
 
-    res.json({ id });
+    res.json({ id, sha256 });
   } catch (err) {
     console.error("POST /api/media error:", sanitizeError(err));
     fs.unlink(filePath, () => {});

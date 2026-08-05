@@ -142,10 +142,13 @@ function guessFileMeta(uri: string, kind: 'photo' | 'audio' | 'video'): { name: 
   return { name: `${kind}.${ext}`, type };
 }
 
+/** Serverens svar på en vellykket opplasting: varig id + sjekksum (B11). */
+type UploadResult = { id: string; sha256?: string };
+
 // Guard against duplicate uploads when a stale in-memory project (without
 // the remoteId that was already persisted) is pushed again.
-const uploadedByUri = new Map<string, string>();
-const uploadsInFlight = new Map<string, Promise<string | null>>();
+const uploadedByUri = new Map<string, UploadResult>();
+const uploadsInFlight = new Map<string, Promise<UploadResult | null>>();
 // URIs permanently rejected by the server (FILE_TOO_LARGE). Never retried.
 const oversizedUris = new Set<string>();
 
@@ -168,7 +171,7 @@ async function uploadMedia(
   uri: string,
   kind: 'photo' | 'audio' | 'video',
   projectId: string,
-): Promise<string | null> {
+): Promise<UploadResult | null> {
   // Permanently quarantined — server already rejected this file as too large.
   if (oversizedUris.has(uri)) return null;
 
@@ -179,9 +182,9 @@ async function uploadMedia(
   if (inFlight) return inFlight;
 
   const promise = doUploadMedia(uri, kind, projectId)
-    .then((remoteId) => {
-      if (remoteId) uploadedByUri.set(uri, remoteId);
-      return remoteId;
+    .then((result) => {
+      if (result) uploadedByUri.set(uri, result);
+      return result;
     })
     .finally(() => {
       // Always remove from in-flight map — even on rejection — so a failed
@@ -234,7 +237,7 @@ async function doUploadMedia(
   uri: string,
   kind: 'photo' | 'audio' | 'video',
   projectId: string,
-): Promise<string | null> {
+): Promise<UploadResult | null> {
   const startMs = Date.now();
   try {
     const formData = new FormData();
@@ -353,9 +356,13 @@ async function doUploadMedia(
       // pointing to a missing IDB entry if a refresh occurred in that window.
     } else {
       logError(new Error('Media upload response missing id'), `upload-${kind}`);
+      return null;
     }
 
-    return remoteId;
+    return {
+      id: remoteId,
+      sha256: typeof data.sha256 === 'string' ? data.sha256 : undefined,
+    };
   } catch (error) {
     console.warn('[sync] Media upload error', error);
     logError(error, `upload-${kind}`);
@@ -386,9 +393,9 @@ async function uploadPendingMedia(
       let nextNote = note;
 
       if (note.audioUri && !note.audioRemoteId) {
-        const remoteId = await uploadMedia(note.audioUri, 'audio', project.id);
-        if (remoteId) {
-          nextNote = { ...nextNote, audioRemoteId: remoteId };
+        const uploaded = await uploadMedia(note.audioUri, 'audio', project.id);
+        if (uploaded) {
+          nextNote = { ...nextNote, audioRemoteId: uploaded.id, audioSha256: uploaded.sha256 };
           changed = true;
         } else {
           failedCount += 1;
@@ -399,10 +406,10 @@ async function uploadPendingMedia(
         const photos: Photo[] = await Promise.all(
           note.photos.map(async (photo) => {
             if (!photo.uri || photo.remoteId) return photo;
-            const remoteId = await uploadMedia(photo.uri, 'photo', project.id);
-            if (remoteId) {
+            const uploaded = await uploadMedia(photo.uri, 'photo', project.id);
+            if (uploaded) {
               changed = true;
-              return { ...photo, remoteId };
+              return { ...photo, remoteId: uploaded.id, sha256: uploaded.sha256 };
             }
             failedCount += 1;
             return photo;
@@ -412,9 +419,9 @@ async function uploadPendingMedia(
       }
 
       if (note.videoUri && !note.videoRemoteId) {
-        const remoteId = await uploadMedia(note.videoUri, 'video', project.id);
-        if (remoteId) {
-          nextNote = { ...nextNote, videoRemoteId: remoteId };
+        const uploaded = await uploadMedia(note.videoUri, 'video', project.id);
+        if (uploaded) {
+          nextNote = { ...nextNote, videoRemoteId: uploaded.id, videoSha256: uploaded.sha256 };
           changed = true;
           // Schedule IDB cleanup for this note's video — deferred so the
           // caller can commit the remoteId to local storage first.
@@ -433,9 +440,9 @@ async function uploadPendingMedia(
   let next: Project = { ...project, notes };
 
   if (project.projectDescriptionAudioUri && !project.projectDescriptionAudioRemoteId) {
-    const remoteId = await uploadMedia(project.projectDescriptionAudioUri, 'audio', project.id);
-    if (remoteId) {
-      next = { ...next, projectDescriptionAudioRemoteId: remoteId };
+    const uploaded = await uploadMedia(project.projectDescriptionAudioUri, 'audio', project.id);
+    if (uploaded) {
+      next = { ...next, projectDescriptionAudioRemoteId: uploaded.id };
       changed = true;
     } else {
       failedCount += 1;

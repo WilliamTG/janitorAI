@@ -6,7 +6,8 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { AppThemeProvider } from '@/src/ui';
+import { nb } from '@/src/i18n/nb';
+import { AppThemeProvider, ToastProvider } from '@/src/ui';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -22,20 +23,20 @@ export default function RootLayout() {
 
   return (
     <AppThemeProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack
-          screenOptions={{
-            animation: Platform.OS === 'ios' ? 'slide_from_right' : 'fade_from_bottom',
-            contentStyle: { backgroundColor: stackBackground },
-            headerBackTitleVisible: false,
-            headerBackTitle: 'Projects',
-          }}
-        >
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
+      <ToastProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack
+            screenOptions={{
+              animation: Platform.OS === 'ios' ? 'slide_from_right' : 'fade_from_bottom',
+              contentStyle: { backgroundColor: stackBackground },
+              headerBackTitle: nb.tabs.home,
+            }}
+          >
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          </Stack>
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </ToastProvider>
     </AppThemeProvider>
   );
 }
