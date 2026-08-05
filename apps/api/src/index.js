@@ -137,6 +137,10 @@ app.use(requireTesterToken);
 const projectsRouter = require("./routes/projects");
 app.use("/api/projects", projectsRouter);
 
+// ---------- SAKSUNDERLAG (PROTECTED, proxyer offentlige API-er) ----------
+const underlagRouter = require("./routes/underlag");
+app.use("/api/underlag", underlagRouter);
+
 // ---------- WHOAMI (PROTECTED) ----------
 app.get("/whoami", (req, res) => {
   res.json({ authorized: true });

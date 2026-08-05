@@ -124,6 +124,20 @@ export const nb = {
     approvedBy: 'Godkjent av takstperson',
   },
 
+  underlag: {
+    title: 'Saksunderlag',
+    searching: 'Søker i Kartverket …',
+    pickHint: 'Velg adressen fra Kartverket, så fylles saken ut automatisk.',
+    municipality: 'Kommune',
+    cadastre: 'Gnr/bnr',
+    coordinates: 'Posisjon',
+    openMap: 'Åpne i Norgeskart',
+    mapAlt: 'Kartutsnitt over eiendommen',
+    rainAroundDamage: 'Nedbør rundt skadedato',
+    rainStation: 'målt ved',
+    sourceLine: 'Kilde: Kartverket (åpne data)',
+  },
+
   share: {
     title: 'Del rapporten',
     create: 'Lag delingslenke',

@@ -48,6 +48,18 @@ export type GeoPoint = {
   lng: number;
 };
 
+/** Saksunderlag hentet fra offentlige API-er ved adressevalg (Kartverket). */
+export type CaseFile = {
+  addressText: string;
+  postCode?: string;
+  postPlace?: string;
+  municipality?: string;
+  gnr?: number;
+  bnr?: number;
+  lat: number;
+  lon: number;
+};
+
 export type Photo = {
   id: string;
   uri: string;
@@ -109,6 +121,8 @@ export type Project = {
   deletedNotes?: Record<string, string>;
   /** Per-project metadata used to populate Google Doc template placeholders. */
   reportMeta?: ReportMeta;
+  /** Saksunderlag fra adressevalget i veiviseren (Kartverket m.fl.). */
+  caseFile?: CaseFile;
   /** URL of the generated Google Doc (persisted after successful generation). */
   reportUrl?: string;
   /** Lifecycle status of the most recent report generation attempt. */

@@ -15,6 +15,7 @@ import apiFetch, {
   validateTesterToken,
 } from '@/src/lib/apiFetch';
 import { getCurrentGeo } from '@/src/lib/geo';
+import { tileForCoordinate } from '@/src/lib/kartverket';
 import { logError, logAction } from '@/src/lib/logger';
 import { GeoPoint, NO_DATE_SET, Note, Project, ReportMeta, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
 import { ReportDetailsSection } from '@/src/features/projects/ReportDetailsSection';
@@ -149,6 +150,7 @@ export default function ProjectDetailScreen() {
   const [googleDocUrl, setGoogleDocUrl] = useState<string | null>(null);
   const [shareInfo, setShareInfo] = useState<{ url: string; pin: string; expiresAt: string } | null>(null);
   const [isCreatingShare, setIsCreatingShare] = useState(false);
+  const [caseWeather, setCaseWeather] = useState<{ station: string; totalMm: number } | null>(null);
   const [activeTab, setActiveTab] = useState<ProjectTab>('notes');
   const [describingPhotos, setDescribingPhotos] = useState<Set<string>>(new Set());
   const [editingPhotos, setEditingPhotos] = useState<Record<string, { editing: boolean; caption: string }>>({});
@@ -1165,6 +1167,35 @@ export default function ProjectDetailScreen() {
 
   // B7/B10: kontoløs delingslenke med PIN og utløp (Wenn-mønsteret, hardnet).
   // PIN-koden vises kun her — den legges aldri i delingsmeldingen (nb.share.hint).
+  // Nedbør rundt skadedato (MET Frost via API-et) — vises kun når serveren har
+  // nøkkel konfigurert og saken har både posisjon og skadedato.
+  useEffect(() => {
+    const cf = project?.caseFile;
+    const damageDate = project?.reportMeta?.damageDate;
+    if (!cf || !damageDate || !/^\d{4}-\d{2}-\d{2}$/.test(damageDate) || !isTokenValid) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await apiFetch(
+          `${getApiBaseUrl()}/api/underlag/vaer?lat=${cf.lat}&lon=${cf.lon}&date=${damageDate}`,
+          { skipAuthHandling: true },
+        );
+        if (cancelled || !response.ok) return;
+        const data: any = await response.json();
+        if (!cancelled && data.configured && typeof data.totalMm === 'number' && data.station) {
+          setCaseWeather({ station: String(data.station), totalMm: data.totalMm });
+        }
+      } catch {
+        // værdata er en berikelse — stille feil
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [project?.caseFile, project?.reportMeta?.damageDate, isTokenValid]);
+
   const createShare = async () => {
     if (!project || isCreatingShare) return;
     try {
@@ -1722,6 +1753,81 @@ export default function ProjectDetailScreen() {
     </GlassCard>
   );
 
+  // Saksunderlaget fra adressevalget: kartutsnitt (Kartverket WMTS), matrikkel-
+  // referanse og eventuell nedbørshistorikk rundt skadedato.
+  const renderUnderlagCard = () => {
+    const cf = project?.caseFile;
+    if (!cf) return null;
+    const pin = tileForCoordinate(cf.lat, cf.lon);
+    const MAP = 216;
+    return (
+      <GlassCard style={{ gap: theme.spacing.sm }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+          <Ionicons name="map-outline" size={18} color={theme.colors.accent} />
+          <Title style={{ fontSize: 18 }}>{nb.underlag.title}</Title>
+        </View>
+        <View style={{ flexDirection: 'row', gap: theme.spacing.md, flexWrap: 'wrap' }}>
+          <View
+            style={{
+              width: MAP,
+              height: MAP,
+              borderRadius: theme.radii.md,
+              overflow: 'hidden',
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+            }}
+          >
+            <Image
+              source={{ uri: pin.url }}
+              style={{ width: MAP, height: MAP }}
+              accessibilityLabel={nb.underlag.mapAlt}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                left: pin.fx * MAP - 7,
+                top: pin.fy * MAP - 7,
+                width: 14,
+                height: 14,
+                borderRadius: 7,
+                backgroundColor: theme.colors.accent,
+                borderWidth: 2,
+                borderColor: '#FFFFFF',
+              }}
+            />
+          </View>
+          <View style={{ flex: 1, minWidth: 180, gap: 6 }}>
+            <Body style={{ fontWeight: '600' }}>
+              {cf.addressText}
+              {cf.postPlace ? `, ${cf.postPlace}` : ''}
+            </Body>
+            {cf.municipality ? (
+              <Caption muted>{`${nb.underlag.municipality}: ${cf.municipality}`}</Caption>
+            ) : null}
+            {cf.gnr != null ? (
+              <Caption muted>{`${nb.underlag.cadastre}: ${cf.gnr}/${cf.bnr}`}</Caption>
+            ) : null}
+            <Caption muted>{`${nb.underlag.coordinates}: ${cf.lat.toFixed(5)}°N ${cf.lon.toFixed(5)}°Ø`}</Caption>
+            {caseWeather ? (
+              <Caption muted>
+                {`${nb.underlag.rainAroundDamage}: ${caseWeather.totalMm} mm (${nb.underlag.rainStation} ${caseWeather.station})`}
+              </Caption>
+            ) : null}
+            <TouchableOpacity
+              onPress={() => Linking.openURL(`https://www.norgeskart.no/#!?sok=${encodeURIComponent(cf.addressText)}`)}
+              accessibilityRole="link"
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 32 }}
+            >
+              <Ionicons name="open-outline" size={14} color={theme.colors.accent} />
+              <Caption style={{ color: theme.colors.accent }}>{nb.underlag.openMap}</Caption>
+            </TouchableOpacity>
+            <Caption muted>{nb.underlag.sourceLine}</Caption>
+          </View>
+        </View>
+      </GlassCard>
+    );
+  };
+
   const renderInfoCard = () => {
     const rawDate = project?.inspectionDate;
     const dateText =
@@ -1837,6 +1943,7 @@ export default function ProjectDetailScreen() {
             renderItem={renderNoteItem}
             ListHeaderComponent={
               <View style={{ gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
+                {renderUnderlagCard()}
                 {renderInfoCard()}
                 {renderProjectDescription()}
                 {renderTextNoteCard()}
