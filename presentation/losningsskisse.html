@@ -290,10 +290,114 @@
     </figure>
   </section>
 
-  <!-- ══ 2 · Forskningsgrepene ══ -->
+
+  <!-- ══ 2 · Saksunderlaget ══ -->
   <section>
     <div class="sec-head">
       <span class="eyebrow">02</span>
+      <h2>Saksunderlaget — ferdig før befaringen</h2>
+    </div>
+    <p>
+      Flyten over starter egentlig ett trinn tidligere: når adressen legges inn, hentes underlaget
+      automatisk fra offentlige API-er. Byggeåret avgjør <strong>hvilket regelverk og hvilken
+      Byggforsk-versjon</strong> som gjaldt, nedbørshistorikken rundt skadedato peker mot
+      <strong>akutt eller gradvis</strong>, og risikokartene gir konteksten forsikringen trenger.
+      Kjernekildene er åpne (Kartverket uten nøkkel, NVE som åpne kartlag, MET med gratis
+      registrering); aggregatorer som Nordeca Insight, Norkart og Ambita samler de samme kildene
+      kommersielt med avtaler og SLA. At dette laget er verdifullt er globalt bevist — Moody's
+      kjøpte CAPE Analytics nettopp for adressespesifikk risikoinnsikt før noen drar ut.
+    </p>
+    <figure>
+      <div class="fig-scroll">
+      <svg viewBox="0 0 1100 445" role="img" aria-label="Dataflyt: takstpersonen legger inn adressen, fem offentlige API-er henter koordinater, byggeaar, risikokart, nedboer og flyfoto, og sakskortet staar ferdig utfylt foer befaringen starter.">
+        <defs>
+          <marker id="u-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="mk-ink"/>
+          </marker>
+          <marker id="u-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="mk-mut"/>
+          </marker>
+        </defs>
+
+        <!-- 0 · ADRESSE -->
+        <text x="14" y="168" class="dnum">0 · ADRESSE</text>
+        <rect x="10" y="178" width="190" height="74" class="db-accent"/>
+        <text x="26" y="204" class="dt">Adressen legges inn</text>
+        <text x="26" y="224" class="ds">Solbergveien 14, Rykkinn</text>
+        <text x="26" y="240" class="ds">— alt under hentes automatisk</text>
+
+        <!-- buss inn -->
+        <line x1="200" y1="215" x2="235" y2="215" class="darr"/>
+        <line x1="235" y1="64" x2="235" y2="320" class="darr"/>
+        <line x1="235" y1="64" x2="266" y2="64" class="darr" marker-end="url(#u-ink)"/>
+        <line x1="235" y1="128" x2="266" y2="128" class="darr" marker-end="url(#u-ink)"/>
+        <line x1="235" y1="192" x2="266" y2="192" class="darr" marker-end="url(#u-ink)"/>
+        <line x1="235" y1="256" x2="266" y2="256" class="darr" marker-end="url(#u-ink)"/>
+        <line x1="235" y1="320" x2="266" y2="320" class="darr" marker-end="url(#u-ink)"/>
+
+        <!-- offentlige API-er -->
+        <text x="274" y="28" class="dnum">OFFENTLIGE API-ER</text>
+        <rect x="270" y="40" width="300" height="48" class="db"/>
+        <text x="284" y="60" class="dt">Kartverket adresse-API</text>
+        <text x="284" y="77" class="ds">koordinater · gnr/bnr — åpent, uten nøkkel</text>
+        <rect x="270" y="104" width="300" height="48" class="db"/>
+        <text x="284" y="124" class="dt">Matrikkelen</text>
+        <text x="284" y="141" class="ds">byggeår · bygningstype · areal</text>
+        <rect x="270" y="168" width="300" height="48" class="db"/>
+        <text x="284" y="188" class="dt">NVE aktsomhetskart</text>
+        <text x="284" y="205" class="ds">flom · overvann · kvikkleire — åpne kartlag</text>
+        <rect x="270" y="232" width="300" height="48" class="db"/>
+        <text x="284" y="252" class="dt">MET Frost</text>
+        <text x="284" y="269" class="ds">nedbør rundt skadedato — gratis nøkkel</text>
+        <rect x="270" y="296" width="300" height="48" class="db"/>
+        <text x="284" y="316" class="dt">Norge i bilder</text>
+        <text x="284" y="333" class="ds">flyfoto av eiendommen — åpent</text>
+
+        <!-- aggregator-spor -->
+        <rect x="270" y="368" width="300" height="50" class="db-dash"/>
+        <text x="284" y="389" class="dt">Aggregator-spor</text>
+        <text x="284" y="406" class="ds">Nordeca Insight · Norkart · Ambita — samme kilder, med avtale</text>
+        <polyline points="570,393 605,393 605,344" class="darr-dash"/>
+
+        <!-- buss ut -->
+        <line x1="570" y1="64" x2="605" y2="64" class="darr"/>
+        <line x1="570" y1="128" x2="605" y2="128" class="darr"/>
+        <line x1="570" y1="192" x2="605" y2="192" class="darr"/>
+        <line x1="570" y1="256" x2="605" y2="256" class="darr"/>
+        <line x1="570" y1="320" x2="605" y2="320" class="darr"/>
+        <line x1="605" y1="64" x2="605" y2="320" class="darr"/>
+        <line x1="605" y1="192" x2="668" y2="192" class="darr" marker-end="url(#u-ink)"/>
+
+        <!-- sakskortet -->
+        <text x="679" y="48" class="dnum">SAKSKORTET — FERDIG FØR BEFARING</text>
+        <rect x="675" y="60" width="415" height="272" class="db-solid"/>
+        <text x="693" y="88" class="dt-w">Solbergveien 14, Rykkinn</text>
+        <text x="693" y="114" class="ds-w">Prosjektnavn = adressen (løser B17)</text>
+        <text x="693" y="136" class="ds-w">Byggeår 1987 → riktig TEK- og Byggforsk-versjon til RAG-en</text>
+        <text x="693" y="158" class="ds-w">Flomsone-flagg → risikokontekst i rapporten</text>
+        <text x="693" y="180" class="ds-w">120 mm nedbør 19.–20. juli → støtter akutt hendelse</text>
+        <text x="693" y="202" class="ds-w">Kart der bevisene plottes med geo-taggene (B9)</text>
+        <text x="693" y="224" class="ds-w">Rapportskjemaet auto-utfylt — mindre tasting i felt</text>
+        <text x="693" y="260" class="ds-w">Takstpersonen vet hva som venter</text>
+        <text x="693" y="278" class="ds-w">— før bilen har forlatt kontoret.</text>
+
+        <!-- inn i befaringen -->
+        <line x1="880" y1="332" x2="880" y2="392" class="darr-dash" marker-end="url(#u-mut)"/>
+        <text x="892" y="368" class="dl">inn i befaringsflyten — trinn 1–5 over</text>
+      </svg>
+      </div>
+      <figcaption>
+        Ett adressesøk fyller saken: de fem åpne kildene dekker kjernebehovet uten lisenskost,
+        mens aggregator-sporet (stiplet) er veien til full matrikkel og plantegninger med avtale.
+        Sakskortet mater både takstpersonens forberedelse og AI-pipelinens Byggforsk-oppslag.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ══ 3 · Forskningsgrepene ══ -->
+  <section>
+    <div class="sec-head">
+      <span class="eyebrow">03</span>
       <h2>Tre forskningsgrep som gjør den til å stole på</h2>
     </div>
     <p>
@@ -338,10 +442,10 @@
     </div>
   </section>
 
-  <!-- ══ 3 · Posisjonen ══ -->
+  <!-- ══ 4 · Posisjonen ══ -->
   <section>
     <div class="sec-head">
-      <span class="eyebrow">03</span>
+      <span class="eyebrow">04</span>
       <h2>Posisjonen: tre fronter — ingen når inn</h2>
     </div>
     <p>
@@ -407,10 +511,10 @@
     </figure>
   </section>
 
-  <!-- ══ 4 · Veien dit ══ -->
+  <!-- ══ 5 · Veien dit ══ -->
   <section>
     <div class="sec-head">
-      <span class="eyebrow">04</span>
+      <span class="eyebrow">05</span>
       <h2>Veien dit: fire sprinter</h2>
     </div>
     <p>
@@ -447,6 +551,14 @@
         <p class="goal"><b>Mål:</b> klar for pilotsalg mot takst og forsikring</p>
       </div>
     </div>
+      <div class="sprint">
+        <span class="s-num">Neste</span>
+        <h3>Saksunderlag</h3>
+        <p>Adressesøk med kart, byggeår fra matrikkelen, NVE-risikolag og nedbørshistorikk rundt skadedato.</p>
+        <div class="tagrow"><span class="tag hot">B17</span><span class="tag">Kartverket</span><span class="tag">NVE</span><span class="tag">MET</span></div>
+        <p class="goal"><b>Mål:</b> saken er ferdig utfylt før takstpersonen kjører</p>
+      </div>
+    </div>
     <div class="callout">
       <div class="bar"></div>
       <p>
@@ -457,10 +569,10 @@
     </div>
   </section>
 
-  <!-- ══ 5 · Økosystem ══ -->
+  <!-- ══ 6 · Økosystem ══ -->
   <section>
     <div class="sec-head">
-      <span class="eyebrow">05</span>
+      <span class="eyebrow">06</span>
       <h2>Hvem er hvem rundt løsningen</h2>
     </div>
     <div class="eco">
