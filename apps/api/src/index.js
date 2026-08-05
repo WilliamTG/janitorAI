@@ -80,6 +80,8 @@ function sendPresentationPage(res, filename) {
 app.get("/pitch", (req, res) => sendPresentationPage(res, "pitch.html"));
 app.get("/losningsskisse", (req, res) => sendPresentationPage(res, "losningsskisse.html"));
 app.get("/ui-endringer", (req, res) => sendPresentationPage(res, "ui-endringer.html"));
+app.get("/underlag-demo", (req, res) => sendPresentationPage(res, "underlag-demo.html"));
+app.get("/totalbilde", (req, res) => sendPresentationPage(res, "totalbilde.html"));
 
 // ---------- SHARE PAGE (public HTML shell; data endpoints gate on PIN) ------
 // Registered before the static/SPA fallback so /share/:id is never swallowed
