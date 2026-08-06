@@ -302,6 +302,16 @@ export default function ProjectDetailScreen() {
     loadProject();
   }, [loadProject]);
 
+  // Keep UI in sync when pushProject writes remote IDs back to storage
+  // (e.g. videoRemoteId after upload completes) without requiring navigation.
+  useEffect(() => {
+    if (!projectId) return;
+    const unsub = subscribeToProjectUpdates(projectId, (updated) => {
+      setState((prev) => ({ ...prev, project: updated }));
+    });
+    return unsub;
+  }, [projectId]);
+
   // «Prøv igjen» fra prosjektlisten (?retry=1): åpne rapport-fanen og start
   // genereringen på nytt — men først når tilgangskoden er ferdig validert,
   // og aldri mer enn én gang per besøk.
