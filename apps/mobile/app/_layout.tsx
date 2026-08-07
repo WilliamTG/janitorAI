@@ -21,6 +21,13 @@ export default function RootLayout() {
     console.log('[Navigation] Root layout mounted with stack background', stackBackground);
   }, [stackBackground]);
 
+  // Set browser tab title on web
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.title = 'DocrAI';
+    }
+  }, []);
+
   return (
     <AppThemeProvider>
       <ToastProvider>
