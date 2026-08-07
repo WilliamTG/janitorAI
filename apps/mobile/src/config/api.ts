@@ -1,31 +1,39 @@
 /**
  * API Configuration
- * 
- * Provides a single source of truth for API base URLs.
- * Uses expo-constants to read configuration from app.config.js based on build profile.
+ *
+ * Priority order:
+ *  1. EXPO_PUBLIC_API_URL  — set as a build-time env var on Render (or any CI).
+ *     Metro inlines all EXPO_PUBLIC_* vars into the static bundle at export time.
+ *  2. Constants.expoConfig.extra.API_BASE_URL — set via app.json/app.config.js
+ *     for EAS native builds (iOS / Android).
+ *  3. Auto-detect: localhost:3000 in dev (__DEV__), production Render URL otherwise.
  */
 
 import Constants from 'expo-constants';
 
 /**
  * Get the API base URL for the current build environment.
- * Falls back to production URL if not configured.
  */
 export function getApiBaseUrl(): string {
-  const baseUrl = Constants.expoConfig?.extra?.API_BASE_URL;
-
-  // An empty string is valid: it means same-origin requests
-  // (the web app is served by the API server itself).
-  if (baseUrl === '') {
-    return '';
+  // 1. Build-time env var (Render static site, any CI pipeline)
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl !== undefined && envUrl !== '') {
+    return envUrl;
   }
 
-  if (!baseUrl) {
-    console.warn('API_BASE_URL not configured in app.config.js, falling back to production URL');
-    return 'https://janitorai-backend.onrender.com';
+  // 2. EAS / app.config extra field (native builds)
+  const extraUrl = Constants.expoConfig?.extra?.API_BASE_URL as string | undefined;
+  if (extraUrl !== undefined && extraUrl !== '') {
+    return extraUrl;
   }
-  
-  return baseUrl;
+
+  // 3. Automatic fallback
+  if (__DEV__) {
+    // Local Expo dev server — backend runs on the same machine
+    return 'http://localhost:3000';
+  }
+
+  return 'https://janitorai-backend.onrender.com';
 }
 
 /**
