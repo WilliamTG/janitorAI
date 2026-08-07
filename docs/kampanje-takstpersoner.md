@@ -67,8 +67,9 @@ Demolenke som viser **mottakerens egen adresse**:
 
 - `docrai.no/demo?adresse=<foretakets kontoradresse>` → siden åpner rett i
   saksunderlaget for adressen: kart, matrikkel, bygningstype, terrenghøyde,
-  vær. Null innlogging (demo-modus fra faseplanen — denne kampanjen er
-  grunnen til å bygge den).
+  vær. Null innlogging. **Bygget (aug 2026):** `/demo?adresse=…` fyller inn
+  og henter automatisk; offentlig endepunkt er rate-begrenset og returnerer
+  kun beste treff, med pilot-CTA på siden — verifisert mot ekte kilder.
 - Førstemelding kan da si: *«Trykk her — dette er kontoret deres, hentet fra
   åpne kilder på 2 sekunder. Tenk deg det samme før hver befaring.»*
   Personalisering som er umulig å ignorere, og som demonstrerer produktet

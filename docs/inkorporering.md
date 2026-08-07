@@ -24,21 +24,27 @@ Amerikanske adjustere *snakker* rapporten sin; AI-en strukturerer. Vi har
 lydnotat + transkripsjon — forsterk til førsteklasses innsatsvei: norsk
 fagterm-prompt (allerede planlagt i faseplanen), og la rapportmotoren
 eksplisitt bruke tale som primærkilde med foto/video som bevisanker.
-**Status:** delvis bygget. Gjenstår: fagtermliste i transkripsjonsprompten
-(timesjobb) + prompt-regel om talens rolle.
+**Status:** bygget (aug 2026). Transkripsjonsprompten er norsk-først med ~50
+byggtekniske fagtermer og ordrett-regler for mål og romnavn. Gjenstår:
+prompt-regel i rapportmotoren om talens rolle som primærkilde.
 
 ### A3. Tid som innebygd metrikk (hele det amerikanske markedet)
 Alle selger «dager spart» (snittsyklus USA: 32,4 dager). Instrumentér
 produktet nå: tidsstempel befaring startet / rapport generert / rapport
 godkjent / rapport delt — og vis «tid til godkjent rapport» i appen.
 Dette er casestudie-valutaen; den må samles fra sak én.
-**Status:** ikke bygget. Små felter på prosjektet + én visning.
+**Status:** bygget (aug 2026). Beregnes fra tidsstempler sakene allerede
+bærer (tidligste bevis → godkjenningsstempel) og vises på prosjektkortet og
+i godkjenningskortet: «Befaring → godkjent rapport: 1 t 19 m».
 
 ### A4. Demo-modus med adresse-parameter (kampanjekroken + Spectora-lærdom)
 Spectora vokste produktledet i et småforetaksmarked. Vår versjon:
 `/demo?adresse=` som åpner saksunderlaget for mottakerens egen adresse uten
 innlogging.
-**Status:** ikke bygget; alle API-lag finnes. Låser opp kampanjen.
+**Status:** bygget (aug 2026). `/demo?adresse=…` viser kart, matrikkel,
+bygning, terreng og vær live uten innlogging; `/api/demo/underlag` er
+rate-begrenset og returnerer kun beste treff. Komma i adressen normaliseres
+(Geonorge-søket gir ellers null treff). Kampanjen kan rulle.
 
 ### A5. Rapportversjoner: AI-utkast ≠ godkjent versjon (faseplanen + Spectora AI)
 Spectoras AI-assistent redigerer *per kommentar/felt* — takstpersonen flikker,
@@ -107,9 +113,10 @@ eget tegne-/måleverktøy.
 
 ## Anbefalt byggerekkefølge (flettet med faseplanen)
 
-1. **A5 versjonslagring** (bygger videre på godkjenningsflyten som nettopp
-   ble ferdig) → 2. **A4 demo-modus** (låser opp kampanjen) → 3. **A2
-   fagterm-transkripsjon** (timesjobb, stor effekt) → 4. **A3
-   tidsinstrumentering** (må inn før pilotsakene starter) → 5. **A1
-   romløype** → 6. **B1 in4mo-eksport** (med pilotbruker) → 7. **B3
-   risikoflagg** → 8. **B2 plantegning** (når dokumentlaget er avklart).
+Ferdig: A2 fagterm-transkripsjon, A3 tidsmetrikk, A4 demo-modus (alle
+aug 2026, i tillegg til godkjenningsflyten). Gjenstående rekkefølge:
+
+1. **A5 versjonslagring** (bygger videre på godkjenningsflyten; flytter
+   rapporten ut av Google Docs og inn i Postgres) → 2. **A1 romløype** →
+   3. **B1 in4mo-eksport** (med pilotbruker) → 4. **B3 risikoflagg** →
+   5. **B2 plantegning** (når dokumentlaget er avklart).
