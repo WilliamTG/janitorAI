@@ -93,6 +93,12 @@ app.get("/share/:id", (req, res) => {
   res.sendFile(path.join(__dirname, "share-page.html"));
 });
 
+// ---------- DEMO (public — kampanjekroken, inkorporering A4) ----------------
+// /demo?adresse=… viser saksunderlaget for en adresse uten innlogging.
+app.get("/demo", (req, res) => {
+  res.sendFile(path.join(__dirname, "demo-page.html"));
+});
+
 if (fs.existsSync(STATIC_DIR)) {
   app.use(express.static(STATIC_DIR, { extensions: ["html"] }));
   app.use((req, res, next) => {
@@ -123,6 +129,9 @@ app.use("/api/share", shareRouter);
 
 // ---------- KARTFLIS-PROXY (public: <img> kan ikke sette headere) ----------
 app.get("/api/flis/:z/:y/:x", require("./routes/underlag").tileHandler);
+// Demo-underlaget er offentlig, men bak heavyLimiter (30 kall/15 min per IP)
+// så det ikke kan misbrukes som gratis oppslagsproxy.
+app.get("/api/demo/underlag", heavyLimiter, require("./routes/underlag").demoHandler);
 
 // ---------- ADMIN (own auth: x-admin-secret header) ----------
 // Mounted before the global tester-token guard so it uses its own middleware.
@@ -155,6 +164,26 @@ app.get("/whoami", (req, res) => {
 });
 
 // ---------- TRANSCRIPTION (Gemini) ----------
+// Norsk fagterm-hint (inkorporering A2): befaringstale er bokmål/dialekt med
+// byggteknisk vokabular som generiske STT-modeller feiltolker. Termlisten
+// styrer modellen mot riktig fagspråk; mål og romnavn skal gjengis ordrett.
+const TRANSCRIPTION_PROMPT = [
+  "Transkriber lydopptaket ordrett på norsk (bokmål).",
+  "Dette er tale fra en takstperson på skadebefaring i en bygning, ofte med",
+  "dialekt og bakgrunnsstøy. Vanlige fagord som skal gjenkjennes korrekt:",
+  "sluk, klemring, membran, smøremembran, svill, bunnsvill, toppsvill,",
+  "diffusjonssperre, dampsperre, vindsperre, fuktsperre, grunnmurspapp,",
+  "drenering, drensrør, kapillærbrytende, fuktskjolder, fuktmåling, hulltaking,",
+  "krypkjeller, kryperom, bjelkelag, tilfarergulv, påstøp, avretting,",
+  "våtromsnormen, våtsone, downlights, rørgjennomføring, rør-i-rør, fordelerskap,",
+  "vannbåren varme, varmekabler, flis, fug, silikonfug, gips, sponplate, OSB,",
+  "råte, muggsopp, svertesopp, saltutslag, kalkutfelling, betong, lettklinker,",
+  "leca, ringmur, radonsperre, takstein, undertak, sutak, lekt, sløyfe,",
+  "beslag, takrenne, nedløp, terrengfall, kotehøyde, gradvis, akutt.",
+  "Gjengi tall, måleverdier (f.eks. «78 prosent», «15 millimeter») og romnavn",
+  "ordrett. Returner kun de talte ordene, uten kommentarer.",
+].join(" ");
+
 app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
@@ -172,7 +201,7 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
         contents: [{
           parts: [
             { inline_data: { mime_type: mimeType, data: base64 } },
-            { text: "Transcribe this audio exactly as spoken. Return only the spoken words, no commentary." },
+            { text: TRANSCRIPTION_PROMPT },
           ],
         }],
       }),

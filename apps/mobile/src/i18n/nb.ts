@@ -71,6 +71,7 @@ export const nb = {
     nameFromAddressHint: 'Tips: bruk adressen som prosjektnavn',
     useAddress: 'Bruk adressen',
     projectMenu: 'Prosjektmeny',
+    timeToApproved: (duration: string) => `Befaring → godkjent rapport: ${duration}`,
   },
 
   detail: {

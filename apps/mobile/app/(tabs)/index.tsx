@@ -22,6 +22,7 @@ import apiFetch, {
 import { formatDate, nb } from '@/src/i18n/nb';
 import { getApiBaseUrl } from '@/src/config/api';
 import { CaseFile, NO_DATE_SET, Project, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
+import { formatMinutes, minutesToApproved } from '@/src/features/projects/metrics';
 
 // Treff fra Kartverkets adresse-API, via /api/underlag/adresse.
 type AddressHit = {
@@ -844,6 +845,7 @@ export default function Index() {
     const audioCount = notes.filter((n) => n.audioUri).length;
     const photoCount = notes.reduce((sum, n) => sum + (n.photos?.length || 0), 0);
     const status = getProjectStatus(item);
+    const approvedMinutes = minutesToApproved(item);
 
     const dateText = formatDate(item.inspectionDate);
     const inspectorText = item.inspector === UNKNOWN_INSPECTOR ? UNKNOWN_INSPECTOR_LABEL : item.inspector;
@@ -888,6 +890,14 @@ export default function Index() {
                 {`${noteCount} ${nb.projects.notesCount} · ${photoCount} ${nb.projects.photosCount} · ${audioCount} ${nb.projects.audioCount}`}
               </Caption>
             </View>
+
+            {/* Tid til godkjent rapport — pilotmetrikken (A3) */}
+            {approvedMinutes !== null && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="timer-outline" size={13} color={theme.colors.muted} />
+                <Caption muted>{nb.projects.timeToApproved(formatMinutes(approvedMinutes))}</Caption>
+              </View>
+            )}
           </GlassCard>
         </Pressable>
       </Animated.View>

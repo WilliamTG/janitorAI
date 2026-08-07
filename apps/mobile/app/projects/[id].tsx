@@ -18,6 +18,7 @@ import { Image as ExpoImage } from 'expo-image';
 
 import { getCurrentGeo } from '@/src/lib/geo';
 import { loadProfile } from '@/src/storage/profileStorage';
+import { formatMinutes, minutesToApproved } from '@/src/features/projects/metrics';
 import { tileForCoordinate } from '@/src/lib/kartverket';
 import { logError, logAction } from '@/src/lib/logger';
 import { GeoPoint, NO_DATE_SET, Note, Project, ReportMeta, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
@@ -1748,6 +1749,15 @@ export default function ProjectDetailScreen() {
                     )}
                   </Body>
                 </View>
+                {(() => {
+                  const minutes = minutesToApproved(project);
+                  return minutes !== null ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Ionicons name="timer-outline" size={13} color={theme.colors.muted} />
+                      <Caption muted>{nb.projects.timeToApproved(formatMinutes(minutes))}</Caption>
+                    </View>
+                  ) : null;
+                })()}
                 <SecondaryButton onPress={confirmWithdrawApproval}>
                   {nb.report.withdraw}
                 </SecondaryButton>

@@ -12,6 +12,29 @@ function sanitizeError(err) {
 }
 
 // ── Adressesøk (Kartverket/Geonorge — åpent, uten nøkkel) ────────────────────
+async function sokAdresser(sok, treffPerSide = 6) {
+  const url =
+    `https://ws.geonorge.no/adresser/v1/sok?fuzzy=true&treffPerSide=${treffPerSide}&sok=` +
+    encodeURIComponent(sok);
+  const response = await fetch(url, {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error(`Adressesøket svarte ${response.status}`);
+  const data = await response.json();
+  return (data.adresser || []).map((a) => ({
+    adressetekst: a.adressetekst,
+    postnummer: a.postnummer,
+    poststed: a.poststed,
+    kommunenavn: a.kommunenavn,
+    kommunenummer: a.kommunenummer,
+    gnr: a.gardsnummer,
+    bnr: a.bruksnummer,
+    lat: a.representasjonspunkt && a.representasjonspunkt.lat,
+    lon: a.representasjonspunkt && a.representasjonspunkt.lon,
+  }));
+}
+
 router.get("/adresse", async (req, res) => {
   const sok = String(req.query.sok || "").trim();
   if (sok.length < 3) {
@@ -19,29 +42,7 @@ router.get("/adresse", async (req, res) => {
   }
 
   try {
-    const url =
-      "https://ws.geonorge.no/adresser/v1/sok?fuzzy=true&treffPerSide=6&sok=" +
-      encodeURIComponent(sok);
-    const response = await fetch(url, {
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!response.ok) {
-      return res.status(502).json({ error: "Adressesøket svarte ikke" });
-    }
-    const data = await response.json();
-    const adresser = (data.adresser || []).map((a) => ({
-      adressetekst: a.adressetekst,
-      postnummer: a.postnummer,
-      poststed: a.poststed,
-      kommunenavn: a.kommunenavn,
-      kommunenummer: a.kommunenummer,
-      gnr: a.gardsnummer,
-      bnr: a.bruksnummer,
-      lat: a.representasjonspunkt && a.representasjonspunkt.lat,
-      lon: a.representasjonspunkt && a.representasjonspunkt.lon,
-    }));
-    res.json({ adresser });
+    res.json({ adresser: await sokAdresser(sok) });
   } catch (err) {
     console.error("GET /api/underlag/adresse error:", sanitizeError(err));
     res.status(502).json({ error: "Fikk ikke kontakt med Kartverket" });
@@ -140,6 +141,51 @@ const BYGNINGSSTATUS = {
   IG: "Igangsettingstillatelse", RA: "Rammetillatelse",
 };
 
+async function hentBygg(lat, lon) {
+  const d = 0.0006; // ~60 m nord-sør
+  const bbox = `${lat - d},${lon - d * 2},${lat + d},${lon + d * 2},urn:ogc:def:crs:EPSG::4258`;
+  const url =
+    "https://wfs.geonorge.no/skwms1/wfs.matrikkelen-bygningspunkt" +
+    "?service=WFS&version=2.0.0&request=GetFeature&typenames=app:Bygning" +
+    "&count=20&srsName=urn:ogc:def:crs:EPSG::4258&bbox=" + encodeURIComponent(bbox);
+  const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  if (!response.ok) throw new Error(`Matrikkel-WFS svarte ${response.status}`);
+  const xml = await response.text();
+
+  const buildings = [];
+  const blocks = xml.split("<app:Bygning ").slice(1);
+  for (const block of blocks) {
+    const grab = (tag) => {
+      const m = block.match(new RegExp(`<app:${tag}>([^<]*)</app:${tag}>`));
+      return m ? m[1] : null;
+    };
+    const pos = block.match(/<gml:pos[^>]*>([\d.]+)\s+([\d.]+)<\/gml:pos>/);
+    if (!pos) continue;
+    const bLat = Number(pos[1]);
+    const bLon = Number(pos[2]);
+    buildings.push({
+      bygningsnummer: grab("bygningsnummer"),
+      typeKode: grab("bygningstype"),
+      statusKode: grab("bygningsstatus"),
+      kulturminne: grab("harKulturminne") === "true",
+      sefrak: grab("harSefrakminne") === "true",
+      distanse: Math.hypot((bLat - lat) * 111320, (bLon - lon) * 55800),
+    });
+  }
+
+  if (buildings.length === 0) return null;
+  buildings.sort((a, b) => a.distanse - b.distanse);
+  const nearest = buildings[0];
+  return {
+    bygningsnummer: nearest.bygningsnummer,
+    type: BYGNINGSTYPE[Number(nearest.typeKode)] || `Bygningstype ${nearest.typeKode}`,
+    typeKode: nearest.typeKode,
+    status: BYGNINGSSTATUS[nearest.statusKode] || nearest.statusKode,
+    kulturminne: nearest.kulturminne || nearest.sefrak,
+    avstandMeter: Math.round(nearest.distanse),
+  };
+}
+
 router.get("/bygg", async (req, res) => {
   const lat = Number(req.query.lat);
   const lon = Number(req.query.lon);
@@ -148,54 +194,7 @@ router.get("/bygg", async (req, res) => {
   }
 
   try {
-    const d = 0.0006; // ~60 m nord-sør
-    const bbox = `${lat - d},${lon - d * 2},${lat + d},${lon + d * 2},urn:ogc:def:crs:EPSG::4258`;
-    const url =
-      "https://wfs.geonorge.no/skwms1/wfs.matrikkelen-bygningspunkt" +
-      "?service=WFS&version=2.0.0&request=GetFeature&typenames=app:Bygning" +
-      "&count=20&srsName=urn:ogc:def:crs:EPSG::4258&bbox=" + encodeURIComponent(bbox);
-    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!response.ok) {
-      return res.status(502).json({ error: "Matrikkel-WFS svarte ikke" });
-    }
-    const xml = await response.text();
-
-    const buildings = [];
-    const blocks = xml.split("<app:Bygning ").slice(1);
-    for (const block of blocks) {
-      const grab = (tag) => {
-        const m = block.match(new RegExp(`<app:${tag}>([^<]*)</app:${tag}>`));
-        return m ? m[1] : null;
-      };
-      const pos = block.match(/<gml:pos[^>]*>([\d.]+)\s+([\d.]+)<\/gml:pos>/);
-      if (!pos) continue;
-      const bLat = Number(pos[1]);
-      const bLon = Number(pos[2]);
-      buildings.push({
-        bygningsnummer: grab("bygningsnummer"),
-        typeKode: grab("bygningstype"),
-        statusKode: grab("bygningsstatus"),
-        kulturminne: grab("harKulturminne") === "true",
-        sefrak: grab("harSefrakminne") === "true",
-        distanse: Math.hypot((bLat - lat) * 111320, (bLon - lon) * 55800),
-      });
-    }
-
-    if (buildings.length === 0) {
-      return res.json({ bygning: null });
-    }
-    buildings.sort((a, b) => a.distanse - b.distanse);
-    const nearest = buildings[0];
-    res.json({
-      bygning: {
-        bygningsnummer: nearest.bygningsnummer,
-        type: BYGNINGSTYPE[Number(nearest.typeKode)] || `Bygningstype ${nearest.typeKode}`,
-        typeKode: nearest.typeKode,
-        status: BYGNINGSSTATUS[nearest.statusKode] || nearest.statusKode,
-        kulturminne: nearest.kulturminne || nearest.sefrak,
-        avstandMeter: Math.round(nearest.distanse),
-      },
-    });
+    res.json({ bygning: await hentBygg(lat, lon) });
   } catch (err) {
     console.error("GET /api/underlag/bygg error:", sanitizeError(err));
     res.status(502).json({ error: "Fikk ikke kontakt med Geonorge" });
@@ -221,13 +220,7 @@ function symbolToNb(code) {
   return SYMBOL_NB[base] || base;
 }
 
-router.get("/stedsinfo", async (req, res) => {
-  const lat = Number(req.query.lat);
-  const lon = Number(req.query.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return res.status(400).json({ error: "lat og lon kreves" });
-  }
-
+async function hentStedsinfo(lat, lon) {
   const result = { hoyde: null, vaer: null };
 
   try {
@@ -283,8 +276,52 @@ router.get("/stedsinfo", async (req, res) => {
     console.warn("locationforecast error:", sanitizeError(err));
   }
 
-  res.json(result);
+  return result;
+}
+
+router.get("/stedsinfo", async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lon = Number(req.query.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return res.status(400).json({ error: "lat og lon kreves" });
+  }
+  res.json(await hentStedsinfo(lat, lon));
 });
+
+// ── Demo-underlag (offentlig, mountes med heavyLimiter) ──────────────────────
+// Kampanjekroken (inkorporering A4): «se din egen adresse på 30 sekunder».
+// Én adressestreng inn → beste treff + bygning + terreng + vær ut, uten
+// innlogging. Kun beste treff returneres og raten begrenses av mounten, så
+// endepunktet ikke kan brukes som generell oppslagsproxy.
+async function demoHandler(req, res) {
+  // Geonorge-søket gir null treff når strengen inneholder komma
+  // («Solbergliveien 8, Oslo») — normaliser før oppslag.
+  const sok = String(req.query.adresse || "").replace(/,/g, " ").replace(/\s+/g, " ").trim();
+  if (sok.length < 3) {
+    return res.status(400).json({ error: "adresse kreves (minst 3 tegn)" });
+  }
+
+  try {
+    const adresser = await sokAdresser(sok, 1);
+    const treff = adresser[0];
+    if (!treff || !Number.isFinite(treff.lat) || !Number.isFinite(treff.lon)) {
+      return res.status(404).json({ error: "Fant ingen adresse hos Kartverket" });
+    }
+
+    const [bygning, sted] = await Promise.all([
+      hentBygg(treff.lat, treff.lon).catch((err) => {
+        console.warn("demo bygg error:", sanitizeError(err));
+        return null;
+      }),
+      hentStedsinfo(treff.lat, treff.lon),
+    ]);
+
+    res.json({ adresse: treff, bygning, hoyde: sted.hoyde, vaer: sted.vaer });
+  } catch (err) {
+    console.error("GET /api/demo/underlag error:", sanitizeError(err));
+    res.status(502).json({ error: "Fikk ikke kontakt med de åpne kildene" });
+  }
+}
 
 // ── Kartflis-proxy (Kartverket åpen WMTS) ────────────────────────────────────
 // Egen handler som mountes UTEN tester-token: <img>-elementer kan ikke sette
@@ -322,3 +359,4 @@ async function tileHandler(req, res) {
 
 module.exports = router;
 module.exports.tileHandler = tileHandler;
+module.exports.demoHandler = demoHandler;
