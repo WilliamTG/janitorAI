@@ -114,6 +114,45 @@ mer enn én utviklingssyklus.
 **Status:** Praktisert i denne fasen (feillisten fra gjennomgangen ble rettet
 før nye funksjoner). Må formaliseres når flere bidrar.
 
+## Ny konkurrent oppdaget august 2026: Befar (befar.io)
+
+Norsk befaringsapp for takstmenn, bygget «av fagfolk som selv står ute på
+befaring» (utviklet med byrået Hellevang & Co). Viktig presisering: Befar er
+et **bolighandel-verktøy** — tilstandsrapporter etter NS 3600:2025 og
+forskrift til avhendingslova — ikke et skadeverktøy. De er Norges svar på
+Spectora. Ingen AI, ingen video/lyd-fangst, ingen beviskjede, ingen
+saksunderlag fra offentlige kilder; motoren er et regelstyrt faglig rammeverk.
+
+**Validering (deres pitch speiler våre veddemål):**
+- «Rapporten bygges opp mens du jobber» ↔ vårt AI-utkast fra fangsten.
+- Adaptiv struktur («alt du ikke trenger, forsvinner») ↔ romløypa vår.
+- «Det er alltid takstmannens vurderinger som gjelder» ↔ godkjenningsflyten.
+- Standard-forankring (NS 3600) ↔ Byggforsk-forankringen vår.
+Markedet konvergerer mot de samme sannhetene — veddemålene våre er riktige,
+og de haster mer.
+
+**Forskjellen som beskytter oss:** Befar selger *uavhengighet fra
+forsikringsselskaper* som verdi — riktig i bolighandel, der habilitet er
+poenget. Vårt marked er det motsatte: skadesaker der oppgjøret SKJER i
+forsikringsflyten, og årsak/akutt-gradvis, beviskjede og in4mo-leveranse er
+kjernen. Segmentene er naboer med samme bruker, ikke samme jobb.
+
+**Trusler å ta på alvor:**
+1. Samme brukerrelasjon — de kan ekspandere fra tilstand til skade senere.
+2. Samme oppmerksomhetskanaler (Norsk takst-miljøet): kampanjebudskapet vårt
+   må alltid si «skadesak/forsikring» eksplisitt, så vi ikke høres ut som
+   «enda en befaringsapp».
+3. Fagfolk-bygget gir dem domenetroverdighet — vår motsvarighet er faglig
+   råd + ride-alongs (kapabilitet 1 i faseplanen), ikke markedsføringsspråk.
+
+**Å lære av dem (inn i løsningen):**
+- «Arbeid direkte i den ferdige rapportvisningen» — ingen eksport-hopping,
+  ingen separate skrivevinduer. Dette er riktig UX for A5: når rapporten
+  flyttes til Postgres, bygges redigeringen i ferdig rapportvisning med
+  felt-diff — ikke som skjema.
+- Deres uavhengighets-posisjonering tvinger frem vår: «uavhengig av
+  forsikringsselskapene — men leverer rett inn i flyten deres.»
+
 ## Oppsummert kobling til backlog
 
 | Erfaring | Dekkes av | Nytt/utestående |

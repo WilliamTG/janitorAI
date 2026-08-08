@@ -91,6 +91,13 @@ Alle bygget på dokumentert smerte (App Store-analysen, `erfaringer-konkurrenter
   og stempler. Byggforsk-henvisninger følger med — og ingenting deles før du
   har godkjent.» Treffer skepsisen mot AI direkte.
 
+**Avgrensning mot Befar (befar.io):** en norsk befaringsapp for
+*bolighandel* (NS 3600-tilstandsrapporter) markedsfører seg mot samme
+målgruppe med lignende språk («rapporten bygges mens du jobber»). Hvert
+budskap må derfor si **skadesak/forsikring eksplisitt** i første setning —
+ellers høres vi ut som «enda en befaringsapp» og arver deres posisjon i
+stedet for å eie vår egen.
+
 Regel: én variant per kontakt, aldri miks. Med N≈1 500 er parallelle A/B-tester
 underpowered — bruk **sekvensiell omfordeling** (bandit-logikk): start uke 1
 med T/V/A fordelt 40/30/30, mål svarrate per variant ukentlig, flytt fordelingen

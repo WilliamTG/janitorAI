@@ -53,6 +53,10 @@ objekter. Lagre AI-utkastet og den godkjente versjonen hver for seg i
 Postgres (fjerner samtidig Google Docs-avhengigheten), med felt-nivå-diff.
 **Status:** godkjenningsstempelet er bygget (commit 89dcccb); versjonslagring
 og diff gjenstår. Diffen er pilotens mest verdifulle data.
+**UX-krav (fra Befar-analysen, aug 2026):** redigeringen bygges i den
+*ferdige rapportvisningen* — takstpersonen ser rapporten slik mottakeren får
+den og redigerer direkte i den, aldri i separate skjemafelter med
+eksport-hopping.
 
 ## B. Pilotfasen (1–3 mnd) — inn mens pilotene kjører
 
