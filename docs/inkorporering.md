@@ -51,12 +51,16 @@ Spectoras AI-assistent redigerer *per kommentar/felt* — takstpersonen flikker,
 ikke omskriver. Forutsetningen er at utkast og endelig versjon er separate
 objekter. Lagre AI-utkastet og den godkjente versjonen hver for seg i
 Postgres (fjerner samtidig Google Docs-avhengigheten), med felt-nivå-diff.
-**Status:** godkjenningsstempelet er bygget (commit 89dcccb); versjonslagring
-og diff gjenstår. Diffen er pilotens mest verdifulle data.
-**UX-krav (fra Befar-analysen, aug 2026):** redigeringen bygges i den
-*ferdige rapportvisningen* — takstpersonen ser rapporten slik mottakeren får
-den og redigerer direkte i den, aldri i separate skjemafelter med
-eksport-hopping.
+**Status:** bygget (aug 2026). AI-motoren returnerer nå den strukturerte
+analysen (område/kilde/årsak/beskrivelse/omfang/tiltak) i stedet for å kaste
+den etter dokumentfletting; appen arkiverer den som uforanderlig
+`reportDraft`, lar takstpersonen redigere `reportFinal` direkte i
+rapportvisningen med «endret»-merker per felt, og enhver rettelse etter
+godkjenning nullstiller stempelet. Mottakeren får den godkjente versjonen
+pluss tillitssignalet «N felter faglig korrigert av takstpersonen fra
+AI-utkastet». Verifisert i e2e-suiten (31 sjekker). Gjenstår: Google
+Docs-avhengigheten fases ut helt (PDF server-side) når ai-motoren flyttes
+til Vertex/EU (B12).
 
 ## B. Pilotfasen (1–3 mnd) — inn mens pilotene kjører
 

@@ -86,7 +86,11 @@ check "project upsert" "200" "$STATUS"
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/share" -H "x-tester-token: $TOKEN" -H 'Content-Type: application/json' -d '{"projectId":"p1"}')
 check "share for unapproved report rejected" "409" "$STATUS"
 
-PROJECT_APPROVED=$(echo "$PROJECT_FINAL" | jq -c '.project.reportApproval={"approvedBy":"Kari Nordmann","approvedAt":"2026-08-04T11:00:00Z"} | .project.updatedAt="2026-08-04T11:00:00Z"')
+PROJECT_APPROVED=$(echo "$PROJECT_FINAL" | jq -c '
+  .project.reportApproval={"approvedBy":"Kari Nordmann","approvedAt":"2026-08-04T11:00:00Z"}
+  | .project.updatedAt="2026-08-04T11:00:00Z"
+  | .project.reportDraft={"at":"2026-08-04T10:30:00Z","content":{"area":"Kjeller bad","cause":"Utett klemring ved sluk - akutt hendelse","description":"Fuktskjolder ved sluk."}}
+  | .project.reportFinal={"at":"2026-08-04T10:55:00Z","content":{"area":"Kjeller bad","cause":"Utett klemring ved sluk - gradvis inntrengning over uker","description":"Fuktskjolder ved sluk."}}')
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE/api/projects/p1" -H "x-tester-token: $TOKEN" -H 'Content-Type: application/json' -d "$PROJECT_APPROVED")
 check "project upsert with approval" "200" "$STATUS"
 
@@ -126,6 +130,8 @@ check "correct pin unlocks" "true" "$([ -n "$VT" ] && [ "$VT" != "null" ] && ech
 REPORT=$(curl -s "$BASE/api/share/$SHARE_ID/report?vt=$VT")
 check "report name" "Solbergveien 14, Rykkinn" "$(echo "$REPORT" | jq -r '.report.name')"
 check "report carries approval stamp" "Kari Nordmann" "$(echo "$REPORT" | jq -r '.report.approval.approvedBy')"
+check "report carries final content" "Utett klemring ved sluk - gradvis inntrengning over uker" "$(echo "$REPORT" | jq -r '.report.content.cause')"
+check "report diff lists corrected field" "cause" "$(echo "$REPORT" | jq -r '.report.draftChangedFields[0]')"
 check "report photo media id" "$MEDIA_ID" "$(echo "$REPORT" | jq -r '.report.notes[0].photos[0].mediaId')"
 check "report geo flows through" "59.94" "$(echo "$REPORT" | jq -r '.report.notes[0].photos[0].geo.lat')"
 check "report never leaks tester token" "" "$(echo "$REPORT" | grep -o "$TOKEN")"

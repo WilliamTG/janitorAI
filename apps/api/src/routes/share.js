@@ -94,6 +94,20 @@ function buildReportPayload(project, mediaById) {
       ),
   }));
 
+  // A5: mottakeren får den godkjente versjonen (final), og en liste over
+  // hvilke felter takstpersonen faglig korrigerte fra AI-utkastet — et
+  // tillitssignal, ikke en svakhet.
+  const CONTENT_FIELDS = [
+    "area", "source", "cause", "description", "extentDescription", "repairsDescription",
+  ];
+  const draftContent = (project.reportDraft && project.reportDraft.content) || null;
+  const finalContent = (project.reportFinal && project.reportFinal.content) || draftContent;
+  const pickContent = (c) =>
+    CONTENT_FIELDS.reduce(
+      (acc, f) => (c[f] ? { ...acc, [f]: String(c[f]) } : acc),
+      typeof c.isHabitable === "boolean" ? { isHabitable: c.isHabitable } : {}
+    );
+
   return {
     name: project.name || "",
     inspectionDate: project.inspectionDate || null,
@@ -102,6 +116,13 @@ function buildReportPayload(project, mediaById) {
     descriptionTranscription: project.projectDescriptionTranscription || null,
     reportMeta: project.reportMeta || {},
     reportStatus: project.reportStatus || null,
+    content: finalContent ? pickContent(finalContent) : null,
+    draftChangedFields:
+      draftContent && finalContent
+        ? CONTENT_FIELDS.filter(
+            (f) => String(finalContent[f] || "").trim() !== String(draftContent[f] || "").trim()
+          )
+        : [],
     approval:
       project.reportApproval && project.reportApproval.approvedAt
         ? {

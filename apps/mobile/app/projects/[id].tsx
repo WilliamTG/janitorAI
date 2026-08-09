@@ -21,7 +21,18 @@ import { loadProfile } from '@/src/storage/profileStorage';
 import { formatMinutes, minutesToApproved } from '@/src/features/projects/metrics';
 import { tileForCoordinate } from '@/src/lib/kartverket';
 import { logError, logAction } from '@/src/lib/logger';
-import { GeoPoint, NO_DATE_SET, Note, Project, ReportMeta, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
+import {
+  GeoPoint,
+  NO_DATE_SET,
+  Note,
+  Project,
+  REPORT_CONTENT_FIELDS,
+  ReportContent,
+  ReportContentField,
+  ReportMeta,
+  UNKNOWN_INSPECTOR,
+} from '@/src/features/projects/types';
+import { contentFromAnalysis } from '@/src/features/projects/reportVersions';
 import { ReportDetailsSection } from '@/src/features/projects/ReportDetailsSection';
 import { ReportGeneratingOverlay } from '@/src/features/projects/ReportGeneratingOverlay';
 import { applyNoteChanges } from '@/src/features/projects/noteChanges';
@@ -1168,6 +1179,10 @@ export default function ProjectDetailScreen() {
       if (data.url) {
         logAction('generate-google-doc', Date.now() - t0).catch(() => {});
         setGoogleDocUrl(data.url);
+        // A5: motoren returnerer den strukturerte analysen sammen med URL-en.
+        // Utkastet arkiveres uendret; final starter som kopi og redigeres.
+        const draftContent = contentFromAnalysis(data.analysis);
+        const draftAt = new Date().toISOString();
         await updateProjectLocally({
           ...snap,
           reportUrl: data.url,
@@ -1175,6 +1190,8 @@ export default function ProjectDetailScreen() {
           reportError: undefined,
           // Ny rapport er et nytt AI-utkast — aldri arv forrige godkjenning.
           reportApproval: undefined,
+          reportDraft: draftContent ? { content: draftContent, at: draftAt } : undefined,
+          reportFinal: draftContent ? { content: { ...draftContent }, at: draftAt } : undefined,
         });
         toast.show({ message: nb.report.ready, variant: 'success' });
       } else {
@@ -1290,6 +1307,42 @@ export default function ProjectDetailScreen() {
       cancelled = true;
     };
   }, [project?.caseFile, isTokenValid]);
+
+  // A5 — versjonslagring: reportDraft (AI-utkastet, uforanderlig) og
+  // reportFinal (redigeres i ferdig rapportvisning). Lokal redigeringstilstand
+  // synkes fra prosjektet og persisteres på blur; enhver endring etter
+  // godkjenning nullstiller stempelet.
+  const [reportEdit, setReportEdit] = useState<ReportContent | null>(null);
+  useEffect(() => {
+    setReportEdit(project?.reportFinal?.content ?? project?.reportDraft?.content ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id, project?.reportDraft?.at, project?.reportFinal?.at]);
+
+  const reportFieldChanged = (field: ReportContentField): boolean => {
+    const draft = project?.reportDraft?.content;
+    if (!draft || !reportEdit) return false;
+    return (reportEdit[field] ?? '').trim() !== (draft[field] ?? '').trim();
+  };
+
+  const saveReportEdits = async () => {
+    if (!project || !reportEdit) return;
+    const persisted = project.reportFinal?.content ?? project.reportDraft?.content ?? null;
+    const dirty = REPORT_CONTENT_FIELDS.some(
+      (f) => (persisted?.[f] ?? '') !== (reportEdit[f] ?? '')
+    );
+    if (!dirty) return;
+    const hadApproval = Boolean(project.reportApproval);
+    await updateProjectLocally({
+      ...project,
+      reportFinal: { content: { ...persisted, ...reportEdit }, at: new Date().toISOString() },
+      // Stempelet gjelder den konkrete teksten som forelå ved godkjenning —
+      // en rettelse etterpå krever ny gjennomlesing og nytt stempel.
+      reportApproval: undefined,
+    });
+    if (hadApproval) {
+      toast.show({ message: nb.report.editClearedApproval, variant: 'info', durationMs: 4500 });
+    }
+  };
 
   // Godkjenningsflyt: takstpersonen leser AI-utkastet og stempler det med navn
   // og tidspunkt. Uten stempel nekter både appen og serveren å dele rapporten.
@@ -1730,6 +1783,66 @@ export default function ProjectDetailScreen() {
                 {nb.report.downloadWord}
               </SecondaryButton>
             </View>
+          </GlassCard>
+        )}
+
+        {/* A5: utkastet redigeres i ferdig rapportvisning (Befar-mønsteret).
+            AI-utkastet arkiveres uendret; endrede felter merkes, og diffen
+            lagres per sak. */}
+        {reportEdit && (
+          <GlassCard style={{ gap: theme.spacing.sm }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+              <Ionicons name="document-text-outline" size={18} color={theme.colors.accent} />
+              <Title style={{ fontSize: 18 }}>{nb.report.editTitle}</Title>
+            </View>
+            {project?.reportDraft?.at ? (
+              <Caption muted>
+                {nb.report.draftVersionLine(formatDateTime(project.reportDraft.at))}
+              </Caption>
+            ) : null}
+            <Caption muted>{nb.report.editHint}</Caption>
+            {(
+              [
+                ['area', nb.report.fieldArea, false],
+                ['source', nb.report.fieldSource, false],
+                ['cause', nb.report.fieldCause, true],
+                ['description', nb.report.fieldDescription, true],
+                ['extentDescription', nb.report.fieldExtent, true],
+                ['repairsDescription', nb.report.fieldRepairs, true],
+              ] as [ReportContentField, string, boolean][]
+            ).map(([field, label, multiline]) => (
+              <View key={field} style={{ gap: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Caption muted>{label}</Caption>
+                  {reportFieldChanged(field) && (
+                    <View
+                      style={{
+                        paddingHorizontal: 8,
+                        paddingVertical: 1,
+                        borderRadius: 999,
+                        backgroundColor: `${theme.colors.accent}22`,
+                      }}
+                    >
+                      <Caption style={{ color: theme.colors.accent, fontWeight: '600' }}>
+                        {nb.report.fieldChanged}
+                      </Caption>
+                    </View>
+                  )}
+                </View>
+                <TextField
+                  value={reportEdit[field] ?? ''}
+                  onChangeText={(text) =>
+                    setReportEdit((prev) => ({ ...(prev ?? {}), [field]: text }))
+                  }
+                  onBlur={() => void saveReportEdits()}
+                  multiline={multiline}
+                  style={multiline ? { minHeight: 72, textAlignVertical: 'top' } : undefined}
+                />
+              </View>
+            ))}
+            <Caption muted>
+              {nb.report.changesSummary(REPORT_CONTENT_FIELDS.filter(reportFieldChanged).length)}
+            </Caption>
           </GlassCard>
         )}
 

@@ -49,6 +49,46 @@ export type GeoPoint = {
 };
 
 /**
+ * Strukturert rapportinnhold (A5). Feltene speiler AI-motorens DamageAnalysis
+ * og er redigerbare i ferdig rapportvisning. AI-utkastet (reportDraft) er
+ * uforanderlig; den godkjente versjonen (reportFinal) starter som kopi og
+ * bærer takstpersonens rettelser — diffen mellom dem er pilotens viktigste
+ * kvalitetsdata.
+ */
+export type ReportContent = {
+  /** Rommet/området som inspiseres. */
+  area?: string;
+  /** Kilden til skaden. */
+  source?: string;
+  /** Den tekniske årsaken. */
+  cause?: string;
+  /** Fyldig faglig beskrivelse. */
+  description?: string;
+  /** Fysisk spredning og berørte materialer. */
+  extentDescription?: string;
+  /** Nødvendige tekniske tiltak. */
+  repairsDescription?: string;
+  isHabitable?: boolean;
+};
+
+export type ReportVersion = {
+  content: ReportContent;
+  /** ISO-tidspunkt for når versjonen ble laget/sist endret. */
+  at: string;
+};
+
+/** Feltnøklene i ReportContent som diffes mellom utkast og godkjent versjon. */
+export const REPORT_CONTENT_FIELDS = [
+  'area',
+  'source',
+  'cause',
+  'description',
+  'extentDescription',
+  'repairsDescription',
+] as const;
+export type ReportContentField = (typeof REPORT_CONTENT_FIELDS)[number];
+
+/**
  * Godkjenningsstempel: takstpersonen har lest AI-utkastet og står faglig
  * ansvarlig for innholdet. Uten stempel er rapporten et utkast og kan ikke
  * deles. Ny generering nullstiller stempelet — det gjelder alltid den
@@ -143,6 +183,10 @@ export type Project = {
   reportStatus?: 'processing' | 'ready' | 'failed';
   /** Takstpersonens godkjenning av gjeldende rapport; kreves før deling. */
   reportApproval?: ReportApproval;
+  /** AI-utkastet slik motoren leverte det — arkiveres uendret (A5). */
+  reportDraft?: ReportVersion;
+  /** Den redigerbare versjonen takstpersonen godkjenner og deler (A5). */
+  reportFinal?: ReportVersion;
   /** Human-readable error from the last failed generation (shown on the project card). */
   reportError?: string;
 };

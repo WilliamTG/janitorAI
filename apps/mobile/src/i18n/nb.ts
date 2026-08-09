@@ -138,6 +138,24 @@ export const nb = {
       'Rapporten markeres som utkast igjen, og nye delingslenker kan ikke lages før den godkjennes på nytt.',
     withdrawnToast: 'Godkjenningen er trukket tilbake',
     approverNameMissing: 'Legg inn navnet ditt under Guide → Takstperson før du godkjenner.',
+    editTitle: 'Rapporten — rediger direkte',
+    editHint:
+      'Slik mottakeren får den. Trykk i et felt og rett rett i rapporten — AI-utkastet arkiveres uendret, og endringene dine merkes.',
+    draftVersionLine: (when: string) => `AI-utkast · ${when} — arkiveres uendret`,
+    fieldChanged: 'endret',
+    fieldArea: 'Skadested',
+    fieldSource: 'Kilde',
+    fieldCause: 'Årsak',
+    fieldDescription: 'Faglig beskrivelse',
+    fieldExtent: 'Omfang',
+    fieldRepairs: 'Tiltak',
+    editClearedApproval: 'Endringen fjernet godkjenningen — les gjennom og godkjenn på nytt.',
+    changesSummary: (n: number) =>
+      n === 0
+        ? 'Ingen felter endret fra AI-utkastet ennå.'
+        : n === 1
+          ? 'Ett felt endret fra AI-utkastet.'
+          : `${n} felter endret fra AI-utkastet.`,
   },
 
   underlag: {
