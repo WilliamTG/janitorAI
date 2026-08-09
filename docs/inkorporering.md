@@ -16,8 +16,11 @@ helst). Inkorporér en lett «befaringsløype»: velg rom → fang bevis knyttet
 til rommet → AI-en får romkontekst gratis (bedre årsaksanalyse, bedre
 rapportstruktur). Ikke 3D, ikke måling — bare rom-tilknytning på det vi
 allerede fanger.
-**Status:** ikke bygget. Rom/fuktlogg-skjermen fra backloggen ER dette —
-bygg den som løype, ikke som skjema.
+**Status:** bygget (aug 2026). Romstripe over fangstknappene med taksonomi-
+hurtigvalg (inkl. «Rom under terreng»), aktivt rom som fangstkontekst og
+filter, våtroms-huskeliste (ærlige påminnelser, ingen falske «✓»), og
+romnavnet følger notatet hele veien inn i AI-promptet. Gjenstår: fuktlogg
+med målepunkter per rom (egen backlogpost).
 
 ### A2. Tale-først i felt (FieldScribe-mønsteret)
 Amerikanske adjustere *snakker* rapporten sin; AI-en strukturerer. Vi har
@@ -167,10 +170,10 @@ med vår motor når skade-sporet er vunnet. Nei-lista gjelder til da.
 
 ## Anbefalt byggerekkefølge (flettet med faseplanen)
 
-Ferdig: A2 fagterm-transkripsjon, A3 tidsmetrikk, A4 demo-modus (alle
-aug 2026, i tillegg til godkjenningsflyten). Gjenstående rekkefølge:
+Ferdig: godkjenningsflyten, A2 fagterm-transkripsjon, A3 tidsmetrikk,
+A4 demo-modus, A5 versjonslagring med felt-diff, A1 romløypa (alle aug
+2026). Gjenstående rekkefølge:
 
-1. **A5 versjonslagring** (bygger videre på godkjenningsflyten; flytter
-   rapporten ut av Google Docs og inn i Postgres) → 2. **A1 romløype** →
-   3. **B1 in4mo-eksport** (med pilotbruker) → 4. **B3 risikoflagg** →
-   5. **B2 plantegning** (når dokumentlaget er avklart).
+1. **B1 in4mo-eksport** (med pilotbruker) → 2. **B3 risikoflagg** →
+3. **B2 plantegning** (når dokumentlaget er avklart) → deretter
+Google Docs-utfasing sammen med Vertex/EU (B12).
