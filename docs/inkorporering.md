@@ -135,6 +135,16 @@ grepene deres forsterker kjernen vår direkte:
    nå krever årsak/konsekvens/tiltak for alle TG2/TG3-avvik — strukturen
    motoren vår allerede produserer (styrker vekstflate C4).
 
+**Fra Wenn-gjennomgangen (aug 2026):** tale-først + romstruktur og
+PIN-lenkedeling er validert (de vant på det samme); 999 kr/mnd er
+markedsprisen for toppnivået — vår 990 ligger riktig; rom × fag-matrisen
+deres blir vår rom × skadetype-struktur i AI-utkastet; og alliansemønsteret
+(MesterAlliansen) er malen for Norsk takst-sporet. **Salgsflaten er bygget**
+(aug 2026): `/om` med verdiløfte («2 t → 15 min»), fem grunner, tre steg,
+ansvarsseksjon, transparente prisnivåer (pilot gratis / 990 kr veiledende /
+foretak) og prøv-selv-inngang til `/demo` — mønsteret begge konkurrentene
+har og vi manglet.
+
 **Vekstflate C4 — NS 3600:2025-tilstandsrapport** (etter pilot): fangst,
 romløype og godkjenningsflyt gjenbrukes; rapporttypen er en regelverkspakke.
 Standarden blir obligatorisk 1. juli 2026 — markedet Befar har åpnet kan nås

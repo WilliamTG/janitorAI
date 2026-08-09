@@ -111,5 +111,40 @@ avsluttes med «Fullfør befaring». Kompletthet er en førsteklasses handling.
    bygger: Befar har strukturen, vi har årsaksmotoren som 2025-utgaven
    faktisk etterspør.
 
+## 4. Wenn Property — samme dybdebehandling (aug 2026)
+
+Full gjennomgang av wennproperty.no. Wenn er befaringsappen for
+**håndverkere** (tilbudsfasen): LiDAR-skann av rom på ~5 min → 3D-modell med
+mengdedata, AI-assistent som gjør talenotater til strukturert
+arbeidsbeskrivelse **per rom og fag** (matrise: rader = rom, kolonner = fag),
+deling via sikker lenke med PIN, PDF/IFC-eksport. Løfte: «spar 30 %+ av
+prosjekttiden». 50+ kundelogoer, distribusjonsavtale med MesterAlliansen.
+
+**Prising (transparent på siden, ingen binding):** Basis 350 kr/mnd ·
+Max 999 kr/mnd (LiDAR + mengdeberegning) · Enterprise i dialog.
+
+**Hva dette validerer hos oss:**
+- Tale-først + romstruktur er nøyaktig Wenns vinnermønster — vi bygger rett.
+- Automatisk dokumentasjon fra adresseoppslag (plantegning/tak/fasademål) —
+  de gjør allerede saksunderlag-trikset i sitt segment.
+- PIN-beskyttet lenkedeling uten mottakerkonto — paritet med vår delingsflyt.
+- **999 kr/mnd er markedsprisen** for feltverktøy-toppnivået i Norge — vår
+  tenkte 990 ligger på øret riktig.
+
+**Hva vi tar fra dem:**
+1. **Salgsflate med transparent prising og prøv-selv.** Både Wenn og Befar
+   har landingsside med prisnivåer, kvantifisert løfte og gratis prøving —
+   vi har bare demoen. Bygges som /om-side koblet til /demo.
+2. **Matrise-tenkningen:** deres rom × fag er vår rom × skadetype/bygningsdel
+   — strukturen AI-utkastet organiseres etter (styrker A1/A5).
+3. **Kvantifisert løfte på forsiden:** «2 timer rapportskriving → 15
+   minutter godkjenning» (og tidsmetrikken vår beviser det per sak).
+4. **Alliansedistribusjon:** MesterAlliansen-avtalen deres er malen for vårt
+   Norsk takst-spor — én avtale gir mange medlemmer.
+5. **Kjøp-ikke-bygg bekreftet:** LiDAR/mengder er Wenns kjerne, ikke vår —
+   ved behov lisensieres det (nei-lista står).
+
 Kilder: standard.no (NS 3600:2025-lansering), DiBK-nyhet om ny utgave,
-Byggkeramikkforeningen om 2025-endringene, takstmann.net om overgangen.
+Byggkeramikkforeningen om 2025-endringene, takstmann.net om overgangen,
+wennproperty.no (produkt, prising, blogg om arbeidsbeskrivelse fra befaring),
+VVS Aktuelt om MesterAlliansen-avtalen.

@@ -133,7 +133,9 @@ NY → KONTAKTET → SVART → DEMO_AKTIVERT → MØTE_BOOKET → PILOT → BETA
 - **Norsk takst-økosystemet:** lokallag og fagdager (NEAK arrangerer, f.eks.
   fagdager i Bergen i august). Mål: faglig innlegg — «AI i skaderapporten:
   hva takstpersonen må kontrollere» — ikke stand. Autoritet + ansvarsbudskapet
-  i én pakke, foran nøyaktig riktig publikum.
+  i én pakke, foran nøyaktig riktig publikum. Wenn viser alliansemønsteret:
+  én avtale med MesterAlliansen ga dem mange medlemsbedrifter på én gang —
+  vår parallell er en avtale med Norsk takst eller et takstnettverk.
 - **NEAK/kursleverandør-sporet:** DocrAI som verktøy-demo i etterutdanning når
   produktet er modent; start dialogen tidlig.
 - **Faglig råd (fra faseplanen):** 1–2 navngitte, respekterte takstpersoner som

@@ -99,6 +99,12 @@ app.get("/demo", (req, res) => {
   res.sendFile(path.join(__dirname, "demo-page.html"));
 });
 
+// ---------- OM/SALGSSIDE (public — Befar/Wenn-mønsteret) --------------------
+// Landingsside med verdiløfte, prisnivåer og prøv-selv-inngang til /demo.
+app.get("/om", (req, res) => {
+  res.sendFile(path.join(__dirname, "om-page.html"));
+});
+
 if (fs.existsSync(STATIC_DIR)) {
   app.use(express.static(STATIC_DIR, { extensions: ["html"] }));
   app.use((req, res, next) => {
