@@ -79,12 +79,64 @@ const darkTheme: AppTheme = {
   blurIntensity: 14,
 };
 
+// Midlertidig valgverktøy for identiteten: fargealternativene fra
+// presentation/fargealternativer.html kan prøves i kjørende app (web) uten
+// rebuild ved å sette localStorage 'DOCRAI_PALETTE' til 'granskog' eller
+// 'skifer'. Fjernes når identiteten er valgt.
+const PALETTE_OVERRIDES: Record<
+  string,
+  { light: Partial<AppTheme['colors']>; dark: Partial<AppTheme['colors']> }
+> = {
+  granskog: {
+    light: {
+      background: '#F5F2EA', foreground: '#1E2A26', muted: '#5A6963',
+      border: 'rgba(30, 42, 38, 0.16)', accent: '#2F5D50',
+      accentStrong: '#234A3F', danger: '#9C4A2F',
+    },
+    dark: {
+      background: '#131A17', surface: 'rgba(27, 36, 32, 0.97)',
+      surfaceSecondary: 'rgba(27, 36, 32, 0.88)', foreground: '#E5EBE7',
+      muted: '#9BAAA2', border: 'rgba(155, 170, 162, 0.28)',
+      accent: '#8FC0AF', accentStrong: '#B2D5C8', danger: '#D28A74',
+    },
+  },
+  skifer: {
+    light: {
+      background: '#F1F3F3', foreground: '#1B262B', muted: '#566670',
+      border: 'rgba(27, 38, 43, 0.16)', accent: '#23545C',
+      accentStrong: '#1A4148', danger: '#A6453A',
+    },
+    dark: {
+      background: '#11181B', surface: 'rgba(26, 35, 39, 0.97)',
+      surfaceSecondary: 'rgba(26, 35, 39, 0.88)', foreground: '#E4EAEC',
+      muted: '#9AA8AE', border: 'rgba(154, 168, 174, 0.28)',
+      accent: '#8FC2CB', accentStrong: '#B3D8DE', danger: '#D3766B',
+    },
+  },
+};
+
+function withPaletteOverride(theme: AppTheme): AppTheme {
+  try {
+    if (typeof localStorage === 'undefined') return theme;
+    const key = localStorage.getItem('DOCRAI_PALETTE');
+    const override = key ? PALETTE_OVERRIDES[key] : undefined;
+    if (!override) return theme;
+    const patch = theme.mode === 'dark' ? override.dark : override.light;
+    return { ...theme, colors: { ...theme.colors, ...patch } };
+  } catch {
+    return theme;
+  }
+}
+
 const ThemeContext = createContext<AppTheme>(lightTheme);
 
 export const AppThemeProvider = ({ children }: PropsWithChildren) => {
   const scheme = useColorScheme();
 
-  const theme = useMemo(() => (scheme === 'dark' ? darkTheme : lightTheme), [scheme]);
+  const theme = useMemo(
+    () => withPaletteOverride(scheme === 'dark' ? darkTheme : lightTheme),
+    [scheme]
+  );
 
   return <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>;
 };
