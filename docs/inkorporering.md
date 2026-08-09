@@ -104,6 +104,31 @@ Hvis piloten viser behov for arealmål: lisensiér/integrér (magicplan-typen)
 i stedet for å bygge — fangst-teknologi er råvare, og nei-lista vår forbyr
 eget tegne-/måleverktøy.
 
+## Fra Befar-analysen (aug 2026) — fire mønstre til
+
+Befar (befar.io, bolighandel/NS 3600) er fagfolk-bygget, og de smarteste
+grepene deres forsterker kjernen vår direkte:
+
+1. **Redigering i ferdig rapportvisning** — allerede innarbeidet som UX-krav
+   i A5: takstpersonen redigerer i rapporten slik mottakeren får den, aldri
+   i skjemafelter med eksport-hopping.
+2. **Adaptiv sjekkliste per rom** («alt du ikke trenger, forsvinner»): når
+   rommet er et bad, vises våtromssjekkpunktene — sluk/klemring, membran,
+   fuktmåling — og ingenting annet. Inn i A1 romløypa.
+3. **Levende rapportkompletthet**: fangstskjermen viser hvor komplett saken
+   er og hva som mangler *før takstpersonen forlater stedet* («mangler:
+   oversiktsbilde · fuktmåling punkt A»). Dreper retur-befaringer — inn i
+   A1/A5. Kompletthetskravene per skadetype defineres med faglig råd.
+4. **Faglig formuleringsbibliotek**: observasjoner kobles til kuraterte,
+   gjennomarbeidede formuleringer. For oss: AI-en formulerer *fra*
+   biblioteket i stedet for fritt — mindre diktning, konsistente rapporter.
+   Bygges som del av Byggforsk-RAG-arbeidet.
+
+**Vekstflate C4 — NS 3600:2025-tilstandsrapport** (etter pilot): fangst,
+romløype og godkjenningsflyt gjenbrukes; rapporttypen er en regelverkspakke.
+Standarden blir obligatorisk 1. juli 2026 — markedet Befar har åpnet kan nås
+med vår motor når skade-sporet er vunnet. Nei-lista gjelder til da.
+
 ## Det vi bevisst IKKE inkorporerer
 
 - **Estimat-/prismotor** (Xactimate-sporet): norsk oppgjør er årsaksdrevet;

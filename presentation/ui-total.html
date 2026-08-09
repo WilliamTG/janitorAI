@@ -170,12 +170,14 @@
     <div class="brand-row"><div class="brand-sq"></div><span class="eyebrow">DocrAI · Total UI-løsning · 07.08.2026</span></div>
     <h1>Hele produktmodellen — fra adresse til levert oppgjør</h1>
     <p class="lede">
-      Fjorten skjermer i fire faser — hele kundereisen i sluttform, oppdatert med det
-      markedsresearchen sier skal inn (<code>docs/inkorporering.md</code>): romløype og tale-først
-      fangst (Hover/FieldScribe-mønstrene), risikoflagg i underlaget (CAPE), versjonert AI-utkast
-      med felt-diff, <strong>godkjenningsstempel, fagterm-transkripsjon, tidsmetrikk og offentlig
-      demo — alle bygget</strong>, bevispakke, in4mo-leveranse (Encircle→Xactimate-presedensen) og
-      selvbetjent kundefangst (Flyreel) som neste produktlinje.
+      Femten skjermer i fire faser — hele kundereisen i sluttform, oppdatert med det
+      markedsresearchen sier skal inn (<code>docs/inkorporering.md</code>): romløype med adaptiv
+      sjekkliste (Hover + Befar), tale-først fangst med levende rapportkompletthet (FieldScribe +
+      Befar), risikoflagg i underlaget (CAPE), utkast som redigeres <em>i ferdig rapportvisning</em>
+      med formuleringsbibliotek og felt-diff (Befar + Spectora),
+      <strong>godkjenningsstempel, fagterm-transkripsjon, tidsmetrikk og offentlig demo — alle
+      bygget</strong>, bevispakke, in4mo-leveranse (Encircle→Xactimate-presedensen), og
+      kundefangst + NS 3600 som vekstflater.
     </p>
     <div class="legend">
       <span class="lp ok">bygget</span><span class="lp next">neste byggetrinn</span><span class="lp later">etter pilot</span>
@@ -263,9 +265,12 @@
           <div class="rows"><span>Velg rom — alt du fanger knyttes dit, og AI-en får romkonteksten gratis.</span></div>
           <div class="room sel"><div class="rn"><b>Kjeller bad</b><span>4 bevis · fukt målt</span></div><span class="cnt">4</span></div>
           <div class="room"><div class="rn"><b>Kjeller gang</b><span>2 bevis</span></div><span class="cnt">2</span></div>
-          <div class="room"><div class="rn"><b>Vaskerom</b><span>ingen bevis ennå</span></div><span class="cnt">0</span></div>
+          <div class="card" style="display:flex;flex-direction:column;gap:4px;">
+            <div class="t" style="font-size:11px;">Våtromssjekk — vises fordi rommet er bad</div>
+            <div class="rows"><span>Sluk/klemring <b style="color:#9BD1AC;">✓</b> · Membranovergang <b style="color:#9BD1AC;">✓</b> · Fuktmåling <b style="color:#E3C08A;">mangler</b></span></div>
+            <div class="s">Adaptiv løype: bare det som er relevant for rommet vises — resten forsvinner. Rommet styrer også Byggforsk-delsettet (våtrom → 727.121).</div>
+          </div>
           <div class="cta sec" style="font-size:11px;padding:8px;">+ Legg til rom</div>
-          <div class="rows" style="margin-top:auto;"><span>Rommet styrer også Byggforsk-delsettet AI-en siterer fra (våtrom → 727.121).</span></div>
         </div>
         <div class="ft"><div class="cta">Fang bevis i Kjeller bad</div></div>
       </div></div>
@@ -283,7 +288,11 @@
           <div class="bigbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#A9C9EF" stroke-width="2"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>Video</div>
           <div class="ev"><div class="th"></div><div class="m"><b>video_kjellerbad.mp4</b><br/>59.9094°N 10.8387°Ø · 08:12 · SHA-256 ✓</div></div>
           <div class="wx ok">Norsk fagspråk transkriberes: «klemring», «svill», «diffusjonssperre»</div>
-          <div class="wx">Si «merk her» under opptak — blir bevispunkt med tidsstempel <span class="tagn">neste</span></div>
+          <div class="card" style="display:flex;flex-direction:column;gap:4px;">
+            <div class="t" style="font-size:11px;">Rapporten bygger seg: 68 %</div>
+            <div class="gauge" style="width:100%;"><i style="width:68%;background:#2E5D9E;"></i></div>
+            <div class="s">Mangler før du drar: oversiktsbilde · fuktmåling punkt A <span class="tagn">neste</span></div>
+          </div>
         </div>
         <div class="ft"><div class="cta">Se rapport</div></div>
       </div></div>
@@ -342,24 +351,27 @@
   <div class="sect"><h3>Etter befaringen</h3><i></i><span>AI foreslår — takstpersonen står ansvarlig</span></div>
   <div class="grid">
 
-    <!-- 8 · AI-utkast med versjoner -->
+    <!-- 8 · AI-utkast i ferdig rapportvisning -->
     <div class="cell">
-      <div class="cell-head"><span class="n">8</span><h2>AI-utkast — versjonert, med diff</h2><span class="lp next">neste byggetrinn</span></div>
+      <div class="cell-head"><span class="n">8</span><h2>Utkastet — i ferdig rapportvisning</h2><span class="lp next">neste byggetrinn</span></div>
       <div class="phone"><div class="scr">
-        <div class="hd"><b>Utkast til rapport</b><span class="sync"><i></i>Synkronisert</span></div>
+        <div class="hd"><b>Rapport — rediger direkte</b><span class="sync"><i></i>Synkronisert</span></div>
         <div class="bd">
           <div class="vline"><span class="vdot"></span><span>AI-utkast v1 · 08:54 — arkiveres uendret</span></div>
-          <div class="card"><div class="t">Årsak (AI-forslag)</div><div class="s">Utett klemring ved sluk — gjentatt fukting over uker. Bevis: bilde @ 02:41.</div></div>
-          <div class="diff">Kari endrer klassifisering: <span class="old">akutt</span> → <span class="new">gradvis, over uker</span></div>
-          <div class="field"><label>Klassifisering — du avgjør, aldri stille-godkjent</label>
-            <div class="seg"><i>Akutt</i><i class="on">Gradvis</i></div></div>
-          <div class="quote">«Membran skal føres minst 15 mm opp på slukets klemring …»
-            <span class="src">Byggforsk 727.121 <span class="vb">punktnr. verifisert</span> <span class="tagn">SINTEF-lisens</span></span></div>
-          <div class="rows"><span>Felt-diffen mellom utkast og godkjent versjon lagres per sak — pilotens viktigste kvalitetsdata.</span></div>
+          <div class="card" style="display:flex;flex-direction:column;gap:6px;">
+            <div class="t">Skaderapport — Solbergliveien 8</div>
+            <div class="rows"><span>Skadested: <b>Kjeller bad, ved sluk</b></span></div>
+            <div class="field"><label>Årsak — trykk og rediger rett i rapporten</label>
+              <div class="input" style="font-weight:500;">Utett klemring ved sluk — gjentatt fukting over uker</div></div>
+            <div class="diff">Kari endret: <span class="old">akutt</span> → <span class="new">gradvis, over uker</span></div>
+            <div class="quote">«Membran skal føres minst 15 mm opp …»
+              <span class="src">Byggforsk 727.121 <span class="vb">verifisert</span> <span class="tagl">formuleringsbibliotek</span> <span class="tagn">SINTEF-lisens</span></span></div>
+          </div>
+          <div class="rows"><span>Slik mottakeren får den — ingen eksport, ingen separate skrivevinduer. Felt-diffen mellom utkast og godkjent versjon lagres per sak.</span></div>
         </div>
         <div class="ft"><div class="cta">Til godkjenning</div></div>
       </div></div>
-      <p>Spectora-mønsteret: AI-en skriver, fagpersonen flikker felt for felt. Utkast og godkjent versjon er separate objekter — diffen måler AI-kvaliteten i produksjon.</p>
+      <p>Befar-mønsteret møter Spectora-mønsteret: AI-en skriver med formuleringer fra et kuratert faglig bibliotek, og fagpersonen redigerer direkte i rapporten slik den leveres — diffen måler AI-kvaliteten i produksjon.</p>
     </div>
 
     <!-- 9 · Godkjenning -->
@@ -486,6 +498,23 @@
       <p>Samme motor, ny inngang: forhåndsdokumenterte saker og en naturlig oppsalgs-SKU — når fagverktøyet sitter.</p>
     </div>
 
+    <!-- 15 · Flere rapporttyper -->
+    <div class="cell">
+      <div class="cell-head"><span class="n">15</span><h2>Flere rapporttyper — NS 3600</h2><span class="lp later">etter pilot</span></div>
+      <div class="phone"><div class="scr">
+        <div class="hd"><b>Ny rapport</b></div>
+        <div class="bd">
+          <div class="field"><label>Rapporttype</label>
+            <div class="seg"><i class="on">Skaderapport</i><i>Tilstand NS 3600</i></div></div>
+          <div class="card"><div class="t">Skaderapport (forsikring)</div><div class="s">Årsak · akutt/gradvis · beviskjede · in4mo-leveranse. Kjernen — bygges først.</div></div>
+          <div class="card"><div class="t">Tilstandsrapport NS 3600:2025</div><div class="s">Samme fangst, samme romløype, samme godkjenningsflyt — nytt regelverk og TG-vurderinger. Obligatorisk standard fra 1. juli 2026.</div><span class="chip warn">etter pilot</span></div>
+          <div class="rows" style="margin-top:auto;"><span>Skade-sporet vinnes først. Deretter er tilstand «bare» en ny regelverkspakke på samme motor — inn i markedet Befar har åpnet.</span></div>
+        </div>
+        <div class="ft"><div class="cta">Start befaring</div></div>
+      </div></div>
+      <p>Vekstflate, ikke fokus: fangst, romløype og godkjenning gjenbrukes — rapporttypen er en regelverkspakke. Nei-lista gjelder til pilot er vunnet.</p>
+    </div>
+
   </div>
 
   <footer>
@@ -493,7 +522,9 @@
     godkjenningsstempelet med serverhåndhevet delingsport, norsk fagterm-transkripsjon,
     tid-til-godkjent-metrikken og den offentlige demoen (<code>/demo?adresse=…</code>). Skjerm 4, 6,
     7, 8 og 12 er neste byggetrinn i anbefalt rekkefølge fra <code>docs/inkorporering.md</code>;
-    skjerm 14 er produktlinje to etter pilot. Gule merker angir elementer som krever nøkkel eller
-    avtale (SINTEF-lisens, kommune/Boligmappa, in4mo-kartlegging) — alt annet kjører på åpne kilder.
+    skjerm 14 og 15 er vekstflater etter pilot. Befar-mønstrene (adaptiv sjekkliste, levende
+    kompletthet, redigering i ferdig rapportvisning, formuleringsbibliotek) er tegnet inn der de
+    hører hjemme. Gule merker angir elementer som krever nøkkel eller avtale (SINTEF-lisens,
+    kommune/Boligmappa, in4mo-kartlegging) — alt annet kjører på åpne kilder.
   </footer>
 </div>
