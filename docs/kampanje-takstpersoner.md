@@ -14,6 +14,9 @@ Betalt annonsering er matematisk feil verktøy for denne målgruppen:
   ~1 500. Smal B2B-targeting koster dessuten $18–35 per klikk.
 - Med pris 990 kr/mnd og en målgruppe der én person kan nås direkte for
   kostnaden av tre klikk, er 1:1-kanaler alltid billigere enn media.
+  (Norsk prisbenchmark: Befar tar 500 kr *per rapport* + 2 000 kr/år i
+  NS 3600-lisens — stykkpris er markedsvalidert, og flat månedspris er
+  vårt volumfordel-argument.)
 - Konklusjon: **dette er en listekampanje (ABM), ikke en annonsekampanje.**
   Hele markedet får plass i ett regneark. Kampanjens jobb er å flytte navn
   nedover en tilstandsmaskin — ikke å kjøpe rekkevidde.

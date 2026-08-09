@@ -120,8 +120,11 @@ Norsk befaringsapp for takstmenn, bygget «av fagfolk som selv står ute på
 befaring» (utviklet med byrået Hellevang & Co). Viktig presisering: Befar er
 et **bolighandel-verktøy** — tilstandsrapporter etter NS 3600:2025 og
 forskrift til avhendingslova — ikke et skadeverktøy. De er Norges svar på
-Spectora. Ingen AI, ingen video/lyd-fangst, ingen beviskjede, ingen
-saksunderlag fra offentlige kilder; motoren er et regelstyrt faglig rammeverk.
+Spectora. Ingen video/lyd-fangst, ingen beviskjede, ingen saksunderlag fra
+offentlige kilder; motoren er et regelstyrt faglig rammeverk. (Merk:
+markedsføringen nevner ikke AI, men brukeravtalen deres krever verifisering
+av «AI-genererte forslag» — et AI-lag er på vei. Forretningsmodell: 500 kr
+per rapport + 2 000 kr/år NS 3600-lisens — se `ns3600-og-befar-ui.md`.)
 
 **Validering (deres pitch speiler våre veddemål):**
 - «Rapporten bygges opp mens du jobber» ↔ vårt AI-utkast fra fangsten.

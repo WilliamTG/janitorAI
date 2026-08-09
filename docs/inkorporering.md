@@ -123,6 +123,17 @@ grepene deres forsterker kjernen vår direkte:
    gjennomarbeidede formuleringer. For oss: AI-en formulerer *fra*
    biblioteket i stedet for fritt — mindre diktning, konsistente rapporter.
    Bygges som del av Byggforsk-RAG-arbeidet.
+5. **Regelverket i felt** (fra app-skjermbildene, aug 2026): Befar viser
+   selve kravet med illustrasjon der vurderingen gjøres (fall 1:100, 15 mm
+   oppkant, membran 25 mm over topp sluk). Vår versjon: Byggforsk-kravet
+   vises ved fangstpunktet — står du i våtrom ved sluk, ser du 727.121-kravet
+   før du dokumenterer. RAG-en blir feltveiledning, ikke bare rapportsitater.
+   Samme SINTEF-avklaring gjelder. I tillegg overtas rom-taksonomien deres
+   («Rom under terreng», «Etasjeskille», «Loft/takkonstruksjon», «Utvendig»)
+   i A1 — det er standardens eget språk og vannskadenes faktiske geografi.
+   Se `docs/ns3600-og-befar-ui.md` for full analyse, inkl. at NS 3600:2025
+   nå krever årsak/konsekvens/tiltak for alle TG2/TG3-avvik — strukturen
+   motoren vår allerede produserer (styrker vekstflate C4).
 
 **Vekstflate C4 — NS 3600:2025-tilstandsrapport** (etter pilot): fangst,
 romløype og godkjenningsflyt gjenbrukes; rapporttypen er en regelverkspakke.
