@@ -88,10 +88,10 @@ function getProjectStatus(project: Project): ProjectStatus {
 // Kun til filterchips (kant/bakgrunn) — selve statusvisningen på kortet
 // bruker StatusChip med WCAG AA-fargepar (B20).
 const STATUS_COLOR: Record<ProjectStatus, string> = {
-  draft: '#94a3b8',
-  processing: '#60a5fa',
-  ready: '#22c55e',
-  failed: '#ef4444',
+  draft: '#7C8A96',
+  processing: '#3D5A80',
+  ready: '#2E7D4F',
+  failed: '#A6453A',
 };
 
 const UNKNOWN_INSPECTOR_LABEL = nb.projects.unknownInspector;

@@ -1,9 +1,10 @@
 import React, { PropsWithChildren } from 'react';
-import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, ScrollView, StyleSheet, View, ViewProps } from 'react-native';
 
 import { useAppTheme } from './theme';
 
+// Flat, varm bakgrunn fra temaet — gradienter er valgt bort bevisst
+// (fargeidentiteten deles med salgs- og delingssidene).
 export const Screen = ({ children, style, scrollable = true }: PropsWithChildren<ViewProps & { scrollable?: boolean }>) => {
   const theme = useAppTheme();
 
@@ -12,14 +13,7 @@ export const Screen = ({ children, style, scrollable = true }: PropsWithChildren
   );
 
   return (
-    <LinearGradient
-      colors={
-        theme.mode === 'dark'
-          ? ['#070815', '#0b1220']
-          : ['#dfe6f0', '#e8eef8']
-      }
-      style={styles.flex}
-    >
+    <View style={[styles.flex, { backgroundColor: theme.colors.background }]}>
       <SafeAreaView style={[styles.flex]}>
         {scrollable ? (
           <ScrollView
@@ -32,7 +26,7 @@ export const Screen = ({ children, style, scrollable = true }: PropsWithChildren
           content
         )}
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 };
 

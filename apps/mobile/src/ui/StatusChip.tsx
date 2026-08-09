@@ -13,13 +13,13 @@ export type ProjectStatus = 'draft' | 'processing' | 'ready' | 'failed';
 const COLORS: Record<'light' | 'dark', Record<ProjectStatus, { bg: string; fg: string; border: string }>> = {
   light: {
     draft: { bg: '#E4E9F1', fg: '#3D4C63', border: '#C3CDDC' },
-    processing: { bg: '#DBEAFE', fg: '#1D4ED8', border: '#93C5FD' },
+    processing: { bg: '#E4EDF5', fg: '#2E4763', border: '#A8BFD4' },
     ready: { bg: '#DCFCE7', fg: '#14532D', border: '#86EFAC' },
     failed: { bg: '#FEE2E2', fg: '#7F1D1D', border: '#FCA5A5' },
   },
   dark: {
     draft: { bg: '#263143', fg: '#C7D2E2', border: '#3A4A63' },
-    processing: { bg: '#16294A', fg: '#A7C7FA', border: '#1D4ED8' },
+    processing: { bg: '#1B2A3A', fg: '#A9C9EF', border: '#3D5A80' },
     ready: { bg: '#103524', fg: '#86EFAC', border: '#166534' },
     failed: { bg: '#3B1513', fg: '#FCA5A5', border: '#7F1D1D' },
   },

@@ -27,52 +27,56 @@ export type AppTheme = {
   blurIntensity: number;
 };
 
+// Fargeidentiteten deles med salgs-, demo- og delingssidene: dempet stålblå
+// aksent (#3D5A80-familien), varm papirhvit bakgrunn og nesten ugjennomsiktige
+// flater. Bevisst valgt bort: knallblå/neonrød «template-farger» og tung
+// glass/blur — takstbransjen skal kjenne igjen et fagverktøy, ikke en demo.
 const lightTheme: AppTheme = {
   mode: 'light',
   colors: {
-    background: '#eef2f7',
-    surface: 'rgba(255,255,255,0.82)',
-    surfaceSecondary: 'rgba(255,255,255,0.65)',
-    foreground: '#0f172a',
-    muted: '#475569',
-    border: 'rgba(148, 163, 184, 0.45)',
-    accent: '#2563EB',
-    accentStrong: '#1d4ed8',
-    danger: '#ef4444',
-    shadow: 'rgba(15, 23, 42, 0.12)',
-    glassOverlay: 'rgba(255,255,255,0.32)',
-    overlay: 'rgba(15, 23, 42, 0.25)',
+    background: '#F4F3EF',
+    surface: 'rgba(255,255,255,0.96)',
+    surfaceSecondary: 'rgba(255,255,255,0.85)',
+    foreground: '#1D2730',
+    muted: '#55636E',
+    border: 'rgba(29, 39, 48, 0.16)',
+    accent: '#3D5A80',
+    accentStrong: '#2E4763',
+    danger: '#A6453A',
+    shadow: 'rgba(29, 39, 48, 0.10)',
+    glassOverlay: 'rgba(255,255,255,0.5)',
+    overlay: 'rgba(29, 39, 48, 0.30)',
   },
   spacing: { xs: 6, sm: 10, md: 14, lg: 18, xl: 24 },
-  radii: { sm: 8, md: 14, lg: 22, pill: 999 },
+  radii: { sm: 6, md: 10, lg: 16, pill: 999 },
   typography: {
     title: { fontSize: 24, fontWeight: '700', letterSpacing: -0.2 },
     body: { fontSize: 16, fontWeight: '400', letterSpacing: -0.1 },
     caption: { fontSize: 13, fontWeight: '400', letterSpacing: 0 },
   },
-  blurIntensity: 40,
+  blurIntensity: 12,
 };
 
 const darkTheme: AppTheme = {
   mode: 'dark',
   colors: {
-    background: '#0b1220',
-    surface: 'rgba(20,25,38,0.8)',
-    surfaceSecondary: 'rgba(20,25,38,0.6)',
-    foreground: '#e2e8f0',
-    muted: '#cbd5e1',
-    border: 'rgba(100, 116, 139, 0.45)',
-    accent: '#60a5fa',
-    accentStrong: '#93c5fd',
-    danger: '#f87171',
-    shadow: 'rgba(15, 23, 42, 0.35)',
-    glassOverlay: 'rgba(15,23,42,0.32)',
+    background: '#12181D',
+    surface: 'rgba(26, 34, 42, 0.97)',
+    surfaceSecondary: 'rgba(26, 34, 42, 0.88)',
+    foreground: '#E6EAEE',
+    muted: '#9DA9B3',
+    border: 'rgba(157, 169, 179, 0.28)',
+    accent: '#94B9DE',
+    accentStrong: '#B7D2EC',
+    danger: '#D3766B',
+    shadow: 'rgba(0, 0, 0, 0.35)',
+    glassOverlay: 'rgba(18, 24, 29, 0.5)',
     overlay: 'rgba(0,0,0,0.5)',
   },
   spacing: lightTheme.spacing,
   radii: lightTheme.radii,
   typography: lightTheme.typography,
-  blurIntensity: 50,
+  blurIntensity: 14,
 };
 
 const ThemeContext = createContext<AppTheme>(lightTheme);
