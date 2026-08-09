@@ -85,6 +85,7 @@ app.get("/ui-endringer", (req, res) => sendPresentationPage(res, "ui-endringer.h
 app.get("/underlag-demo", (req, res) => sendPresentationPage(res, "underlag-demo.html"));
 app.get("/totalbilde", (req, res) => sendPresentationPage(res, "totalbilde.html"));
 app.get("/ui-total", (req, res) => sendPresentationPage(res, "ui-total.html"));
+app.get("/fargealternativer", (req, res) => sendPresentationPage(res, "fargealternativer.html"));
 
 // ---------- SHARE PAGE (public HTML shell; data endpoints gate on PIN) ------
 // Registered before the static/SPA fallback so /share/:id is never swallowed

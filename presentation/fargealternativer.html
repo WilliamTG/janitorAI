@@ -1,0 +1,217 @@
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DocrAI — Tre fargealternativer</title>
+<style>
+  :root {
+    --page-bg: #EFEEE9; --page-ink: #1D2730; --page-muted: #5C6B7A; --page-border: #D8D6CE;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page-bg: #101519; --page-ink: #E6EAEE; --page-muted: #9DA9B3; --page-border: #2A3542;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page-bg: #101519; --page-ink: #E6EAEE; --page-muted: #9DA9B3; --page-border: #2A3542;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page-bg); color: var(--page-ink);
+    font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif; font-size: 15px; line-height: 1.55; }
+  .page { max-width: 1180px; margin: 0 auto; padding: 44px 22px 64px; display: flex; flex-direction: column; gap: 28px; }
+  header { display: flex; flex-direction: column; gap: 10px; max-width: 860px; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--page-muted); }
+  h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
+  .lede { margin: 0; color: var(--page-muted); font-size: 15px; max-width: 70ch; }
+
+  .alts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; }
+
+  /* Hvert alternativ er en selvstendig tokenverden via CSS-variabler. */
+  .alt { border-radius: 16px; overflow: hidden; border: 1px solid var(--page-border); display: flex; flex-direction: column; }
+  .alt .light { background: var(--surface); color: var(--ink); padding: 20px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  .alt .darkstrip { background: var(--d-surface); color: var(--d-ink); padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+
+  .alt h2 { margin: 0; font-size: 17px; font-weight: 700; }
+  .alt .why { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .brandrow { display: flex; align-items: center; gap: 8px; }
+  .brandrow .sq { width: 18px; height: 18px; background: var(--accent); flex: none; }
+  .brandrow b { font-size: 14px; }
+
+  .hero-mini { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.25; }
+  .btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { border-radius: 9px; padding: 9px 14px; font-weight: 700; font-size: 12.5px; }
+  .btn.pri { background: var(--accent); color: #fff; }
+  .btn.sec { border: 1.5px solid var(--border); background: var(--paper); color: var(--ink); }
+
+  .card { background: var(--paper); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .card .k { font-size: 11px; color: var(--muted); }
+  .card .v { font-size: 13.5px; font-weight: 600; }
+  .chiprow { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 2px 9px; border: 1px solid; }
+  .stamp { align-self: flex-start; border: 1.5px solid var(--ok-border); color: var(--ok); background: var(--ok-bg);
+    padding: 2px 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; font-size: 9.5px; border-radius: 5px; }
+  .tokens { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; color: var(--muted); line-height: 1.7; word-spacing: 6px; }
+  .swatches { display: flex; gap: 6px; }
+  .sw { flex: 1; height: 26px; border-radius: 6px; border: 1px solid var(--border); }
+
+  .darkstrip .lbl { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--d-muted); }
+  .darkstrip .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .darkstrip .btn.pri { background: var(--d-accent); color: var(--d-btn-ink); }
+  .darkstrip .card { background: var(--d-paper); border-color: var(--d-border); color: var(--d-ink); }
+  .darkstrip .card .k { color: var(--d-muted); }
+
+  /* ── Alternativ A: Stålblå (dagens) ── */
+  .alt-a {
+    --surface: #F4F3EF; --paper: #FFFFFF; --ink: #1D2730; --muted: #55636E; --border: #DDE0DB;
+    --accent: #3D5A80; --accent-strong: #2E4763; --danger: #A6453A;
+    --ok: #14532D; --ok-bg: #DCFCE7; --ok-border: #86EFAC;
+    --d-surface: #12181D; --d-paper: #1A222A; --d-ink: #E6EAEE; --d-muted: #9DA9B3; --d-border: #33404B;
+    --d-accent: #94B9DE; --d-btn-ink: #12181D;
+  }
+  /* ── Alternativ B: Granskog ── */
+  .alt-b {
+    --surface: #F5F2EA; --paper: #FFFFFF; --ink: #1E2A26; --muted: #5A6963; --border: #DEDACE;
+    --accent: #2F5D50; --accent-strong: #234A3F; --danger: #9C4A2F;
+    --ok: #1F4D33; --ok-bg: #DFF0E2; --ok-border: #8FC9A0;
+    --d-surface: #131A17; --d-paper: #1B2420; --d-ink: #E5EBE7; --d-muted: #9BAAA2; --d-border: #33413B;
+    --d-accent: #8FC0AF; --d-btn-ink: #131A17;
+  }
+  /* ── Alternativ C: Skifer og kobber ── */
+  .alt-c {
+    --surface: #F1F3F3; --paper: #FFFFFF; --ink: #1B262B; --muted: #566670; --border: #D8DEDF;
+    --accent: #23545C; --accent-strong: #1A4148; --danger: #A6453A; --copper: #A65E2E;
+    --ok: #14532D; --ok-bg: #DCEFE3; --ok-border: #8FC9A0;
+    --d-surface: #11181B; --d-paper: #1A2327; --d-ink: #E4EAEC; --d-muted: #9AA8AE; --d-border: #324047;
+    --d-accent: #8FC2CB; --d-btn-ink: #11181B;
+  }
+  .alt-c .stamp { border-color: #C98B5A; color: #7F4A22; background: #F7ECE1; }
+
+  footer { border-top: 1px solid var(--page-border); padding-top: 14px; font-size: 12.5px; color: var(--page-muted); max-width: 78ch; }
+</style>
+
+<div class="page">
+  <header>
+    <span class="eyebrow">DocrAI · Fargealternativer · 09.08.2026</span>
+    <h1>Tre retninger for identiteten — vist på produktet</h1>
+    <p class="lede">
+      Alle tre er bygget etter samme regler: varm/nøytral papirbakgrunn (aldri kjølig
+      template-grå), dempet aksent med WCAG AA-kontrast for hvit tekst, murstensrød — aldri
+      neon — for feil, og komplette lys/mørk-par. Tokenlistene mapper 1:1 til
+      <code>theme.tsx</code> og nettsidene, så byttet er én commit.
+    </p>
+  </header>
+
+  <div class="alts">
+
+    <!-- A -->
+    <div class="alt alt-a">
+      <div class="light">
+        <h2>A · Stålblå <span style="font-weight:400;font-size:12px;color:var(--muted);">(dagens)</span></h2>
+        <p class="why">Forsikringens og dokumentets farge: nøytral, institusjonell, umulig å mislike. Signaliserer «verktøy for oppgjør» — trygghet foran personlighet. Risiko: minst særpreg av de tre.</p>
+        <div class="brandrow"><span class="sq"></span><b>DocrAI</b></div>
+        <div class="hero-mini">Fra befaring til forsikringsklar skaderapport.</div>
+        <div class="btnrow"><span class="btn pri">Se rapport</span><span class="btn sec">Del rapporten</span></div>
+        <div class="card">
+          <span class="k">Saksunderlag</span>
+          <span class="v">OSLO · gnr/bnr 144/463 · 138 moh.</span>
+          <div class="chiprow">
+            <span class="chip" style="color:#3D4C63;background:#E4E9F1;border-color:#C3CDDC;">Utkast</span>
+            <span class="chip" style="color:#2E4763;background:#E4EDF5;border-color:#A8BFD4;">Behandler</span>
+            <span class="chip" style="color:#14532D;background:#DCFCE7;border-color:#86EFAC;">Klar</span>
+            <span class="chip" style="color:#7F1D1D;background:#FEE2E2;border-color:#FCA5A5;">Feilet</span>
+          </div>
+          <span class="stamp">Godkjent av takstperson</span>
+        </div>
+        <div class="swatches">
+          <div class="sw" style="background:#F4F3EF;"></div><div class="sw" style="background:#3D5A80;"></div>
+          <div class="sw" style="background:#2E4763;"></div><div class="sw" style="background:#A6453A;"></div>
+          <div class="sw" style="background:#1D2730;"></div>
+        </div>
+        <div class="tokens">surface #F4F3EF accent #3D5A80 strong #2E4763 danger #A6453A ink #1D2730</div>
+      </div>
+      <div class="darkstrip">
+        <span class="lbl">Mørk modus</span>
+        <div class="row"><span class="btn pri">Se rapport</span>
+          <div class="card" style="flex:1;"><span class="k">Årsak</span><span style="font-size:12px;">Utett klemring ved sluk</span></div>
+        </div>
+        <div class="tokens" style="color:var(--d-muted);">surface #12181D paper #1A222A accent #94B9DE</div>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div class="alt alt-b">
+      <div class="light">
+        <h2>B · Granskog</h2>
+        <p class="why">Byggfagets farge: dyp gran mot varm kremhvit — jordnær, håndverksnær, norsk. Skiller oss fra både in4mos blå og forsikringsselskapenes paletter. Risiko: nærmer seg Befars grønntone (deres er lysere salvie — vår er mørk gran, men sjekk side om side).</p>
+        <div class="brandrow"><span class="sq"></span><b>DocrAI</b></div>
+        <div class="hero-mini">Fra befaring til forsikringsklar skaderapport.</div>
+        <div class="btnrow"><span class="btn pri">Se rapport</span><span class="btn sec">Del rapporten</span></div>
+        <div class="card">
+          <span class="k">Saksunderlag</span>
+          <span class="v">OSLO · gnr/bnr 144/463 · 138 moh.</span>
+          <div class="chiprow">
+            <span class="chip" style="color:#3E4A45;background:#E8EAE2;border-color:#C9CDBF;">Utkast</span>
+            <span class="chip" style="color:#234A3F;background:#E2EDE7;border-color:#A9C9B8;">Behandler</span>
+            <span class="chip" style="color:#1F4D33;background:#DFF0E2;border-color:#8FC9A0;">Klar</span>
+            <span class="chip" style="color:#7A2E1B;background:#F9E4DC;border-color:#E2A791;">Feilet</span>
+          </div>
+          <span class="stamp">Godkjent av takstperson</span>
+        </div>
+        <div class="swatches">
+          <div class="sw" style="background:#F5F2EA;"></div><div class="sw" style="background:#2F5D50;"></div>
+          <div class="sw" style="background:#234A3F;"></div><div class="sw" style="background:#9C4A2F;"></div>
+          <div class="sw" style="background:#1E2A26;"></div>
+        </div>
+        <div class="tokens">surface #F5F2EA accent #2F5D50 strong #234A3F danger #9C4A2F ink #1E2A26</div>
+      </div>
+      <div class="darkstrip">
+        <span class="lbl">Mørk modus</span>
+        <div class="row"><span class="btn pri">Se rapport</span>
+          <div class="card" style="flex:1;"><span class="k">Årsak</span><span style="font-size:12px;">Utett klemring ved sluk</span></div>
+        </div>
+        <div class="tokens" style="color:var(--d-muted);">surface #131A17 paper #1B2420 accent #8FC0AF</div>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div class="alt alt-c">
+      <div class="light">
+        <h2>C · Skifer og kobber</h2>
+        <p class="why">Teknisk presisjon med varme: petrolblå-grønn som hovedfarge, kobber som signaturdetalj på stempel og nøkkeltall — taket og beslaget på norske bygg. Mest særpreg av de tre og lengst fra alle konkurrentene. Risiko: to aksentfarger krever disiplin (kobber kun til stempel/tall, aldri knapper).</p>
+        <div class="brandrow"><span class="sq"></span><b>DocrAI</b></div>
+        <div class="hero-mini">Fra befaring til forsikringsklar <span style="color:var(--copper);">skaderapport</span>.</div>
+        <div class="btnrow"><span class="btn pri">Se rapport</span><span class="btn sec">Del rapporten</span></div>
+        <div class="card">
+          <span class="k">Saksunderlag</span>
+          <span class="v">OSLO · gnr/bnr 144/463 · <span style="color:var(--copper);font-weight:700;">138 moh.</span></span>
+          <div class="chiprow">
+            <span class="chip" style="color:#42525A;background:#E5EAEC;border-color:#C4CFD3;">Utkast</span>
+            <span class="chip" style="color:#1A4148;background:#E0ECEE;border-color:#9FC4CA;">Behandler</span>
+            <span class="chip" style="color:#14532D;background:#DCEFE3;border-color:#8FC9A0;">Klar</span>
+            <span class="chip" style="color:#7F1D1D;background:#FCE5E1;border-color:#EFAF9F;">Feilet</span>
+          </div>
+          <span class="stamp">Godkjent av takstperson</span>
+        </div>
+        <div class="swatches">
+          <div class="sw" style="background:#F1F3F3;"></div><div class="sw" style="background:#23545C;"></div>
+          <div class="sw" style="background:#A65E2E;"></div><div class="sw" style="background:#A6453A;"></div>
+          <div class="sw" style="background:#1B262B;"></div>
+        </div>
+        <div class="tokens">surface #F1F3F3 accent #23545C kobber #A65E2E danger #A6453A ink #1B262B</div>
+      </div>
+      <div class="darkstrip">
+        <span class="lbl">Mørk modus</span>
+        <div class="row"><span class="btn pri">Se rapport</span>
+          <div class="card" style="flex:1;"><span class="k">Årsak</span><span style="font-size:12px;">Utett klemring ved sluk <span style="color:#C98B5A;">· 727.121</span></span></div>
+        </div>
+        <div class="tokens" style="color:var(--d-muted);">surface #11181B paper #1A2327 accent #8FC2CB kobber #C98B5A</div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    Alle aksentfarger holder WCAG AA med hvit tekst (A: 6,6:1 · B: 7,3:1 · C: 7,9:1), og
+    statuschip-parene er tunet per palett. Anbefaling: A er tryggest mot forsikringsmarkedet,
+    B eier byggfaget, C har mest særpreg. Valget byttes i praksis ved å oppdatere tokenene i
+    <code>theme.tsx</code> + CSS-variablene på nettsidene — én commit, ingen strukturendringer.
+  </footer>
+</div>
