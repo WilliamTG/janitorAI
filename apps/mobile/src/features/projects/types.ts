@@ -114,6 +114,12 @@ export type CaseFile = {
   lon: number;
 };
 
+/** Rom i befaringsløypa (A1) — organiserende enhet for bevis og AI-kontekst. */
+export type Room = {
+  id: string;
+  name: string;
+};
+
 export type Photo = {
   id: string;
   uri: string;
@@ -132,6 +138,8 @@ export type Note = {
   id: string;
   text: string;
   createdAt: string;
+  /** Rommet bevisene i notatet hører til (A1). Notater uten rom er gyldige. */
+  roomId?: string;
   /** Last modification time (ISO). Used for per-note merge across devices. */
   updatedAt?: string;
   audioUri?: string;
@@ -177,6 +185,8 @@ export type Project = {
   reportMeta?: ReportMeta;
   /** Saksunderlag fra adressevalget i veiviseren (Kartverket m.fl.). */
   caseFile?: CaseFile;
+  /** Befaringsløypas rom (A1). */
+  rooms?: Room[];
   /** URL of the generated Google Doc (persisted after successful generation). */
   reportUrl?: string;
   /** Lifecycle status of the most recent report generation attempt. */

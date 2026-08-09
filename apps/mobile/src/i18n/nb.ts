@@ -196,6 +196,20 @@ export const nb = {
     municipalHint: 'Byggesaks- og VA-innsyn varierer per kommune — sjekk kommunens innsynsportal.',
   },
 
+  rooms: {
+    all: 'Alle',
+    add: '+ Rom',
+    addTitle: 'Nytt rom',
+    placeholder: 'F.eks. Kjeller bad',
+    confirm: 'Legg til',
+    added: (name: string) => `«${name}» lagt til`,
+    duplicate: 'Rommet finnes allerede',
+    capturingIn: (name: string) => `Fanger i: ${name}`,
+    wetChecklistTitle: 'Huskeliste — våtrom',
+    wetChecklistHint:
+      'Rommet er et våtrom. Dokumentér punktene under — de styrer også hvilke Byggforsk-anvisninger rapporten forankres i.',
+  },
+
   share: {
     title: 'Del rapporten',
     create: 'Lag delingslenke',

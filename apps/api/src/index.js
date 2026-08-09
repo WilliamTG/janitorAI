@@ -322,6 +322,14 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
 
     // Resolve photo URIs to absolute URLs and strip empty fields so the AI
     // engine receives a clean, self-contained context object.
+    // A1: romnavnet følger notatet — rommet er konteksten som skiller
+    // «fukt ved sluk på badet» fra «fukt i boden», og styrer hvilket
+    // Byggforsk-delsett som er relevant.
+    const roomsById = new Map(
+      (Array.isArray(project?.rooms) ? project.rooms : [])
+        .filter((r) => r && r.id && r.name)
+        .map((r) => [String(r.id), String(r.name)])
+    );
     const enrichedNotes = (Array.isArray(project?.notes) ? project.notes : [])
       .map((note) => {
         const enrichedPhotos = (Array.isArray(note.photos) ? note.photos : [])
@@ -337,6 +345,9 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
         const enriched = {};
         if (note.text) enriched.text = note.text;
         if (note.transcription) enriched.transcription = note.transcription;
+        if (note.roomId && roomsById.has(String(note.roomId))) {
+          enriched.room = roomsById.get(String(note.roomId));
+        }
         if (enrichedPhotos.length > 0) enriched.photos = enrichedPhotos;
         return enriched;
       })

@@ -33,6 +33,12 @@ import {
   UNKNOWN_INSPECTOR,
 } from '@/src/features/projects/types';
 import { contentFromAnalysis } from '@/src/features/projects/reportVersions';
+import {
+  ROOM_SUGGESTIONS,
+  WET_ROOM_CHECKLIST,
+  isWetRoom,
+  roomNameById,
+} from '@/src/features/projects/rooms';
 import { ReportDetailsSection } from '@/src/features/projects/ReportDetailsSection';
 import { ReportGeneratingOverlay } from '@/src/features/projects/ReportGeneratingOverlay';
 import { applyNoteChanges } from '@/src/features/projects/noteChanges';
@@ -411,6 +417,33 @@ export default function ProjectDetailScreen() {
     setIsEditingDescription(false);
   };
 
+  // A1 — befaringsløypa: aktivt rom er fangstkonteksten. Alt som fanges mens
+  // et rom er valgt, knyttes dit; «Alle» (null) er fortsatt gyldig fangst.
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [addingRoom, setAddingRoom] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+
+  const addRoom = async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || !project) return;
+    const existing = (project.rooms || []).find(
+      (r) => r.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (existing) {
+      setActiveRoomId(existing.id);
+      setAddingRoom(false);
+      setNewRoomName('');
+      toast.show({ message: nb.rooms.duplicate, variant: 'info' });
+      return;
+    }
+    const room = { id: Date.now().toString(), name: trimmed };
+    await updateProjectLocally({ ...project, rooms: [...(project.rooms || []), room] });
+    setActiveRoomId(room.id);
+    setAddingRoom(false);
+    setNewRoomName('');
+    toast.show({ message: nb.rooms.added(trimmed), variant: 'success' });
+  };
+
   const addTextNote = async () => {
     const trimmed = noteText.trim();
     if (!trimmed || !project) return;
@@ -419,6 +452,7 @@ export default function ProjectDetailScreen() {
       id: Date.now().toString(),
       text: trimmed,
       createdAt: new Date().toISOString(),
+      ...(activeRoomId ? { roomId: activeRoomId } : {}),
     };
 
     const newNotes = [newNote, ...(project.notes || [])];
@@ -498,6 +532,7 @@ export default function ProjectDetailScreen() {
         text: textForNote,
         createdAt: new Date().toISOString(),
         audioUri: durableUri,
+        ...(activeRoomId ? { roomId: activeRoomId } : {}),
       };
 
       const newNotes = [newNote, ...(project.notes || [])];
@@ -912,6 +947,7 @@ export default function ProjectDetailScreen() {
         id: Date.now().toString(),
         text: textForNote,
         createdAt: new Date().toISOString(),
+        ...(activeRoomId ? { roomId: activeRoomId } : {}),
         photos: [{
           id: Date.now().toString(),
           uri,
@@ -1032,6 +1068,7 @@ export default function ProjectDetailScreen() {
           videoUri: uri,
           videoCapturedAt: new Date().toISOString(),
           ...(geo ? { videoGeo: geo } : {}),
+          ...(activeRoomId ? { roomId: activeRoomId } : {}),
         };
 
         const newNotes = [newNote, ...(project.notes || [])];
@@ -1133,6 +1170,7 @@ export default function ProjectDetailScreen() {
         .map(n => ({
           ...(n.text ? { text: n.text } : {}),
           ...(n.transcription ? { transcription: n.transcription } : {}),
+          ...(n.roomId ? { roomId: n.roomId } : {}),
           photos: (n.photos || [])
             .filter(p => p.remoteId || p.uri)
             .map(p => ({
@@ -1147,6 +1185,8 @@ export default function ProjectDetailScreen() {
         inspector: snap.inspector,
         ...(snap.projectDescriptionText ? { projectDescriptionText: snap.projectDescriptionText } : {}),
         ...(snap.projectDescriptionTranscription ? { projectDescriptionTranscription: snap.projectDescriptionTranscription } : {}),
+        // A1: rommene følger med så API-et kan sette romnavn på hvert notat.
+        ...(snap.rooms && snap.rooms.length > 0 ? { rooms: snap.rooms } : {}),
         notes: enrichedNotes,
       };
 
@@ -1539,7 +1579,11 @@ export default function ProjectDetailScreen() {
     <Animated.View entering={FadeInDown.duration(300).delay(index * 40)}>
       <GlassCard style={{ marginBottom: theme.spacing.sm, gap: theme.spacing.xs }}>
         <Body>{item.text}</Body>
-        <Caption muted>{formatDateTime(item.createdAt)}</Caption>
+        <Caption muted>
+          {[roomNameById(project, item.roomId), formatDateTime(item.createdAt)]
+            .filter(Boolean)
+            .join(' · ')}
+        </Caption>
 
         {/* Video clip — show whenever local URI or remote copy exists */}
         {(item.videoUri || item.videoRemoteId) && (
@@ -2397,13 +2441,118 @@ export default function ProjectDetailScreen() {
     </GlassCard>
   );
 
+  // A1: romstripen — «Alle» + rommene + «+ Rom», med hurtigvalg fra
+  // taksonomien. Aktivt rom er fangstkontekst og filter samtidig.
+  const renderRoomStrip = () => {
+    const rooms = project?.rooms || [];
+    const activeName = roomNameById(project, activeRoomId ?? undefined);
+    const chip = (label: string, selected: boolean, onPress: () => void, key: string) => (
+      <TouchableOpacity
+        key={key}
+        onPress={onPress}
+        accessibilityRole="button"
+        style={{
+          paddingHorizontal: 14,
+          paddingVertical: 8,
+          minHeight: 36,
+          borderRadius: theme.radii.pill,
+          borderWidth: 1,
+          borderColor: selected ? theme.colors.accent : theme.colors.border,
+          backgroundColor: selected ? `${theme.colors.accent}1A` : theme.colors.surfaceSecondary,
+        }}
+      >
+        <Caption style={{ color: selected ? theme.colors.accent : theme.colors.muted, fontWeight: '600' }}>
+          {label}
+        </Caption>
+      </TouchableOpacity>
+    );
+
+    return (
+      <View style={{ gap: theme.spacing.xs }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {chip(nb.rooms.all, activeRoomId === null, () => setActiveRoomId(null), 'all')}
+          {rooms.map((room) =>
+            chip(room.name, activeRoomId === room.id, () => setActiveRoomId(room.id), room.id)
+          )}
+          {chip(nb.rooms.add, false, () => setAddingRoom((v) => !v), 'add')}
+        </ScrollView>
+        {activeName ? <Caption muted>{nb.rooms.capturingIn(activeName)}</Caption> : null}
+        {addingRoom && (
+          <GlassCard style={{ gap: theme.spacing.sm }}>
+            <Caption muted>{nb.rooms.addTitle}</Caption>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {ROOM_SUGGESTIONS.filter(
+                (name) => !rooms.some((r) => r.name.toLowerCase() === name.toLowerCase())
+              ).map((name) => (
+                <TouchableOpacity
+                  key={name}
+                  onPress={() => void addRoom(name)}
+                  accessibilityRole="button"
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 7,
+                    borderRadius: theme.radii.pill,
+                    borderWidth: 1,
+                    borderColor: theme.colors.border,
+                    backgroundColor: theme.colors.surface,
+                  }}
+                >
+                  <Caption style={{ color: theme.colors.foreground }}>{name}</Caption>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={{ flexDirection: 'row', gap: theme.spacing.sm, alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <TextField
+                  value={newRoomName}
+                  onChangeText={setNewRoomName}
+                  placeholder={nb.rooms.placeholder}
+                  onSubmitEditing={() => void addRoom(newRoomName)}
+                />
+              </View>
+              <SecondaryButton onPress={() => void addRoom(newRoomName)}>
+                {nb.rooms.confirm}
+              </SecondaryButton>
+            </View>
+          </GlassCard>
+        )}
+      </View>
+    );
+  };
+
+  // A1: adaptiv huskeliste (Befar-mønsteret) — vises kun når det aktive
+  // rommet er et våtrom. Statisk påminnelse, ingen falske «✓».
+  const renderWetRoomChecklist = () => {
+    const activeName = roomNameById(project, activeRoomId ?? undefined);
+    if (!activeName || !isWetRoom(activeName)) return null;
+    return (
+      <GlassCard style={{ gap: theme.spacing.xs }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+          <Ionicons name="water-outline" size={16} color={theme.colors.accent} />
+          <Title style={{ fontSize: 15 }}>{nb.rooms.wetChecklistTitle}</Title>
+        </View>
+        <Caption muted>{nb.rooms.wetChecklistHint}</Caption>
+        {WET_ROOM_CHECKLIST.map((item) => (
+          <View key={item} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
+            <Caption style={{ color: theme.colors.accent }}>—</Caption>
+            <Caption muted style={{ flex: 1 }}>{item}</Caption>
+          </View>
+        ))}
+      </GlassCard>
+    );
+  };
+
   const renderNotesTab = () => {
-    const noteData = project?.notes || [];
+    const allNotes = project?.notes || [];
+    const noteData = activeRoomId
+      ? allNotes.filter((n) => n.roomId === activeRoomId)
+      : allNotes;
 
     return (
       <Animated.View entering={FadeInRight.duration(320)} style={{ flex: 1 }}>
         {/* B13: fangst-knappene ligger fast øverst, utenfor scrollingen. */}
-        <View style={{ marginTop: theme.spacing.md }}>
+        <View style={{ marginTop: theme.spacing.md, gap: theme.spacing.sm }}>
+          {renderRoomStrip()}
           {renderCaptureButtons()}
         </View>
 
@@ -2414,6 +2563,7 @@ export default function ProjectDetailScreen() {
             renderItem={renderNoteItem}
             ListHeaderComponent={
               <View style={{ gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
+                {renderWetRoomChecklist()}
                 {renderUnderlagCard()}
                 {renderInfoCard()}
                 {renderProjectDescription()}
