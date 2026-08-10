@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Siden finnes ikke — DocrAI</title>
+<meta name="robots" content="noindex" />
+<style>
+  :root { --paper:#FFFFFF; --surface:#F4F3EF; --ink:#16202B; --muted:#5C6B7A; --border:#DDE4EB; --accent:#3D5A80; }
+  @media (prefers-color-scheme: dark) { :root { --paper:#131920; --surface:#0F141A; --ink:#E4EAF1; --muted:#97A6B5; --border:#2A3542; --accent:#94B9DE; } }
+  * { box-sizing:border-box; } body { margin:0; background:var(--surface); color:var(--ink);
+    font-family:'Inter',-apple-system,'Segoe UI',system-ui,sans-serif; font-size:16px; line-height:1.6;
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .card { max-width:460px; background:var(--paper); border:1px solid var(--border); border-radius:16px;
+    padding:32px 28px; display:flex; flex-direction:column; gap:14px; }
+  .brand { display:flex; align-items:center; gap:10px; } .brand .sq { width:20px; height:20px; background:#3D5A80; }
+  .brand b { font-size:15px; }
+  .code { font-size:13px; font-weight:700; letter-spacing:0.1em; color:var(--muted); text-transform:uppercase; }
+  h1 { margin:0; font-size:24px; font-weight:700; letter-spacing:-0.01em; }
+  p { margin:0; color:var(--muted); font-size:14.5px; }
+  .links { display:flex; gap:10px; flex-wrap:wrap; margin-top:4px; }
+  .btn { display:inline-block; text-decoration:none; font-weight:700; font-size:14px; border-radius:10px; padding:11px 18px; }
+  .btn.primary { background:var(--accent); color:#fff; }
+  .btn.ghost { border:1.5px solid var(--border); color:var(--ink); }
+  @media (prefers-color-scheme: dark) { .btn.primary { color:#0F141A; } }
+  a.plain { color:var(--accent); font-size:13.5px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand"><span class="sq"></span><b>DocrAI</b></div>
+    <span class="code">404 — ikke funnet</span>
+    <h1>Denne siden finnes ikke.</h1>
+    <p>Lenken kan være skrevet feil, eller siden er flyttet. Delte rapportlenker kan også ha
+    utløpt eller blitt trukket tilbake av takstpersonen.</p>
+    <div class="links">
+      <a class="btn primary" href="/om">Til forsiden</a>
+      <a class="btn ghost" href="/demo">Prøv demoen</a>
+    </div>
+    <a class="plain" href="/faq">Ofte stilte spørsmål</a>
+  </div>
+</body>
+</html>

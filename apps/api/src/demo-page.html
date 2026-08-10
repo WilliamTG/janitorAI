@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="robots" content="noindex, nofollow" />
 <title>DocrAI — Saksunderlag på sekunder</title>
+<meta name="description" content="Skriv inn en adresse og se saksunderlaget DocrAI henter automatisk før hver befaring: kart, matrikkel, bygningstype, terreng og vær — live fra åpne offentlige kilder." />
+<meta property="og:title" content="DocrAI — Saksunderlag på sekunder" />
+<meta property="og:description" content="Skriv inn en adresse og se kart, matrikkel, bygningstype, terreng og vær hentet live fra åpne offentlige kilder." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="/og-bilde.png" />
+<meta property="og:locale" content="nb_NO" />
 <style>
   :root {
     --paper: #FFFFFF; --surface: #F4F3EF; --ink: #16202B; --muted: #5C6B7A;
@@ -181,6 +187,9 @@
     var params = new URLSearchParams(location.search);
     var pre = params.get("adresse");
     if (pre) { $("adr").value = pre; run(); }
+
+    // Cookiefri besøkstelling — kun sti + ev. kampanjekilde, aldri IP.
+    try { navigator.sendBeacon("/api/besok", new Blob([JSON.stringify({ sti: "/demo", kilde: params.get("k") || undefined })], { type: "application/json" })); } catch (e) {}
   })();
 </script>
 </body>

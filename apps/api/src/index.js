@@ -106,6 +106,32 @@ app.get("/om", (req, res) => {
   res.sendFile(path.join(__dirname, "om-page.html"));
 });
 
+// ---------- LANSERINGSSIDER (public — FAQ, personvern, takk, robots, og) ----
+app.get("/faq", (req, res) => {
+  res.sendFile(path.join(__dirname, "faq-page.html"));
+});
+app.get("/personvern", (req, res) => {
+  res.sendFile(path.join(__dirname, "personvern-page.html"));
+});
+app.get("/takk", (req, res) => {
+  res.sendFile(path.join(__dirname, "takk-page.html"));
+});
+app.get("/robots.txt", require("./routes/publikum").robotsHandler);
+app.get("/og-bilde.png", (req, res) => {
+  res.sendFile(path.join(__dirname, "assets/og-bilde.png"));
+});
+
+// Merkevare-404 for HTML-forespørsler som ikke traff noen rute; JSON-klienter
+// får fortsatt JSON. Registrert som funksjon så både SPA-fallback og halen
+// kan bruke den.
+function sendNotFound(req, res) {
+  const acceptsHtml = (req.get("accept") || "").includes("text/html");
+  if (req.method === "GET" && acceptsHtml && !req.path.startsWith("/api/")) {
+    return res.status(404).sendFile(path.join(__dirname, "404-page.html"));
+  }
+  res.status(404).json({ error: "Not found" });
+}
+
 if (fs.existsSync(STATIC_DIR)) {
   app.use(express.static(STATIC_DIR, { extensions: ["html"] }));
   app.use((req, res, next) => {
@@ -123,6 +149,17 @@ if (fs.existsSync(STATIC_DIR)) {
   console.log(`Serving static web app from ${STATIC_DIR}`);
 }
 
+// HTML-forespørsler som ikke traff noen side (og ikke ble tatt av SPA-
+// fallbacken over) skal ha merkevare-404 — ikke 401 fra token-vakten lenger
+// ned. API-stier går videre til sine egne feilsvar.
+app.use((req, res, next) => {
+  const acceptsHtml = (req.get("accept") || "").includes("text/html");
+  if (req.method === "GET" && acceptsHtml && !req.path.startsWith("/api/")) {
+    return sendNotFound(req, res);
+  }
+  next();
+});
+
 // ---------- MEDIA (own auth: header or ?token= query) ----------
 // Mounted before the global guard because media URLs are used directly in
 // <Image>/audio players, which cannot set custom headers.
@@ -133,6 +170,9 @@ app.use("/api/media", mediaRouter);
 // recipient endpoints gate on PIN + view token) ----------
 const shareRouter = require("./routes/share");
 app.use("/api/share", shareRouter);
+
+// ---------- PUBLIKUM (public: pilotskjema + cookiefri besøkstelling) --------
+app.use("/api", require("./routes/publikum"));
 
 // ---------- KARTFLIS-PROXY (public: <img> kan ikke sette headere) ----------
 app.get("/api/flis/:z/:y/:x", require("./routes/underlag").tileHandler);
@@ -454,6 +494,9 @@ app.get("/api/projects/:id/download/:format", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+// ---------- 404 (alt som ikke traff noen rute) ----------
+app.use(sendNotFound);
 
 // ---------- ORPHANED MEDIA CLEANUP ----------
 // Sweep on boot + every few hours: deletes media files that have not been

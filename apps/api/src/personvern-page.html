@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Personvern — DocrAI</title>
+<meta name="description" content="Slik behandler DocrAI personopplysninger: cookiefrie nettsider, lokal lagring i appen, planlagt EU/EØS-prosessering og dine rettigheter." />
+<style>
+  :root { --paper:#FFFFFF; --surface:#F4F3EF; --ink:#16202B; --muted:#5C6B7A; --border:#DDE4EB; --accent:#3D5A80; }
+  @media (prefers-color-scheme: dark) { :root { --paper:#131920; --surface:#0F141A; --ink:#E4EAF1; --muted:#97A6B5; --border:#2A3542; --accent:#94B9DE; } }
+  * { box-sizing:border-box; } body { margin:0; background:var(--surface); color:var(--ink);
+    font-family:'Inter',-apple-system,'Segoe UI',system-ui,sans-serif; font-size:16px; line-height:1.65; }
+  .page { max-width:720px; margin:0 auto; padding:36px 18px 64px; display:flex; flex-direction:column; gap:20px; }
+  .crumb { font-size:13px; } .crumb a { color:var(--accent); text-decoration:none; font-weight:600; }
+  .brand { display:flex; align-items:center; gap:10px; } .brand .sq { width:20px; height:20px; background:#3D5A80; }
+  .brand b { font-size:15px; }
+  h1 { margin:0; font-size:26px; font-weight:700; letter-spacing:-0.01em; }
+  h2 { margin:10px 0 0; font-size:18px; font-weight:700; }
+  p, li { color:var(--muted); font-size:14.5px; margin:0; }
+  ul { margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px; }
+  p b, li b { color:var(--ink); }
+  .card { background:var(--paper); border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:8px; }
+  .datestamp { font-size:12.5px; color:var(--muted); }
+  footer { border-top:1px solid var(--border); padding-top:14px; font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:6px; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="page">
+  <nav class="crumb" aria-label="Brødsmulesti"><a href="/om">DocrAI</a> <span aria-hidden="true">›</span> Personvern</nav>
+  <div class="brand"><span class="sq"></span><b>DocrAI</b></div>
+  <h1>Personvernerklæring</h1>
+  <p class="datestamp">Sist oppdatert: august 2026. DocrAI er i utviklingsfase mot pilot — denne
+  erklæringen beskriver dagens faktiske behandling og oppdateres før pilot med ekte skadesaker.</p>
+
+  <div class="card">
+    <h2 style="margin:0;">Kort versjon</h2>
+    <ul>
+      <li><b>Nettsidene bruker ingen cookies</b> og har ingen tredjeparts sporing — derfor ser du heller ikke noe samtykkebanner.</li>
+      <li><b>Vi lagrer aldri IP-adressen din</b> på de offentlige sidene. Besøkstelling registrerer kun hvilken side som ble åpnet.</li>
+      <li><b>Appdata tilhører takstpersonen.</b> Befaringsmedia lagres lokalt på enheten først og synkroniseres bak personlig tilgangskode.</li>
+      <li><b>Før pilot med ekte skadesaker</b> flyttes all AI-prosessering til EU/EØS-region med databehandleravtale.</li>
+    </ul>
+  </div>
+
+  <h2>Hva vi behandler på nettsidene</h2>
+  <p><b>Besøksstatistikk uten cookies:</b> når du åpner en av de offentlige sidene, registrerer vi
+  kun stien (f.eks. «/om») og eventuelt hvilken kampanjelenke du kom fra. Ingen IP-adresse, ingen
+  enhetsidentifikator, ingen fingeravtrykk — tallene kan ikke knyttes til deg. Dette er et bevisst
+  valg i stedet for Google Analytics.</p>
+  <p><b>Demoen (/demo):</b> adressen du søker på sendes til åpne offentlige kilder (Kartverket/
+  Geonorge og Meteorologisk institutt) for å hente kart- og bygningsdata. Søket lagres ikke
+  sammen med noen identitet, og misbruksbegrensningen som teller antall oppslag holder tellingen
+  i minnet — den skrives aldri til disk.</p>
+  <p><b>Pilotinteresse-skjemaet:</b> sender du inn navn og e-post, lagrer vi det for å kontakte deg
+  om piloten — det er hele formålet. Grunnlaget er ditt samtykke (GDPR art. 6 nr. 1 a), og du kan
+  når som helst be oss slette det med en e-post.</p>
+
+  <h2>Hva appen behandler (for testere i dag)</h2>
+  <p>Video, lyd, foto og notater fra befaringer lagres lokalt på enheten først, og synkroniseres
+  til vår server bak en personlig tilgangskode per bruker. All transport er kryptert (TLS), og
+  hvert bevis forsegles med SHA-256-sjekksum ved fangst. Feillogger fra appen kan inneholde
+  teknisk enhetsinformasjon (modell, OS-versjon) for feilretting — aldri befaringsinnhold.</p>
+  <p>I dagens testfase brukes Googles AI-tjenester til transkripsjon og rapportutkast. Testere
+  instrueres derfor om å ikke bruke reelle personopplysninger i testsaker. <b>Før pilot med ekte
+  skadesaker</b> flyttes prosesseringen til EU/EØS-region med signert databehandleravtale, og
+  denne erklæringen oppdateres med fullstendig behandlingsoversikt og DPIA.</p>
+
+  <h2>Dine rettigheter</h2>
+  <p>Du har rett til innsyn, retting, sletting og dataportabilitet, og til å trekke samtykke
+  tilbake. Send en e-post til <a href="mailto:fdalen.97@gmail.com">fdalen.97@gmail.com</a> — vi
+  svarer innen én virkedag. Du kan også klage til
+  <a href="https://www.datatilsynet.no" rel="noopener">Datatilsynet</a>.</p>
+
+  <h2>Lagringstid</h2>
+  <ul>
+    <li>Pilotinteresse: slettes når piloten er fulltegnet eller på forespørsel.</li>
+    <li>Besøksstatistikk: aggregerte tall uten persontilknytning, ryddes løpende.</li>
+    <li>Befaringsdata: styres av takstpersonen — sletting i appen sletter også på serveren.</li>
+  </ul>
+
+  <footer>
+    <span>Spørsmål om personvern? <a href="mailto:fdalen.97@gmail.com">fdalen.97@gmail.com</a> · svar innen én virkedag.</span>
+    <span><a href="/om">Om DocrAI</a> · <a href="/faq">Ofte stilte spørsmål</a> · <a href="/demo">Prøv demoen</a></span>
+  </footer>
+</div>
+<script>
+  try { navigator.sendBeacon('/api/besok', new Blob([JSON.stringify({ sti: '/personvern' })], { type: 'application/json' })); } catch (e) {}
+</script>
+</body>
+</html>

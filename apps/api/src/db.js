@@ -112,6 +112,26 @@ CREATE TABLE IF NOT EXISTS shares (
 
 CREATE INDEX IF NOT EXISTS shares_project_id_idx ON shares (project_id);
 
+-- Pilotinteresse fra salgssiden (/om): navn + e-post, samtykkebasert.
+CREATE TABLE IF NOT EXISTS pilot_interesse (
+  id          SERIAL      PRIMARY KEY,
+  navn        TEXT        NOT NULL,
+  epost       TEXT        NOT NULL,
+  melding     TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Cookiefri besøkslogg for de offentlige sidene: kun sti + valgfri kilde,
+-- aldri IP eller fingeravtrykk. Bevisst valgt i stedet for Google Analytics
+-- (ingen samtykkebanner, ingen tredjepart).
+CREATE TABLE IF NOT EXISTS sidevisninger (
+  id          SERIAL      PRIMARY KEY,
+  sti         TEXT        NOT NULL,
+  kilde       TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sidevisninger_created_idx ON sidevisninger (created_at DESC);
+
 -- Incremental migrations for pre-existing deployments
 ALTER TABLE projects        ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
 ALTER TABLE deleted_projects ADD COLUMN IF NOT EXISTS tester_token   VARCHAR;

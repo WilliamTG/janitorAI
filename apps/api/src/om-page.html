@@ -4,6 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>DocrAI — Fra befaring til forsikringsklar skaderapport</title>
+<meta name="description" content="DocrAI gjør befaringsvideo og tale om til forsikringsklar skaderapport med årsak, akutt/gradvis-vurdering og Byggforsk-henvisninger. Du kontrollerer og godkjenner — AI-en skriver utkastet." />
+<meta property="og:title" content="DocrAI — Fra befaring til forsikringsklar skaderapport" />
+<meta property="og:description" content="Snakk deg gjennom befaringen — AI-en skriver utkastet med årsak og Byggforsk-henvisninger. Du kontrollerer, korrigerer og godkjenner." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="/og-bilde.png" />
+<meta property="og:locale" content="nb_NO" />
+<meta name="twitter:card" content="summary_large_image" />
 <style>
   :root {
     --paper: #FFFFFF; --surface: #F4F3EF; --ink: #16202B; --muted: #5C6B7A;
@@ -86,6 +93,33 @@
 
   footer { border-top: 1px solid var(--border); padding-top: 16px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
   a { color: var(--accent); }
+
+  .pilot-form { background: var(--paper); border: 1.5px solid var(--accent); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+  .pilot-form label { font-size: 13px; font-weight: 600; display: flex; flex-direction: column; gap: 4px; }
+  .pilot-form input, .pilot-form textarea {
+    font: inherit; font-size: 15px; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; width: 100%;
+  }
+  .pilot-form textarea { resize: vertical; min-height: 64px; }
+  .pilot-form button { font: inherit; font-weight: 700; font-size: 15px; background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 13px 22px; min-height: 48px; cursor: pointer; align-self: flex-start; }
+  .pilot-form .svartid { font-size: 12.5px; color: var(--muted); }
+  .hp { position: absolute; left: -9999px; top: -9999px; height: 0; overflow: hidden; }
+
+  .sticky-cta { display: none; }
+  @media (max-width: 640px) {
+    .page { padding-bottom: 96px; }
+    .sticky-cta {
+      display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+      background: var(--paper); border-top: 1px solid var(--border);
+      padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); gap: 10px;
+    }
+    .sticky-cta a { flex: 1; text-align: center; text-decoration: none; font-weight: 700; font-size: 15px; border-radius: 10px; padding: 13px 0; }
+    .sticky-cta .p { background: var(--accent); color: #fff; }
+    .sticky-cta .g { border: 1.5px solid var(--border); color: var(--ink); }
+  }
+  @media (prefers-color-scheme: dark) {
+    .btn.primary, .pilot-form button, .sticky-cta .p { color: #0F141A; }
+  }
 </style>
 </head>
 <body>
@@ -104,7 +138,7 @@
     </p>
     <div class="cta-row">
       <a class="btn primary" href="/demo">Se din egen adresse på 2 sekunder</a>
-      <a class="btn ghost" href="mailto:fdalen.97@gmail.com?subject=DocrAI%20pilot">Bli pilotdeltaker</a>
+      <a class="btn ghost" href="#pilot">Bli pilotdeltaker</a>
     </div>
   </div>
 
@@ -188,11 +222,53 @@
     </div>
   </section>
 
+  <section id="pilot">
+    <h2>Bli pilotdeltaker</h2>
+    <form class="pilot-form" method="post" action="/api/pilot-interesse">
+      <label>Navn
+        <input name="navn" required autocomplete="name" maxlength="200" />
+      </label>
+      <label>E-post
+        <input name="epost" type="email" required autocomplete="email" maxlength="200" />
+      </label>
+      <label>Melding <span style="font-weight:400;color:var(--muted);">(valgfritt — f.eks. foretak og antall takstpersoner)</span>
+        <textarea name="melding" maxlength="2000"></textarea>
+      </label>
+      <div class="hp" aria-hidden="true">
+        <label>Firma<input name="firmafelt" tabindex="-1" autocomplete="off" /></label>
+      </div>
+      <button type="submit">Meld interesse for piloten</button>
+      <span class="svartid"><b>Vi svarer innen én virkedag.</b> Navn og e-post brukes kun til å kontakte deg om piloten — se <a href="/personvern">personvern</a>.</span>
+    </form>
+  </section>
+
   <footer>
-    <span>Kontakt: <a href="mailto:fdalen.97@gmail.com">fdalen.97@gmail.com</a></span>
+    <span>Kontakt: <a href="mailto:fdalen.97@gmail.com">fdalen.97@gmail.com</a> · vi svarer innen én virkedag.</span>
+    <span><a href="/demo">Demo</a> · <a href="/faq">Ofte stilte spørsmål</a> · <a href="/personvern">Personvern</a> · <a href="/kundereisen">Kundereisen</a></span>
     <span>DocrAI er under utvikling mot pilot. Kilder i demoen: Kartverket, åpen matrikkel (Geonorge) og Meteorologisk institutt.</span>
   </footer>
 
 </div>
+
+<nav class="sticky-cta" aria-label="Hurtigvalg">
+  <a class="p" href="/demo">Prøv demoen</a>
+  <a class="g" href="#pilot">Bli pilot</a>
+</nav>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "DocrAI",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "iOS, Android, Web",
+  "description": "Gjør befaringsvideo og tale om til forsikringsklar skaderapport med årsak, akutt/gradvis-vurdering og Byggforsk-henvisninger. Takstpersonen kontrollerer og godkjenner.",
+  "inLanguage": "nb",
+  "offers": { "@type": "Offer", "price": "990", "priceCurrency": "NOK", "description": "Veiledende månedspris per takstperson i pilotfasen, uten bindingstid." }
+}
+</script>
+<script>
+  try { navigator.sendBeacon('/api/besok', new Blob([JSON.stringify({ sti: '/om', kilde: new URLSearchParams(location.search).get('k') || undefined })], { type: 'application/json' })); } catch (e) {}
+</script>
 </body>
 </html>

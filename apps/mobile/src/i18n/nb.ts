@@ -25,6 +25,14 @@ export const nb = {
     guide: 'Guide',
   },
 
+  notFound: {
+    headerTitle: 'Ikke funnet',
+    code: '404 — ikke funnet',
+    title: 'Denne siden finnes ikke.',
+    hint: 'Lenken kan være skrevet feil, eller siden er flyttet.',
+    goHome: 'Til prosjektene',
+  },
+
   sync: {
     idle: 'Skysynk',
     syncing: 'Synkroniserer …',
