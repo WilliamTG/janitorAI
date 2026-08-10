@@ -14,9 +14,22 @@ function sanitizeError(err) {
 // Enkel per-IP-teller i minnet — nok til å stoppe skjema-/beacon-spam uten
 // å lagre IP-er varig (nullstilles hvert kvarter og ved omstart).
 const bucket = new Map();
+let lastPrune = 0;
+
+// Rydd bort utløpte bøtter så kartet ikke vokser ubegrenset over tid (S5).
+// Kjøres høyst hvert minutt, og bare når nye forespørsler kommer inn.
+function pruneBucket(now) {
+  if (now - lastPrune < 60 * 1000) return;
+  lastPrune = now;
+  for (const [key, entry] of bucket) {
+    if (now > entry.reset) bucket.delete(key);
+  }
+}
+
 function limited(req, max) {
   const key = req.ip || "ukjent";
   const now = Date.now();
+  pruneBucket(now);
   const entry = bucket.get(key) || { count: 0, reset: now + 15 * 60 * 1000 };
   if (now > entry.reset) {
     entry.count = 0;
@@ -75,7 +88,7 @@ router.post("/pilot-interesse", requireDb, express.urlencoded({ extended: false 
 
 // ── Cookiefri besøkstelling (POST /api/besok) ────────────────────────────────
 // Kun forhåndsgodkjente stier telles; ingen IP, ingen bruker-ID.
-const TELLBARE_STIER = new Set(["/om", "/demo", "/faq", "/personvern", "/takk"]);
+const TELLBARE_STIER = new Set(["/om", "/demo", "/faq", "/personvern", "/vilkar", "/takk"]);
 
 router.post("/besok", requireDb, express.json({ limit: "1kb" }), async (req, res) => {
   if (limited(req, 120)) return res.status(204).end();

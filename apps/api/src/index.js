@@ -9,12 +9,25 @@ const requireTesterToken = require("./middleware/requireTesterToken");
 const { generalLimiter, heavyLimiter } = require("./middleware/rateLimiters");
 const requestLogger = require("./middleware/requestLogger");
 
+const { getPool, isDbEnabled } = require("./db");
+
 const app = express();
 app.set("trust proxy", 1);
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(express.json());
+// CORS (S12): standard er åpen (auth er header-token, ikke cookies, så det er
+// ingen credentialed CSRF). Sett CORS_ORIGINS=komma,separert,liste i produksjon
+// for å låse API-et til webappens og admin-dashbordets origins.
+const CORS_ORIGINS = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+app.use(cors(CORS_ORIGINS.length ? { origin: CORS_ORIGINS } : {}));
+
+// Eksplisitt body-tak (S15): prosjekt-bloben lagres som JSONB; 300kb holder for
+// store befaringer med mange notater, og hindrer at en klient dytter inn
+// vilkårlig store payloads.
+app.use(express.json({ limit: "300kb" }));
 
 // ---------- REQUEST LOGGER ----------
 // Minimal request logging (method, path, status, latency only)
@@ -116,9 +129,23 @@ app.get("/personvern", (req, res) => {
 app.get("/takk", (req, res) => {
   res.sendFile(path.join(__dirname, "takk-page.html"));
 });
+app.get("/vilkar", (req, res) => {
+  res.sendFile(path.join(__dirname, "vilkar-page.html"));
+});
 app.get("/robots.txt", require("./routes/publikum").robotsHandler);
 app.get("/og-bilde.png", (req, res) => {
   res.sendFile(path.join(__dirname, "assets/og-bilde.png"));
+});
+// Favicon (W9): egen merkevare-ikon i tre størrelser. /favicon.ico peker på
+// PNG-en — nettlesere godtar det, og vi slipper 401 fra token-vakten.
+app.get(["/favicon.ico", "/favicon.png"], (req, res) => {
+  res.sendFile(path.join(__dirname, "assets/favicon.png"));
+});
+app.get("/apple-touch-icon.png", (req, res) => {
+  res.sendFile(path.join(__dirname, "assets/apple-touch-icon.png"));
+});
+app.get("/apple-touch-icon-precomposed.png", (req, res) => {
+  res.sendFile(path.join(__dirname, "assets/apple-touch-icon.png"));
 });
 
 // Merkevare-404 for HTML-forespørsler som ikke traff noen rute; JSON-klienter
@@ -241,9 +268,9 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
     const base64 = buffer.toString("base64");
     const mimeType = req.file.mimetype || "audio/mp4";
 
-    const response = await fetch(`${GEMINI_BASE_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(GEMINI_BASE_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
       body: JSON.stringify({
         contents: [{
           parts: [
@@ -295,9 +322,9 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
     const base64 = buffer.toString("base64");
     const mimeType = req.file.mimetype || "image/jpeg";
 
-    const response = await fetch(`${GEMINI_BASE_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(GEMINI_BASE_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
       body: JSON.stringify({
         contents: [{
           parts: [
@@ -350,6 +377,19 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
         status: "error",
         message: "No video found. Please add a video note to this project before generating a report.",
       });
+    }
+
+    // S4/S3: verifiser at videoen tilhører denne testeren. (Media-GET er også
+    // skopet på token, så dette feiler dessuten tidlig med en tydelig melding.)
+    if (isDbEnabled()) {
+      const pool = getPool();
+      const ownsVideo = await pool.query(
+        "SELECT 1 FROM media WHERE id = $1 AND tester_token = $2",
+        [String(video_filename), token]
+      );
+      if (ownsVideo.rows.length === 0) {
+        return res.status(404).json({ status: "error", message: "Video not found for this tester." });
+      }
     }
 
     // Build a URL the AI engine can use to download the video directly from
@@ -440,23 +480,39 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
 //
 // Proxies an export request to the AI engine so the mobile app can receive
 // a PDF or Word file directly without needing a Google account.
-// The :id segment is kept for semantic clarity and future ownership checks;
-// the doc_id is extracted from the ?doc_url query parameter.
+//
+// Eierskap (S4): AI-motorens /api/export eksporterer via en servicekonto som
+// kan nå et hvilket som helst dokument. Vi stoler derfor ALDRI på ?doc_url fra
+// klienten — dokument-ID-en avledes fra prosjektets lagrede reportUrl, slått opp
+// skopet på denne testerens token. Da kan ingen tester eksportere en annens
+// rapport ved å gjette/lekke en doc-URL.
 app.get("/api/projects/:id/download/:format", async (req, res) => {
-  const { format } = req.params;
+  const { id, format } = req.params;
   if (!["pdf", "docx"].includes(format)) {
     return res.status(400).json({ error: "format must be 'pdf' or 'docx'" });
   }
 
-  const docUrl = req.query.doc_url;
-  if (!docUrl) {
-    return res.status(400).json({ error: "doc_url query parameter is required" });
+  if (!isDbEnabled()) {
+    return res.status(503).json({ error: "Persistence not configured" });
   }
 
-  // Extract the document ID from the Google Docs URL
-  const match = String(docUrl).match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
+  const pool = getPool();
+  const owned = await pool.query(
+    "SELECT data FROM projects WHERE id = $1 AND tester_token = $2",
+    [String(id), req.testerToken]
+  );
+  if (owned.rows.length === 0) {
+    return res.status(404).json({ error: "Project not found" });
+  }
+
+  const reportUrl = (owned.rows[0].data || {}).reportUrl;
+  const match = String(reportUrl || "").match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
   if (!match) {
-    return res.status(400).json({ error: "Invalid Google Doc URL" });
+    return res.status(409).json({
+      error: "Report not generated yet",
+      message:
+        "Generer og synkroniser rapporten før nedlasting — ingen lagret rapportlenke for dette prosjektet.",
+    });
   }
   const docId = match[1];
 
@@ -497,6 +553,27 @@ app.get("/api/projects/:id/download/:format", async (req, res) => {
 
 // ---------- 404 (alt som ikke traff noen rute) ----------
 app.use(sendNotFound);
+
+// ---------- GLOBAL FEILHÅNDTERER (S17) ----------
+// Uten denne faller JSON-parsefeil (uautentisert nåbar) og multer-feil til
+// Express' innebygde handler, som legger err.stack (med serverfilstier) i
+// responskroppen når NODE_ENV ikke er "production". Vi returnerer alltid en
+// generisk melding og logger detaljene serverside.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  console.error("Unhandled error:", req.method, req.path, sanitizeError(err));
+  if (err && err.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "Invalid JSON" });
+  }
+  if (err && err.type === "entity.too.large") {
+    return res.status(413).json({ error: "Payload too large" });
+  }
+  if (err && err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({ error: "File too large", code: "FILE_TOO_LARGE" });
+  }
+  res.status(err && err.status ? err.status : 500).json({ error: "Server error" });
+});
 
 // ---------- ORPHANED MEDIA CLEANUP ----------
 // Sweep on boot + every few hours: deletes media files that have not been

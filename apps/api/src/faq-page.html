@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Ofte stilte spørsmål — DocrAI</title>
+<link rel="icon" type="image/png" href="/favicon.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<title>Ofte stilte spørsmål – DocrAI</title>
 <meta name="description" content="Svar på de vanligste spørsmålene om DocrAI: ansvar og godkjenning, personvern og EØS, pris, offline-bruk og deling av rapporter." />
 <style>
   :root { --paper:#FFFFFF; --surface:#F4F3EF; --ink:#16202B; --muted:#5C6B7A; --border:#DDE4EB; --accent:#3D5A80; }
@@ -12,7 +14,7 @@
     font-family:'Inter',-apple-system,'Segoe UI',system-ui,sans-serif; font-size:16px; line-height:1.6; }
   .page { max-width:720px; margin:0 auto; padding:36px 18px 64px; display:flex; flex-direction:column; gap:22px; }
   .crumb { font-size:13px; } .crumb a { color:var(--accent); text-decoration:none; font-weight:600; }
-  .brand { display:flex; align-items:center; gap:10px; } .brand .sq { width:20px; height:20px; background:#3D5A80; }
+  .brand { display:flex; align-items:center; gap:10px; } .brand .sq { width:20px; height:20px; background:#3D5A80;  display:flex; align-items:center; justify-content:center; color:#F4F3EF; font-weight:700; font-size:13px; line-height:1; }
   .brand b { font-size:15px; }
   h1 { margin:0; font-size:26px; font-weight:700; letter-spacing:-0.01em; }
   details { background:var(--paper); border:1px solid var(--border); border-radius:12px; padding:0; }
@@ -25,14 +27,14 @@
 <body>
 <div class="page">
   <nav class="crumb" aria-label="Brødsmulesti"><a href="/om">DocrAI</a> <span aria-hidden="true">›</span> Ofte stilte spørsmål</nav>
-  <div class="brand"><span class="sq"></span><b>DocrAI</b></div>
+  <div class="brand"><span class="sq">D</span><b>DocrAI</b></div>
   <h1>Ofte stilte spørsmål</h1>
 
   <details open>
-    <summary>Hvem står ansvarlig for rapporten — AI-en eller takstpersonen?</summary>
+    <summary>Hvem står ansvarlig for rapporten – AI-en eller takstpersonen?</summary>
     <p>Alltid takstpersonen. AI-en lager et utkast med foreslått årsak og klassifisering, men
-    rapporten er merket «AI-utkast — ikke godkjent» til du aktivt godkjenner den med navn og
-    tidspunkt. Delingslenker kan ikke lages før stempelet er satt — det håndheves av serveren,
+    rapporten er merket «AI-utkast – ikke godkjent» til du aktivt godkjenner den med navn og
+    tidspunkt. Delingslenker kan ikke lages før stempelet er satt – det håndheves av serveren,
     ikke bare av appen. Endrer du noe etterpå, faller godkjenningen og må settes på nytt.</p>
   </details>
 
@@ -40,19 +42,19 @@
     <summary>Hvor lagres dataene, og hva med personvern?</summary>
     <p>Prosjektdata lagres kryptert i transit og med tilgangskode per bruker. Befaringsmedia kan
     inneholde personopplysninger, og før pilot med ekte skadesaker flyttes all AI-prosessering til
-    EU/EØS-region med databehandleravtale. Demosidene bruker ingen cookies og lagrer aldri IP —
+    EU/EØS-region med databehandleravtale. Demosidene bruker ingen cookies og lagrer aldri IP –
     se <a href="/personvern">personvernerklæringen</a>.</p>
   </details>
 
   <details>
     <summary>Hva koster DocrAI?</summary>
     <p>Pilotdeltakere bruker DocrAI gratis i 3 måneder mot ukentlig tilbakemelding, og får 50 %
-    rabatt første året etterpå. Veiledende pris er 990 kr/mnd per takstperson, uten bindingstid —
+    rabatt første året etterpå. Veiledende pris er 990 kr/mnd per takstperson, uten bindingstid –
     endelig prising settes sammen med pilotene. Én spart rapporttime dekker måneden.</p>
   </details>
 
   <details>
-    <summary>Fungerer appen uten dekning — i kjelleren?</summary>
+    <summary>Fungerer appen uten dekning – i kjelleren?</summary>
     <p>Ja. Alt du fanger (video, lyd, foto, notater) lagres lokalt på enheten først og
     synkroniseres automatisk når dekningen er tilbake. Du mister aldri en befaring på grunn av
     dårlig nett.</p>
@@ -62,13 +64,13 @@
     <summary>Hvordan mottar forsikringsselskapet rapporten?</summary>
     <p>Som en PIN-beskyttet lenke som åpnes uten konto. Mottakeren ser den godkjente rapporten
     med årsak, klassifisering og bevis der hvert element bærer geo, tidspunkt og
-    SHA-256-sjekksum — og kan verifisere at ingenting er endret siden fangst. Lenken har
+    SHA-256-sjekksum – og kan verifisere at ingenting er endret siden fangst. Lenken har
     utløpsdato og kan trekkes tilbake.</p>
   </details>
 
   <footer>
     <span><b>Svartid:</b> vi svarer på henvendelser innen én virkedag.</span>
-    <span>Flere spørsmål? <a href="mailto:fdalen.97@gmail.com">fdalen.97@gmail.com</a> · <a href="/demo">Prøv demoen</a> · <a href="/om">Om DocrAI</a></span>
+    <span>Flere spørsmål? <a href="mailto:fdalen.97@gmail.com">fdalen.97@gmail.com</a> · <a href="/demo">Prøv demoen</a> · <a href="/om">Om DocrAI</a> · <a href="/personvern">Personvern</a> · <a href="/vilkar">Vilkår</a></span>
   </footer>
 </div>
 
@@ -77,14 +79,14 @@
   "@context": "https://schema.org",
   "@type": "FAQPage",
   "mainEntity": [
-    { "@type": "Question", "name": "Hvem står ansvarlig for rapporten — AI-en eller takstpersonen?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Alltid takstpersonen. AI-en lager et utkast, men rapporten må aktivt godkjennes med navn og tidspunkt før den kan deles — håndhevet av serveren." } },
+    { "@type": "Question", "name": "Hvem står ansvarlig for rapporten – AI-en eller takstpersonen?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Alltid takstpersonen. AI-en lager et utkast, men rapporten må aktivt godkjennes med navn og tidspunkt før den kan deles – håndhevet av serveren." } },
     { "@type": "Question", "name": "Hvor lagres dataene, og hva med personvern?",
       "acceptedAnswer": { "@type": "Answer", "text": "Prosjektdata lagres med tilgangskode per bruker; før pilot flyttes AI-prosessering til EU/EØS med databehandleravtale. Demosidene bruker ingen cookies og lagrer aldri IP." } },
     { "@type": "Question", "name": "Hva koster DocrAI?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Pilot: gratis i 3 måneder. Veiledende 990 kr/mnd per takstperson uten binding — endelig prising settes med pilotene." } },
+      "acceptedAnswer": { "@type": "Answer", "text": "Pilot: gratis i 3 måneder. Veiledende 990 kr/mnd per takstperson uten binding – endelig prising settes med pilotene." } },
     { "@type": "Question", "name": "Fungerer appen uten dekning?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Ja — alt lagres lokalt først og synkroniseres når dekningen er tilbake." } },
+      "acceptedAnswer": { "@type": "Answer", "text": "Ja – alt lagres lokalt først og synkroniseres når dekningen er tilbake." } },
     { "@type": "Question", "name": "Hvordan mottar forsikringsselskapet rapporten?",
       "acceptedAnswer": { "@type": "Answer", "text": "Som PIN-beskyttet lenke uten konto, med utløpsdato, der bevisene kan verifiseres mot SHA-256-sjekksummer." } }
   ]

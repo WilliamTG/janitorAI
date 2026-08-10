@@ -21,6 +21,7 @@ import apiFetch, {
 } from '@/src/lib/apiFetch';
 import { formatDate, nb } from '@/src/i18n/nb';
 import { getApiBaseUrl } from '@/src/config/api';
+import { newId } from '@/src/lib/ids';
 import { CaseFile, NO_DATE_SET, Project, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
 import { formatMinutes, minutesToApproved } from '@/src/features/projects/metrics';
 
@@ -377,7 +378,7 @@ export default function Index() {
     const profile = await loadProfile();
 
     const newProject: Project = {
-      id: Date.now().toString(),
+      id: newId(),
       name,
       inspectionDate: date || NO_DATE_SET,
       inspector: inspector || UNKNOWN_INSPECTOR,

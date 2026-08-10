@@ -18,6 +18,7 @@ const fs = require("fs");
 const path = require("path");
 const { getPool, requireDb } = require("../db");
 const requireTesterToken = require("../middleware/requireTesterToken");
+const { applySafeMediaHeaders } = require("../mediaTypes");
 const {
   PIN_LENGTH,
   generateShareId,
@@ -283,9 +284,11 @@ router.get("/:id/report", requireViewToken, async (req, res) => {
       return res.status(410).json({ error: "Prosjektet finnes ikke lenger" });
     }
 
+    // S3: skoper også på eierens tester_token, så eventuelle rader plantet under
+    // prosjektet av en annen tester aldri når mottakeren.
     const mediaResult = await pool.query(
-      "SELECT id, sha256, mime_type, created_at FROM media WHERE project_id = $1",
-      [req.share.project_id]
+      "SELECT id, sha256, mime_type, created_at FROM media WHERE project_id = $1 AND tester_token = $2",
+      [req.share.project_id, req.share.tester_token]
     );
     const mediaById = new Map(mediaResult.rows.map((row) => [String(row.id), row]));
 
@@ -304,8 +307,8 @@ router.get("/:id/media/:mediaId", requireViewToken, async (req, res) => {
   try {
     const pool = getPool();
     const result = await pool.query(
-      "SELECT file_path, mime_type FROM media WHERE id = $1 AND project_id = $2",
-      [String(req.params.mediaId), req.share.project_id]
+      "SELECT file_path, mime_type FROM media WHERE id = $1 AND project_id = $2 AND tester_token = $3",
+      [String(req.params.mediaId), req.share.project_id, req.share.tester_token]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Not found" });
@@ -316,7 +319,8 @@ router.get("/:id/media/:mediaId", requireViewToken, async (req, res) => {
       return res.status(404).json({ error: "File missing on server" });
     }
 
-    if (mimeType) res.type(mimeType);
+    // S7: avledet, whitelistet MIME + nosniff også på mottaker-strømmen.
+    applySafeMediaHeaders(res, mimeType);
     res.set("Cache-Control", "private, max-age=3600");
     res.sendFile(path.resolve(filePath));
   } catch (err) {

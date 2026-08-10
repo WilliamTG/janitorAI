@@ -17,6 +17,7 @@ import apiFetch, {
 import { Image as ExpoImage } from 'expo-image';
 
 import { getCurrentGeo } from '@/src/lib/geo';
+import { newId } from '@/src/lib/ids';
 import { loadProfile } from '@/src/storage/profileStorage';
 import { formatMinutes, minutesToApproved } from '@/src/features/projects/metrics';
 import { tileForCoordinate } from '@/src/lib/kartverket';
@@ -436,7 +437,7 @@ export default function ProjectDetailScreen() {
       toast.show({ message: nb.rooms.duplicate, variant: 'info' });
       return;
     }
-    const room = { id: Date.now().toString(), name: trimmed };
+    const room = { id: newId(), name: trimmed };
     await updateProjectLocally({ ...project, rooms: [...(project.rooms || []), room] });
     setActiveRoomId(room.id);
     setAddingRoom(false);
@@ -449,7 +450,7 @@ export default function ProjectDetailScreen() {
     if (!trimmed || !project) return;
 
     const newNote: Note = {
-      id: Date.now().toString(),
+      id: newId(),
       text: trimmed,
       createdAt: new Date().toISOString(),
       ...(activeRoomId ? { roomId: activeRoomId } : {}),
@@ -528,7 +529,7 @@ export default function ProjectDetailScreen() {
       const textForNote = trimmed || 'Lydnotat (ingen tekst ennå – transkriberes senere)';
 
       const newNote: Note = {
-        id: Date.now().toString(),
+        id: newId(),
         text: textForNote,
         createdAt: new Date().toISOString(),
         audioUri: durableUri,
@@ -944,12 +945,12 @@ export default function ProjectDetailScreen() {
 
       const geo = await geoPromise;
       const newNote: Note = {
-        id: Date.now().toString(),
+        id: newId(),
         text: textForNote,
         createdAt: new Date().toISOString(),
         ...(activeRoomId ? { roomId: activeRoomId } : {}),
         photos: [{
-          id: Date.now().toString(),
+          id: newId(),
           uri,
           caption: '',
           aiGenerated: false,
@@ -1055,7 +1056,7 @@ export default function ProjectDetailScreen() {
 
         // Generate the note ID before persisting so we can pass it to
         // persistMediaLocally — on web it uses the ID as the IndexedDB key.
-        const noteId = Date.now().toString();
+        const noteId = newId();
         const uri = await persistMediaLocally(asset.uri, noteId);
         const trimmed = noteText.trim();
         const textForNote = trimmed || 'Videonotat (ingen tekst ennå)';

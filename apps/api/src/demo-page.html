@@ -3,10 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="/favicon.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <meta name="robots" content="noindex, nofollow" />
-<title>DocrAI — Saksunderlag på sekunder</title>
-<meta name="description" content="Skriv inn en adresse og se saksunderlaget DocrAI henter automatisk før hver befaring: kart, matrikkel, bygningstype, terreng og vær — live fra åpne offentlige kilder." />
-<meta property="og:title" content="DocrAI — Saksunderlag på sekunder" />
+<title>DocrAI – Saksunderlag på sekunder</title>
+<meta name="description" content="Skriv inn en adresse og se saksunderlaget DocrAI henter automatisk før hver befaring: kart, matrikkel, bygningstype, terreng og vær – live fra åpne offentlige kilder." />
+<meta property="og:title" content="DocrAI – Saksunderlag på sekunder" />
 <meta property="og:description" content="Skriv inn en adresse og se kart, matrikkel, bygningstype, terreng og vær hentet live fra åpne offentlige kilder." />
 <meta property="og:type" content="website" />
 <meta property="og:image" content="/og-bilde.png" />
@@ -36,7 +38,7 @@
   }
   .page { max-width: 560px; margin: 0 auto; padding: 36px 16px 56px; display: flex; flex-direction: column; gap: 18px; }
   .brand { display: flex; align-items: center; gap: 10px; }
-  .brand .sq { width: 20px; height: 20px; background: #3D5A80; flex: none; }
+  .brand .sq { width: 20px; height: 20px; background: #3D5A80; flex: none;  display:flex; align-items:center; justify-content:center; color:#F4F3EF; font-weight:700; font-size:13px; line-height:1; }
   .brand b { font-size: 15px; letter-spacing: 0.01em; }
   h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
   .lede { margin: 0; color: var(--muted); font-size: 14.5px; }
@@ -78,10 +80,10 @@
 </head>
 <body>
 <div class="page">
-  <div class="brand"><span class="sq"></span><b>DocrAI</b></div>
-  <h1>Saksunderlaget — før bilen starter</h1>
+  <div class="brand"><span class="sq">D</span><b>DocrAI</b></div>
+  <h1>Saksunderlaget – før bilen starter</h1>
   <p class="lede">Skriv inn en adresse. Kart, matrikkel, bygningsdata, terreng og vær hentes
-    live fra åpne offentlige kilder — slik det ligger klart i DocrAI før hver befaring.</p>
+    live fra åpne offentlige kilder – slik det ligger klart i DocrAI før hver befaring.</p>
 
   <div class="searchrow">
     <input id="adr" type="text" placeholder="F.eks. Solbergliveien 8, Oslo" autocomplete="street-address" />
@@ -99,7 +101,7 @@
   <div id="cta" class="cta hidden">
     <b>Dette tok <span id="ctaSec"></span> sekunder.</b>
     <p>I DocrAI er dette bare starten: video og lyd fra befaringen blir et AI-utkast til
-      forsikringsrapport — årsak, akutt/gradvis-vurdering og Byggforsk-henvisninger — som
+      forsikringsrapport – årsak, akutt/gradvis-vurdering og Byggforsk-henvisninger – som
       takstpersonen kontrollerer og godkjenner. Rapporten deles PIN-beskyttet, med
       hash-forseglet bevis.</p>
     <p><b>Nysgjerrig?</b> Ta kontakt for pilot: <a href="mailto:fdalen.97@gmail.com">fdalen.97@gmail.com</a></p>
@@ -107,7 +109,9 @@
 
   <footer>Kilder: Kartverket (adresse, kart, terreng), åpen matrikkel (Geonorge) og
     Meteorologisk institutt. Ingenting lagres om søkene dine.
-    <a href="/om" style="color:var(--accent);">Les mer om DocrAI →</a></footer>
+    <a href="/om" style="color:var(--accent);">Les mer om DocrAI →</a><br>
+    <a href="/personvern" style="color:var(--accent);">Personvern</a> ·
+    <a href="/vilkar" style="color:var(--accent);">Vilkår</a></footer>
 </div>
 
 <script>
@@ -167,13 +171,13 @@
             (v.beskrivelse ? " · " + v.beskrivelse : "") +
             (v.nedborNeste24tMm ? " · " + String(v.nedborNeste24tMm).replace(".", ",") + " mm nedbør" : ""));
 
-          $("rStat").textContent = "Hentet live fra fem åpne kilder — uten én avtale.";
+          $("rStat").textContent = "Hentet live fra fem åpne kilder – uten én avtale.";
           $("result").classList.remove("hidden");
           $("ctaSec").textContent = String(Math.max(1, Math.round((Date.now() - t0) / 1000)));
           $("cta").classList.remove("hidden");
         })
         .catch(function (err) {
-          $("error").textContent = err && err.message ? err.message : "Noe gikk galt — prøv igjen.";
+          $("error").textContent = err && err.message ? err.message : "Noe gikk galt – prøv igjen.";
           $("error").classList.remove("hidden");
         })
         .then(function () { busy = false; $("go").textContent = "Hent"; });
@@ -182,13 +186,13 @@
     $("go").addEventListener("click", run);
     $("adr").addEventListener("keydown", function (e) { if (e.key === "Enter") run(); });
 
-    // Kampanjelenken: /demo?adresse=... fyller inn og henter automatisk —
+    // Kampanjelenken: /demo?adresse=... fyller inn og henter automatisk –
     // mottakeren ser sitt eget kontor uten å taste noe.
     var params = new URLSearchParams(location.search);
     var pre = params.get("adresse");
     if (pre) { $("adr").value = pre; run(); }
 
-    // Cookiefri besøkstelling — kun sti + ev. kampanjekilde, aldri IP.
+    // Cookiefri besøkstelling – kun sti + ev. kampanjekilde, aldri IP.
     try { navigator.sendBeacon("/api/besok", new Blob([JSON.stringify({ sti: "/demo", kilde: params.get("k") || undefined })], { type: "application/json" })); } catch (e) {}
   })();
 </script>
