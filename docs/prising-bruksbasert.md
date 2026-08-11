@@ -12,31 +12,53 @@ Forutsetning avklart: **kundene er bedrifter** (takstfolk/proffbrukere), ikke
 forbrukere. Det forenkler jussen betydelig og flytter kravene til leverandør-
 compliance (DPA/underleverandørliste).
 
-## Anbefalt pris (utgangspunkt — bekreftes mot ekte COGS)
+## Anbefalt modell og pris (utgangspunkt — bekreftes mot ekte COGS)
 
-**TL;DR: 149 kr per rapport (B2B, eks. mva), forhåndsbetalt i kredittpakker,
-med volumrabatt og gratis startkreditter. Behold 990 kr/mnd flat som alternativ
-for storbrukere.**
+**Kjerneinnsikt: det er ikke prisen folk misliker, det er taksameteret.**
+«149 kr per rapport» tvinger en kjøpsbeslutning hver gang verktøyet brukes i
+felt — det demper bruk. Løsningen er mobil-taksonomien: **selg «rapporter», vis
+alltid «X rapporter igjen», og la kroner-beslutningen tas én gang (ved kjøp) —
+aldri i det brukeren lager en rapport.** Økonomien er identisk med per-rapport,
+men uten angsten.
 
-- **Enhet:** 1 rapport = 10 kreditter. Transkripsjon og bildebeskrivelse er
-  *inkludert* i rapporten — de er små, og separat måling skaper taksameter-angst.
-- **Veiledende pris og pakker:**
+**Enhet: rapporter — ikke kroner-per-rapport, og ikke tokens.**
+Tokens som kundevendt saldo feiler fordi en takstperson ikke kan forutsi hvor
+mange tokens en rapport koster (kort vs. lang video varierer vilt). «Rapporter
+igjen» svarer på spørsmålet de faktisk har: *hvor mange befaringer kan jeg gjøre?*
+Marginen vår er så stor (COGS ~0,25–3 kr mot pris ~100 kr) at vi har råd til å
+prise i den forutsigbare enheten og svelge variasjonen. **Tokens måles kun
+internt** (`/api/admin/cost`) — kunden ser aldri et token.
 
-  | Pakke | Rapporter | Pris | Per rapport |
+**To produkter, rett fra mobilmarkedet:**
+
+- **Klippekort (kontantkort-modellen)** — for sporadiske brukere. Kjøp en pakke
+  rapporter, gyldig 12 mnd, teller ned. Ingen binding.
+- **Rapport-abonnement (mobilabonnement-modellen)** — for faste brukere. Et
+  antall rapporter/mnd inkludert som fornyes, rimelig påfyll ved tomt, og et
+  «fri rapporter»-toppnivå. Gir forutsigbar MRR og capper COGS-risikoen (i
+  motsetning til rent ubegrenset abonnement).
+
+**Veiledende tall (eksempler — ikke vedtatt):**
+
+  | Produkt | Inkludert | Pris | Effektiv pr. rapport |
   |---|---|---|---|
-  | Start (gratis) | 5 | 0 kr | — |
-  | Liten | 10 | 1 490 kr | 149 kr |
-  | Medium | 50 | 5 900 kr | 118 kr |
-  | Stor | 100 | 9 900 kr | 99 kr |
-  | Flat abonnement | ubegrenset | 990 kr/mnd | break-even ~7/mnd |
+  | Gratis start | 5 rapporter | 0 kr | — |
+  | Klippekort 10 | 10 rapporter (12 mnd) | 1 490 kr | 149 kr |
+  | Klippekort 50 | 50 rapporter (12 mnd) | 5 900 kr | 118 kr |
+  | Abonnement Liten | 10 rapp/mnd | 990 kr/mnd | 99 kr |
+  | Abonnement Medium | 25 rapp/mnd | 1 990 kr/mnd | 80 kr |
+  | Abonnement Fri | ubegrenset (fair-use) | 2 990 kr/mnd | — |
+  | Påfyll utover kvote | pr. rapport | 79 kr | 79 kr |
 
-**Hvorfor 149 kr — verdibasert, ikke kostnad-pluss:**
+**Den ene UX-regelen:** aldri vis kr i genereringsøyeblikket — bare «18 av 25
+rapporter igjen denne måneden». Varsle ved lav saldo, tilby påfyll/oppgradering.
+
+**Hvorfor dette prisnivået — verdibasert, ikke kostnad-pluss:**
 - En rapport sparer ~2 timer. Takstpersonens time ~800–1 500 kr →
-  **1 400–2 600 kr spart verdi per rapport**. 149 kr er ~6–10 % av verdien.
-- **Under Befar (500 kr/rapport)** — vi underbyr etablert per-rapport-pris klart,
-  med bedre feltopplevelse.
-- **Marginen er >95 %** over kostnad (se under). Prisen begrenses av verdi og
-  konkurranse, ikke av COGS.
+  **1 400–2 600 kr spart verdi per rapport**. Effektiv pris (80–149 kr) er
+  ~5–10 % av verdien.
+- **Under Befar (500 kr/rapport)** — vi underbyr etablert per-rapport-pris klart.
+- **Marginen er >95 %** over kostnad (se under).
 
 **COGS-gulvet — målt via `GET /api/admin/cost`** (Gemini-tokenforbruk per
 operasjon; ~10 kr/USD):
@@ -49,16 +71,16 @@ operasjon; ~10 kr/USD):
   | **Sum LLM per rapport** | | **~0,25 kr** |
 
 > ⚠️ **Tallene er estimater basert på realistisk rapportstørrelse — video-tokens
-> er jokeren** (lang video kan mangedoble input-tokens). De bekreftes med ekte
-> pilotrapporter via `/api/admin/cost` (`maks_total_tokens` gir verste-falls-
-> grunnlaget). Legg til infrastruktur (AI-motor-hosting, Google Docs, lagring) og
-> sett **kalkylegulvet til ~2–3 kr/rapport** for margin-trygghet. Selv da er 149 kr
-> ~98 % margin.
+> er jokeren** (lang video kan mangedoble input-tokens). Bekreftes med ekte
+> pilotrapporter via `/api/admin/cost` (`maks_total_tokens` = verste-fall).
+> Legg til infrastruktur (AI-motor-hosting, Google Docs, lagring) og sett
+> **kalkylegulvet til ~2–3 kr/rapport** for margin-trygghet. Selv da er
+> effektiv pris ~97–98 % margin.
 
-**Beslutning gruppen må ta:** godkjenne 149 kr/rapport som veiledende startpris
-(eller justere), og pakkestrukturen over. Priser på `/om` og `/vilkar` endres
-først når vedtaket foreligger — og etter at 10–20 ekte pilotrapporter har
-bekreftet COGS-gulvet.
+**Beslutning gruppen må ta:** (1) rapporter som enhet + «rapporter igjen»-framing
+(anbefalt), (2) klippekort + abonnement som de to produktene, (3) de veiledende
+tallene. Priser på `/om` og `/vilkar` endres først når vedtaket foreligger — og
+etter at 10–20 ekte pilotrapporter har bekreftet COGS-gulvet.
 
 ## Hvorfor det passer DocrAI
 
