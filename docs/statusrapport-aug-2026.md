@@ -96,7 +96,29 @@ sprinter, økosystem), totalbildet (flyt + kostnadsstack), kundereisen
 (animert, mobilstøtte), saksunderlag-demo, UI-endringer før/etter, og
 fargealternativene — alt synkronisert med samme status og identitet.
 
-## 4. Status og neste steg
+## 4. Sikkerhet, lansering og herding (siste uke)
+
+- **Lanseringssjekkliste (20 punkter):** FAQ, personvern, vilkår, takk- og
+  merkevare-404-sider; pilotskjema med honeypot; cookiefri førstepartstelling
+  (ingen samtykkebanner); robots.txt, sitemap.xml, favicon i tre størrelser,
+  Open Graph + schema.org, sticky mobil-CTA.
+- **Sikkerhetsrevisjon (42 funn, alle adversarielt etterprøvd):** 9 bekreftede
+  hull tettet — tenant-skoping på media, MIME-whitelist mot lagret XSS, eierskap
+  på nedlasting/rapport, signerte kortlevde medie-URL-er (token forlater aldri
+  serveren), uforutsigbare UUID-er, global feilhåndterer, 0 sårbarheter i
+  api-treet. Full oversikt: `sikkerhetsrevisjon-aug-2026.md`.
+- **Fagkart for lansering:** status per 15 fagområder med launch-gate —
+  `fagkart-lansering.md`. Denial-of-Wallet-vern (timeouts), sikkerhets-headere,
+  fokusmarkering (WCAG) og CI (e2e + audit + Dependabot) er bygget.
+- **Kvalitetssikring i CI:** GitHub Actions kjører delings-e2e mot ekte Postgres,
+  typesjekk og `npm audit` på hver push; Dependabot holder avhengigheter oppdatert.
+
+**Compliance er blindsonen, ikke koden.** Det som gjenstår før pilot med ekte
+persondata er avtaler og beslutninger, ikke bygging: databehandleravtaler,
+EU/EØS-flytting av AI-prosessering + TIA, DPIA, og driftsoppsett (Sentry, testet
+backup-restore). Se launch-gaten i fagkartet.
+
+## 5. Status og neste steg
 
 **11 av 16 skjermer i produktmodellen er bygget.** Gjenstående byggetrinn er
 avtale-avhengige: in4mo-eksport (trenger feltkartlegging med pilotbruker),

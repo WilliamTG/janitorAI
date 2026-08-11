@@ -1,0 +1,27 @@
+version: 2
+updates:
+  # Backend-avhengigheter (Express, multer, pg …) — sikkerhetsoppdateringer ukentlig.
+  - package-ecosystem: npm
+    directory: "/apps/api"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      api-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # App-avhengigheter (Expo/React Native) — samlet så Expo-kjeden ikke splittes.
+  - package-ecosystem: npm
+    directory: "/apps/mobile"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      mobile-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # Selve CI-actionene.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

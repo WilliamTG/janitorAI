@@ -25,6 +25,12 @@
   .datestamp { font-size:12.5px; color:var(--muted); }
   footer { border-top:1px solid var(--border); padding-top:14px; font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:6px; }
   a { color:var(--accent); }
+
+  /* Tilgjengelighet (WCAG 2.4.7): tydelig fokusmarkering for tastaturbrukere. */
+  a:focus-visible, button:focus-visible, summary:focus-visible,
+  input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+  }
 </style>
 </head>
 <body>
