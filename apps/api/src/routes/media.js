@@ -130,9 +130,14 @@ const storage = multer.diskStorage({
   },
 });
 
+// Én sannhet for opplastingstaket, så feilmelding og faktisk grense aldri
+// spriker (video kan være stor; 200 MB holder Render-RAM trygt).
+const MAX_UPLOAD_MB = 200;
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
 const upload = multer({
   storage,
-  limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB cap
+  limits: { fileSize: MAX_UPLOAD_BYTES },
 });
 
 async function rejectWhenDiskFull(req, res, next) {
@@ -231,16 +236,15 @@ router.post("/", heavyLimiter, rejectWhenDiskFull, upload.single("file"), async 
 
 // ── Multer error handler ─────────────────────────────────────────────────────
 // Must be a 4-arg Express error handler. Catches multer's LIMIT_FILE_SIZE error
-// (thrown when the uploaded file exceeds the 50 MB cap) and returns a structured
-// 413 response so the client can show a specific "file too large" banner instead
-// of treating it as a generic upload failure.
+// (thrown when the uploaded file exceeds the cap) and returns a structured 413
+// response so the client can show a specific "file too large" banner instead of
+// treating it as a generic upload failure.
 router.use((err, req, res, next) => {
   if (err && err.code === "LIMIT_FILE_SIZE") {
     return res.status(413).json({
-      error:
-        "File is too large. The maximum upload size is 50 MB. Please trim your video or export at a lower resolution.",
+      error: `File is too large. The maximum upload size is ${MAX_UPLOAD_MB} MB. Please trim your video or export at a lower resolution.`,
       code: "FILE_TOO_LARGE",
-      maxBytes: 50 * 1024 * 1024,
+      maxBytes: MAX_UPLOAD_BYTES,
     });
   }
   next(err);

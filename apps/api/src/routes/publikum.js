@@ -42,19 +42,29 @@ function limited(req, max) {
 
 // ── robots.txt ───────────────────────────────────────────────────────────────
 // Salgsflatene skal indekseres; delte rapporter, API og admin skal ikke.
+// Interne presentasjons-/strategisider (roadmap, konkurrentanalyse) skal ikke
+// indekseres — bare de kundevendte salgssidene. /kundereisen er bevisst
+// offentlig (lenket + i sitemap), så den står ikke her.
 const ROBOTS = [
   "User-agent: *",
   "Allow: /",
   "Disallow: /api/",
   "Disallow: /share/",
   "Disallow: /admin-dashboard",
+  "Disallow: /presentation",
+  "Disallow: /losningsskisse",
+  "Disallow: /totalbilde",
+  "Disallow: /ui-total",
+  "Disallow: /ui-endringer",
+  "Disallow: /underlag-demo",
+  "Disallow: /fargealternativer",
   "",
-  "Sitemap: /sitemap.xml",
-  "",
-].join("\n");
+];
 
 function robotsHandler(req, res) {
-  res.type("text/plain").send(ROBOTS);
+  const base =
+    process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
+  res.type("text/plain").send(ROBOTS.concat(`Sitemap: ${base}/sitemap.xml`, "").join("\n"));
 }
 
 // ── Pilotinteresse (POST /api/pilot-interesse) ───────────────────────────────
