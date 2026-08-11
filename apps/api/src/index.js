@@ -10,6 +10,7 @@ const { generalLimiter, heavyLimiter } = require("./middleware/rateLimiters");
 const requestLogger = require("./middleware/requestLogger");
 
 const { getPool, isDbEnabled } = require("./db");
+const { signedMediaUrl } = require("./mediaSign");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -393,13 +394,12 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     }
 
     // Build a URL the AI engine can use to download the video directly from
-    // this API server's media storage. Token is embedded as ?token= so the
-    // AI engine can fetch it with a plain HTTP GET (no custom headers needed).
+    // this API server's media storage. S10: vi signerer en kortlevd URL i stedet
+    // for å legge tester-tokenet i ?token= — tokenet forlater aldri serveren.
     const apiBaseUrl =
       process.env.API_BASE_URL ||
       `${req.protocol}://${req.get("host")}`;
-    const tokenParam = encodeURIComponent(req.testerToken || "");
-    const videoUrl = `${apiBaseUrl}/api/media/${video_filename}?token=${tokenParam}`;
+    const videoUrl = signedMediaUrl(apiBaseUrl, video_filename);
 
     // Resolve photo URIs to absolute URLs and strip empty fields so the AI
     // engine receives a clean, self-contained context object.
@@ -416,9 +416,13 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
         const enrichedPhotos = (Array.isArray(note.photos) ? note.photos : [])
           .filter((p) => p && (p.uri || p.remoteId))
           .map((p) => {
-            const mediaId = p.remoteId ?? p.uri;
+            // Signert URL for opplastede foto (remoteId); lokale uri-er (ikke
+            // ennå synket) sendes som de er.
+            const uri = p.remoteId
+              ? signedMediaUrl(apiBaseUrl, p.remoteId)
+              : String(p.uri);
             return {
-              uri: `${apiBaseUrl}/api/media/${mediaId}?token=${tokenParam}`,
+              uri,
               ...(p.caption ? { caption: p.caption } : {}),
             };
           });

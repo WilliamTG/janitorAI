@@ -20,6 +20,7 @@ const {
 } = require("../diskSpace");
 const { safeMimeForExt, applySafeMediaHeaders } = require("../mediaTypes");
 const { heavyLimiter } = require("../middleware/rateLimiters");
+const { verifyMedia } = require("../mediaSign");
 
 const router = express.Router();
 
@@ -45,6 +46,17 @@ function extractToken(req) {
 }
 
 async function requireTokenHeaderOrQuery(req, res, next) {
+  // S10: en gyldig kortlevd signatur autoriserer henting av ÉN bestemt medie-ID
+  // (GET /:id) uten token — brukt av AI-motoren så tester-tokenet aldri legges i
+  // URL-en. Signaturen er bundet til medie-ID-en, så den gir ikke bredere tilgang.
+  if (req.method === "GET") {
+    const signedId = decodeURIComponent(req.path.replace(/^\//, ""));
+    if (signedId && verifyMedia(signedId, req.query.exp, req.query.sig)) {
+      req.signedMediaId = signedId;
+      return next();
+    }
+  }
+
   const providedToken = extractToken(req);
 
   if (!providedToken) {
@@ -243,10 +255,18 @@ router.get("/:id", async (req, res) => {
   try {
     const id = String(req.params.id);
     const pool = getPool();
-    const result = await pool.query(
-      "SELECT file_path, mime_type FROM media WHERE id = $1 AND tester_token = $2",
-      [id, req.testerToken]
-    );
+    // Signert forespørsel (S10): signaturen autoriserer nettopp denne ID-en, så
+    // vi slår opp på id alene. Ellers krever vi at mediet eies av testerens token.
+    const result =
+      req.signedMediaId === id
+        ? await pool.query(
+            "SELECT file_path, mime_type FROM media WHERE id = $1",
+            [id]
+          )
+        : await pool.query(
+            "SELECT file_path, mime_type FROM media WHERE id = $1 AND tester_token = $2",
+            [id, req.testerToken]
+          );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Not found" });
