@@ -30,6 +30,17 @@ app.use(cors(CORS_ORIGINS.length ? { origin: CORS_ORIGINS } : {}));
 // vilkårlig store payloads.
 app.use(express.json({ limit: "300kb" }));
 
+// ---------- SIKKERHETS-HEADERE (OWASP: Security Misconfiguration) ----------
+// Nøkterne, alltid-trygge headere på alt: hindrer MIME-sniffing, clickjacking
+// og referrer-lekkasje. (CSP holdes utenfor her fordi de statiske HTML-sidene
+// bruker inline-script; kan legges på per-side senere.)
+app.use((req, res, next) => {
+  res.set("X-Content-Type-Options", "nosniff");
+  res.set("X-Frame-Options", "SAMEORIGIN");
+  res.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  next();
+});
+
 // ---------- REQUEST LOGGER ----------
 // Minimal request logging (method, path, status, latency only)
 app.use(requestLogger);
@@ -49,6 +60,17 @@ if (!GEMINI_API_KEY) {
 // Helper function to sanitize errors for logging (avoid logging full error objects)
 function sanitizeError(err) {
   return err && err.message ? err.message : String(err);
+}
+
+// Utgående fetch med tidsavbrudd (Denial-of-Wallet-vern): et hengende
+// oppstrøms-kall (Gemini/AI-motor) skal aldri holde en forbindelse — og en
+// fakturerbar operasjon — åpen i det uendelige. Kaster ved timeout.
+function fetchWithTimeout(url, options = {}, timeoutMs = 60000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() =>
+    clearTimeout(timer)
+  );
 }
 
 // Multer config for uploads (audio / images) — 20 MB cap keeps Render RAM safe
@@ -134,6 +156,20 @@ app.get("/vilkar", (req, res) => {
   res.sendFile(path.join(__dirname, "vilkar-page.html"));
 });
 app.get("/robots.txt", require("./routes/publikum").robotsHandler);
+// Sitemap (SEO): kun de offentlige, indekserbare salgssidene.
+app.get("/sitemap.xml", (req, res) => {
+  const base =
+    process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
+  const paths = ["/om", "/demo", "/faq", "/personvern", "/vilkar", "/kundereisen"];
+  const urls = paths
+    .map((p) => `  <url><loc>${base}${p}</loc></url>`)
+    .join("\n");
+  res
+    .type("application/xml")
+    .send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`
+    );
+});
 app.get("/og-bilde.png", (req, res) => {
   res.sendFile(path.join(__dirname, "assets/og-bilde.png"));
 });
@@ -269,7 +305,7 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
     const base64 = buffer.toString("base64");
     const mimeType = req.file.mimetype || "audio/mp4";
 
-    const response = await fetch(GEMINI_BASE_URL, {
+    const response = await fetchWithTimeout(GEMINI_BASE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
       body: JSON.stringify({
@@ -323,7 +359,7 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
     const base64 = buffer.toString("base64");
     const mimeType = req.file.mimetype || "image/jpeg";
 
-    const response = await fetch(GEMINI_BASE_URL, {
+    const response = await fetchWithTimeout(GEMINI_BASE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
       body: JSON.stringify({
@@ -451,7 +487,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     // the DB) — the AI engine authenticates against its own TESTER_TOKEN env var,
     // so the backend needs AI_ENGINE_TOKEN set to that same value.
     const aiToken = process.env.AI_ENGINE_TOKEN || "";
-    const response = await fetch(`${aiEngineUrl}/api/report`, {
+    const response = await fetchWithTimeout(`${aiEngineUrl}/api/report`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -527,7 +563,7 @@ app.get("/api/projects/:id/download/:format", async (req, res) => {
 
   try {
     const aiToken = process.env.AI_ENGINE_TOKEN || "";
-    const aiRes = await fetch(
+    const aiRes = await fetchWithTimeout(
       `${aiEngineUrl}/api/export/${encodeURIComponent(docId)}?format=${format}`,
       { headers: { "x-tester-token": aiToken } }
     );

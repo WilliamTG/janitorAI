@@ -49,6 +49,8 @@ const ROBOTS = [
   "Disallow: /share/",
   "Disallow: /admin-dashboard",
   "",
+  "Sitemap: /sitemap.xml",
+  "",
 ].join("\n");
 
 function robotsHandler(req, res) {
