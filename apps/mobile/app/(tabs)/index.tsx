@@ -13,14 +13,35 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import {
+import apiFetch, {
   clearTesterToken,
   loadTesterToken,
   setTesterToken,
   validateTesterToken,
 } from '@/src/lib/apiFetch';
 import { formatDate, nb } from '@/src/i18n/nb';
-import { NO_DATE_SET, Project, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
+import { getApiBaseUrl } from '@/src/config/api';
+import { newId } from '@/src/lib/ids';
+import { CaseFile, NO_DATE_SET, Project, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
+import { formatMinutes, minutesToApproved } from '@/src/features/projects/metrics';
+
+// Treff fra Kartverkets adresse-API, via /api/underlag/adresse.
+type AddressHit = {
+  adressetekst: string;
+  postnummer?: string;
+  poststed?: string;
+  kommunenavn?: string;
+  kommunenummer?: string;
+  gnr?: number;
+  bnr?: number;
+  lat?: number;
+  lon?: number;
+};
+
+function tidyPlace(value?: string): string {
+  if (!value) return '';
+  return value.charAt(0) + value.slice(1).toLowerCase();
+}
 import { loadProfile } from '@/src/storage/profileStorage';
 import {
   loadProjects,
@@ -68,10 +89,10 @@ function getProjectStatus(project: Project): ProjectStatus {
 // Kun til filterchips (kant/bakgrunn) — selve statusvisningen på kortet
 // bruker StatusChip med WCAG AA-fargepar (B20).
 const STATUS_COLOR: Record<ProjectStatus, string> = {
-  draft: '#94a3b8',
-  processing: '#60a5fa',
-  ready: '#22c55e',
-  failed: '#ef4444',
+  draft: '#7C8A96',
+  processing: '#3D5A80',
+  ready: '#2E7D4F',
+  failed: '#A6453A',
 };
 
 const UNKNOWN_INSPECTOR_LABEL = nb.projects.unknownInspector;
@@ -114,6 +135,10 @@ export default function Index() {
   const [wizardStep, setWizardStep] = useState<0 | 1 | 2 | 3>(0);
   const [wizardName, setWizardName] = useState('');
   const [wizardNameError, setWizardNameError] = useState<string | null>(null);
+  // Saksunderlag: adresseforslag fra Kartverket mens man skriver (B17).
+  const [addressHits, setAddressHits] = useState<AddressHit[]>([]);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const [wizardCaseFile, setWizardCaseFile] = useState<CaseFile | null>(null);
   const [wizardDate, setWizardDate] = useState(() => localDateString(new Date()));
   const [wizardInspector, setWizardInspector] = useState('');
   const [wizardDescription, setWizardDescription] = useState('');
@@ -275,6 +300,67 @@ export default function Index() {
     setWizardInspector('');
     setWizardDescription('');
     setWizardMediaFiles([]);
+    setWizardCaseFile(null);
+    setAddressHits([]);
+    pickedAddressRef.current = null;
+  };
+
+  // ── Saksunderlag: adressesøk mot Kartverket mens man skriver ────────────────
+  const pickedAddressRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const query = wizardName.trim();
+    if (wizardStep !== 1 || query.length < 4 || query === pickedAddressRef.current) {
+      setAddressHits([]);
+      setIsSearchingAddress(false);
+      return;
+    }
+    let cancelled = false;
+    setIsSearchingAddress(true);
+    const timer = setTimeout(async () => {
+      try {
+        const response = await apiFetch(
+          `${getApiBaseUrl()}/api/underlag/adresse?sok=${encodeURIComponent(query)}`,
+          { skipAuthHandling: true },
+        );
+        if (cancelled || !response.ok) return;
+        const data: any = await response.json();
+        if (!cancelled) {
+          setAddressHits(Array.isArray(data.adresser) ? data.adresser.slice(0, 4) : []);
+        }
+      } catch {
+        // Adressesøket er en berikelse — feil skal aldri stoppe veiviseren.
+      } finally {
+        if (!cancelled) setIsSearchingAddress(false);
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [wizardName, wizardStep]);
+
+  const pickAddress = (hit: AddressHit) => {
+    const label = hit.poststed ? `${hit.adressetekst}, ${tidyPlace(hit.poststed)}` : hit.adressetekst;
+    pickedAddressRef.current = label;
+    setWizardName(label);
+    setWizardNameError(null);
+    setAddressHits([]);
+    if (typeof hit.lat === 'number' && typeof hit.lon === 'number') {
+      setWizardCaseFile({
+        addressText: hit.adressetekst,
+        postCode: hit.postnummer,
+        postPlace: tidyPlace(hit.poststed),
+        municipality: tidyPlace(hit.kommunenavn),
+        municipalityNumber: hit.kommunenummer,
+        gnr: hit.gnr,
+        bnr: hit.bnr,
+        lat: hit.lat,
+        lon: hit.lon,
+      });
+    } else {
+      setWizardCaseFile(null);
+    }
   };
 
   const createProject = async () => {
@@ -292,15 +378,21 @@ export default function Index() {
     const profile = await loadProfile();
 
     const newProject: Project = {
-      id: Date.now().toString(),
+      id: newId(),
       name,
       inspectionDate: date || NO_DATE_SET,
       inspector: inspector || UNKNOWN_INSPECTOR,
       notes: [],
       ...(description ? { projectDescriptionText: description } : {}),
+      ...(wizardCaseFile ? { caseFile: wizardCaseFile } : {}),
       reportMeta: {
         contributors: [{}],
         buildings: [{}],
+        // Saksunderlaget forhåndsutfyller rapportskjemaet (B17-sporet).
+        addressStreet: wizardCaseFile?.addressText || undefined,
+        addressPostcodeCity: wizardCaseFile
+          ? [wizardCaseFile.postCode, wizardCaseFile.postPlace].filter(Boolean).join(' ') || undefined
+          : undefined,
         inspectionDoneByName: profile.name || undefined,
         inspectionDoneByPhone: profile.phone || undefined,
         inspectionDoneByCompany: profile.company || undefined,
@@ -461,6 +553,48 @@ export default function Index() {
                 autoFocus
                 error={wizardNameError ?? undefined}
               />
+              {/* Saksunderlag: adresseforslag fra Kartverket */}
+              {isSearchingAddress && <Caption muted>{nb.underlag.searching}</Caption>}
+              {addressHits.length > 0 && (
+                <View style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radii.md, overflow: 'hidden' }}>
+                  {addressHits.map((hit, index) => (
+                    <Pressable
+                      key={`${hit.adressetekst}-${hit.postnummer}-${index}`}
+                      onPress={() => pickAddress(hit)}
+                      accessibilityRole="button"
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: theme.spacing.sm,
+                        paddingVertical: theme.spacing.sm,
+                        paddingHorizontal: theme.spacing.md,
+                        borderTopWidth: index === 0 ? 0 : 1,
+                        borderTopColor: theme.colors.border,
+                        backgroundColor: theme.colors.surfaceSecondary,
+                      }}
+                    >
+                      <Ionicons name="location-outline" size={16} color={theme.colors.accent} />
+                      <View style={{ flex: 1 }}>
+                        <Body style={{ fontWeight: '600' }}>{hit.adressetekst}</Body>
+                        <Caption muted>
+                          {[hit.postnummer, tidyPlace(hit.poststed), tidyPlace(hit.kommunenavn)]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </Caption>
+                      </View>
+                    </Pressable>
+                  ))}
+                  <View style={{ paddingVertical: 6, paddingHorizontal: theme.spacing.md, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
+                    <Caption muted>{nb.underlag.pickHint}</Caption>
+                  </View>
+                </View>
+              )}
+              {wizardCaseFile && addressHits.length === 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+                  <Ionicons name="checkmark-circle-outline" size={14} color={theme.colors.accent} />
+                  <Caption muted>{`${nb.underlag.title}: ${nb.underlag.cadastre} ${wizardCaseFile.gnr}/${wizardCaseFile.bnr} · ${wizardCaseFile.municipality}`}</Caption>
+                </View>
+              )}
               {/* B17: inline duplikatvarsel — ikke blokkerende */}
               {isDuplicateName && !wizardNameError && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
@@ -712,6 +846,7 @@ export default function Index() {
     const audioCount = notes.filter((n) => n.audioUri).length;
     const photoCount = notes.reduce((sum, n) => sum + (n.photos?.length || 0), 0);
     const status = getProjectStatus(item);
+    const approvedMinutes = minutesToApproved(item);
 
     const dateText = formatDate(item.inspectionDate);
     const inspectorText = item.inspector === UNKNOWN_INSPECTOR ? UNKNOWN_INSPECTOR_LABEL : item.inspector;
@@ -756,6 +891,14 @@ export default function Index() {
                 {`${noteCount} ${nb.projects.notesCount} · ${photoCount} ${nb.projects.photosCount} · ${audioCount} ${nb.projects.audioCount}`}
               </Caption>
             </View>
+
+            {/* Tid til godkjent rapport — pilotmetrikken (A3) */}
+            {approvedMinutes !== null && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="timer-outline" size={13} color={theme.colors.muted} />
+                <Caption muted>{nb.projects.timeToApproved(formatMinutes(approvedMinutes))}</Caption>
+              </View>
+            )}
           </GlassCard>
         </Pressable>
       </Animated.View>

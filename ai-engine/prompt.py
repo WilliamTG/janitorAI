@@ -39,7 +39,10 @@ def build_inspector_context(project: dict) -> str:
             if not note_text and not note_trans and not photos:
                 continue
 
-            lines.append(f"\nNote {i}:")
+            # A1: rommet er konteksten — «fukt ved sluk» betyr noe annet på
+            # badet enn i boden, og romnavnet styrer relevant regelverk.
+            room = (note.get("room") or "").strip()
+            lines.append(f"\nNote {i}{f' (room: {room})' if room else ''}:")
             if note_text:
                 lines.append(f"  (Written) {note_text}")
             if note_trans and note_trans != note_text:

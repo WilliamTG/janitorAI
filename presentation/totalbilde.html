@@ -1,0 +1,267 @@
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DocrAI – Totalbildet</title>
+<style>
+  :root {
+    --paper: #FFFFFF; --surface: #F4F3EF; --ink: #16202B; --muted: #5C6B7A;
+    --border: #DDE4EB; --accent: #3D5A80; --accent-fill: #3D5A80; --accent-pale: #E8F0F7;
+    --amber: #A8681F; --amber-pale: #F7EEDD; --ok: #2E7D4F; --bad: #A6453A;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #131920; --surface: #0F141A; --ink: #E4EAF1; --muted: #97A6B5;
+      --border: #2A3542; --accent: #94B9DE; --accent-fill: #3D5A80; --accent-pale: #1B2634;
+      --amber: #D69A4E; --amber-pale: #2B2214; --ok: #5CB884; --bad: #D3766B;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper: #FFFFFF; --surface: #F4F3EF; --ink: #16202B; --muted: #5C6B7A;
+    --border: #DDE4EB; --accent: #3D5A80; --accent-fill: #3D5A80; --accent-pale: #E8F0F7;
+    --amber: #A8681F; --amber-pale: #F7EEDD; --ok: #2E7D4F; --bad: #A6453A;
+  }
+  :root[data-theme="dark"] {
+    --paper: #131920; --surface: #0F141A; --ink: #E4EAF1; --muted: #97A6B5;
+    --border: #2A3542; --accent: #94B9DE; --accent-fill: #3D5A80; --accent-pale: #1B2634;
+    --amber: #D69A4E; --amber-pale: #2B2214; --ok: #5CB884; --bad: #D3766B;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface); color: var(--ink);
+    font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif; font-size: 15px; line-height: 1.55; }
+  .page { max-width: 960px; margin: 0 auto; padding: 48px 24px 72px; display: flex; flex-direction: column; gap: 44px; }
+
+  header { display: flex; flex-direction: column; gap: 12px; }
+  .brand-row { display: flex; align-items: center; gap: 12px; }
+  .brand-sq { width: 22px; height: 22px; background: var(--accent-fill); flex: none; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+  .lede { margin: 0; max-width: 64ch; color: var(--muted); font-size: 15.5px; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  section { display: flex; flex-direction: column; gap: 16px; }
+  .sec-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  .sec-head .eyebrow { color: var(--muted); }
+  h2 { margin: 0; font-size: 20px; font-weight: 700; }
+  section > p { margin: 0; max-width: 68ch; color: var(--muted); }
+  section > p strong { color: var(--ink); font-weight: 600; }
+
+  figure { margin: 0; background: var(--paper); border: 1px solid var(--border); }
+  .fig-scroll { overflow-x: auto; padding: 20px 16px; }
+  figure svg { display: block; min-width: 820px; width: 100%; height: auto; }
+  figcaption { padding: 12px 20px 14px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+
+  .db { fill: var(--paper); stroke: var(--border); stroke-width: 1.25; }
+  .db-accent { fill: var(--accent-pale); stroke: var(--accent); stroke-width: 1.25; }
+  .db-solid { fill: var(--accent-fill); stroke: none; }
+  .db-amber { fill: var(--amber-pale); stroke: var(--amber); stroke-width: 1.5; }
+  .db-dash { fill: none; stroke: var(--muted); stroke-width: 1.25; stroke-dasharray: 5 4; }
+  .dt   { fill: var(--ink); font-size: 12.5px; font-weight: 600; }
+  .dt-w { fill: #FFFFFF; font-size: 12.5px; font-weight: 600; }
+  .ds   { fill: var(--muted); font-size: 10.5px; }
+  .ds-w { fill: #D9E4F0; font-size: 10.5px; }
+  .dl   { fill: var(--muted); font-size: 10px; }
+  .dnum { fill: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; }
+  .dpay { fill: var(--amber); font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; }
+  .darr { stroke: var(--ink); stroke-width: 1.4; fill: none; }
+  .darr-dash { stroke: var(--muted); stroke-width: 1.3; fill: none; stroke-dasharray: 5 4; }
+  .mk-ink { fill: var(--ink); }
+  .mk-mut { fill: var(--muted); }
+
+  /* Kostnadstabell */
+  .costs { display: flex; flex-direction: column; gap: 0; background: var(--paper); border: 1px solid var(--border); }
+  .cost-group { border-top: 1px solid var(--border); }
+  .cost-group:first-child { border-top: 0; }
+  .cg-head { display: flex; align-items: center; gap: 10px; padding: 12px 18px; }
+  .cg-head h3 { margin: 0; font-size: 14px; font-weight: 700; }
+  .cg-head .sum { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .pill { font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 999px; flex: none; }
+  .pill.free { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
+  .pill.key  { color: var(--accent); background: var(--accent-pale); }
+  .pill.pay  { color: var(--amber); background: var(--amber-pale); }
+  .row { display: grid; grid-template-columns: minmax(180px, 1.2fr) 2fr minmax(110px, 0.8fr); gap: 12px;
+    padding: 9px 18px; border-top: 1px dashed var(--border); font-size: 13.5px; align-items: baseline; }
+  .row .k { font-weight: 600; }
+  .row .v { color: var(--muted); }
+  .row .st { font-size: 11.5px; font-weight: 600; text-align: right; white-space: nowrap; }
+  .st.live { color: var(--ok); }
+  .st.ready { color: var(--accent); }
+  .st.todo { color: var(--muted); }
+  @media (max-width: 620px) { .row { grid-template-columns: 1fr; gap: 2px; } .row .st { text-align: left; } }
+
+  .callout { display: flex; gap: 14px; align-items: flex-start; background: var(--amber-pale);
+    border: 1px solid var(--amber); padding: 16px 18px; }
+  .callout .bar { width: 4px; align-self: stretch; background: var(--amber); flex: none; }
+  .callout p { margin: 0; font-size: 14px; }
+  .callout p strong { font-weight: 700; }
+
+  footer { border-top: 1px solid var(--border); padding-top: 16px; font-size: 12.5px; color: var(--muted); max-width: 70ch; }
+</style>
+
+<div class="page">
+
+  <header>
+    <div class="brand-row">
+      <div class="brand-sq"></div>
+      <span class="eyebrow">DocrAI · Totalbildet · 05.08.2026</span>
+    </div>
+    <h1>Slik blir det til slutt – og hva det koster</h1>
+    <p class="lede">
+      Hele kjeden fra adresse til arkivert rapport, med ærlig merking av hva som er
+      <strong>gratis</strong>, hva som krever <strong>gratis nøkkel eller avtale</strong>, og hva
+      som faktisk <strong>koster penger</strong>. Det meste av underlaget er allerede i drift på
+      åpne kilder.
+    </p>
+  </header>
+
+  <!-- ══ 1 · Totalflyten ══ -->
+  <section>
+    <div class="sec-head"><span class="eyebrow">01</span><h2>Totalflyten – sluttbildet</h2></div>
+    <figure>
+      <div class="fig-scroll">
+      <svg viewBox="0 0 1150 330" role="img" aria-label="Sluttbildet: saksunderlag fra aapne kilder, fangst i felt, AI-utkast med Byggforsk-RAG, godkjenning, forensisk rapport, PIN-deling til forsikring, arkivering i Boligmappa og laeringssloyfe tilbake til AI-en.">
+        <defs>
+          <marker id="t-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="mk-ink"/>
+          </marker>
+          <marker id="t-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="mk-mut"/>
+          </marker>
+        </defs>
+
+        <text x="14" y="60" class="dnum">0 · UNDERLAG</text>
+        <rect x="10" y="70" width="150" height="120" class="db-accent"/>
+        <text x="24" y="92" class="dt">Adresse inn</text>
+        <text x="24" y="110" class="ds">Kartverket · åpen</text>
+        <text x="24" y="124" class="ds">matrikkel · NVE · kart</text>
+        <text x="24" y="138" class="ds">MET-vær · flyfoto</text>
+        <text x="24" y="160" class="dl">gratis, i drift</text>
+        <text x="24" y="176" class="dpay">+ dokumentlag: avtale</text>
+
+        <line x1="160" y1="130" x2="193" y2="130" class="darr" marker-end="url(#t-ink)"/>
+
+        <text x="201" y="60" class="dnum">1 · FELT</text>
+        <rect x="197" y="70" width="140" height="120" class="db"/>
+        <text x="211" y="92" class="dt">Fangst</text>
+        <text x="211" y="110" class="ds">video · lyd · foto</text>
+        <text x="211" y="124" class="ds">geo + tid + SHA-256</text>
+        <text x="211" y="138" class="ds">store knapper, norsk</text>
+        <text x="211" y="160" class="dl">bygget og verifisert</text>
+
+        <line x1="337" y1="130" x2="370" y2="130" class="darr" marker-end="url(#t-ink)"/>
+
+        <text x="378" y="60" class="dnum">2 · AI (EU/EØS)</text>
+        <rect x="374" y="70" width="160" height="120" class="db"/>
+        <text x="388" y="92" class="dt">Utkast</text>
+        <text x="388" y="110" class="ds">transkripsjon · skadetype</text>
+        <text x="388" y="124" class="ds">bevisbilder m/tidsstempel</text>
+        <text x="388" y="138" class="ds">Byggforsk-RAG (verifisert)</text>
+        <text x="388" y="160" class="dpay">AI-bruk: betalt per sak</text>
+        <text x="388" y="176" class="dpay">SINTEF-lisens: kritisk</text>
+
+        <line x1="534" y1="130" x2="567" y2="130" class="darr" marker-end="url(#t-ink)"/>
+
+        <text x="575" y="60" class="dnum">3 · GODKJENNING</text>
+        <rect x="571" y="70" width="130" height="120" class="db-amber"/>
+        <text x="585" y="92" class="dt">Takstperson</text>
+        <text x="585" y="110" class="ds">korrigerer og</text>
+        <text x="585" y="124" class="ds">godkjenner alltid</text>
+        <text x="585" y="138" class="ds">– stemples i rapport</text>
+        <text x="585" y="160" class="dl">menneske-i-løkken</text>
+
+        <line x1="701" y1="130" x2="734" y2="130" class="darr" marker-end="url(#t-ink)"/>
+
+        <text x="742" y="60" class="dnum">4 · RAPPORT</text>
+        <rect x="738" y="70" width="140" height="120" class="db-solid"/>
+        <text x="752" y="92" class="dt-w">Forensisk</text>
+        <text x="752" y="110" class="ds-w">årsak · akutt/gradvis</text>
+        <text x="752" y="124" class="ds-w">Byggforsk-sitater</text>
+        <text x="752" y="138" class="ds-w">bevis m/sjekksum</text>
+        <text x="752" y="160" class="ds-w">docx + strukturert</text>
+
+        <line x1="878" y1="130" x2="911" y2="130" class="darr" marker-end="url(#t-ink)"/>
+
+        <text x="919" y="60" class="dnum">5 · DELING</text>
+        <rect x="915" y="70" width="130" height="120" class="db"/>
+        <text x="929" y="92" class="dt">PIN + utløp</text>
+        <text x="929" y="110" class="ds">forsikring · takst</text>
+        <text x="929" y="124" class="ds">uten konto</text>
+        <text x="929" y="138" class="ds">In4mo-kobling</text>
+        <text x="929" y="160" class="dl">bygget og verifisert</text>
+
+        <!-- retur 1: Boligmappa-arkivering -->
+        <polyline points="808,190 808,255 335,255" class="darr-dash" marker-end="url(#t-mut)"/>
+        <rect x="180" y="232" width="155" height="46" class="db-dash"/>
+        <text x="194" y="252" class="dt">Boligmappa</text>
+        <text x="194" y="268" class="ds">rapporten arkiveres på boligen</text>
+        <text x="480" y="247" class="dl">godkjent rapport → boligens historikk (partneravtale)</text>
+
+        <!-- retur 2: læringssløyfe -->
+        <polyline points="636,190 636,305 555,305" class="darr-dash" marker-end="url(#t-mut)"/>
+        <rect x="374" y="284" width="180" height="42" class="db-dash"/>
+        <text x="388" y="302" class="dt">Evalsett + siteringsscore</text>
+        <text x="388" y="317" class="ds">rettelser blir treningsdata</text>
+        <polyline points="374,305 340,305 340,195" class="darr-dash" marker-end="url(#t-mut)"/>
+        <text x="650" y="300" class="dl">rettelser (med samtykke) → målt forbedring</text>
+      </svg>
+      </div>
+      <figcaption>
+        Heltrukket = skadesaken; stiplet = de to retur-sløyfene som bygger varige fortrinn:
+        rapporten arkiveres på boligen i Boligmappa, og takstpersonens rettelser måles inn i
+        evalsettet. Gule merker viser de eneste stedene penger må ut.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ══ 2 · Kostnadsbildet ══ -->
+  <section>
+    <div class="sec-head"><span class="eyebrow">02</span><h2>Kilder og kostnader – hele stacken</h2></div>
+    <div class="costs">
+
+      <div class="cost-group">
+        <div class="cg-head"><span class="pill free">GRATIS · uten nøkkel</span><h3>Åpne offentlige kilder</h3><span class="sum">0 kr – for alltid</span></div>
+        <div class="row"><span class="k">Kartverket adresse-API</span><span class="v">Adresse, gnr/bnr, koordinater, kommune</span><span class="st live">✓ i drift</span></div>
+        <div class="row"><span class="k">Åpen matrikkel (Geonorge WFS)</span><span class="v">Bygningstype, bygningsstatus, kulturminne/SEFRAK-flagg</span><span class="st live">✓ i drift</span></div>
+        <div class="row"><span class="k">Kartverket kartfliser (WMTS)</span><span class="v">Kartutsnitt med markør – proxyet gjennom eget API</span><span class="st live">✓ i drift</span></div>
+        <div class="row"><span class="k">NVE aktsomhetskart</span><span class="v">Flom-, overvanns- og kvikkleirelag</span><span class="st ready">klar – kobles på</span></div>
+        <div class="row"><span class="k">Norge i bilder</span><span class="v">Flyfoto av eiendommen</span><span class="st ready">klar – kobles på</span></div>
+        <div class="row"><span class="k">Kommunale innsynsportaler</span><span class="v">Byggesaksinnsyn (gratis, men manuelt per kommune)</span><span class="st todo">manuelt spor</span></div>
+      </div>
+
+      <div class="cost-group">
+        <div class="cg-head"><span class="pill key">GRATIS · med nøkkel/avtale</span><h3>Offentlige kilder som krever registrering</h3><span class="sum">0 kr – litt papirarbeid</span></div>
+        <div class="row"><span class="k">MET Frost</span><span class="v">Nedbørshistorikk rundt skadedato (akutt/gradvis-indikasjon)</span><span class="st ready">kode klar – trenger FROST_CLIENT_ID</span></div>
+        <div class="row"><span class="k">Kartverket full Matrikkel-API</span><span class="v">Byggeår, areal, bruksenheter – gratis avtale direkte med Kartverket</span><span class="st todo">søknad i pilotfasen</span></div>
+      </div>
+
+      <div class="cost-group">
+        <div class="cg-head"><span class="pill pay">BETALT</span><h3>Det som faktisk koster penger</h3><span class="sum">fire poster</span></div>
+        <div class="row"><span class="k">SINTEF Byggforsk-lisens</span><span class="v">Anvisningene til RAG-en – selve fagforankringen. Kritisk sti, må prises i dialog med SINTEF. Befar viser modellen: standardlisensen kan selges som egen årslinje (deres NS 3600-lisens: 2 000 kr/år)</span><span class="st todo">forhandling</span></div>
+        <div class="row"><span class="k">AI-modellbruk</span><span class="v">Transkripsjon, bildeanalyse, rapportutkast (Gemini i dag → Vertex AI EU-region for B12). Betales per sak – kroner, ikke hundrelapper</span><span class="st live">✓ i drift</span></div>
+        <div class="row"><span class="k">Plantegninger per sak</span><span class="v">«Godkjente bygningstegninger» fra Ambita Infoland / Norkart e-Torg – typisk noen hundrelapper per bestilling, kun ved behov</span><span class="st todo">pilotfasen</span></div>
+        <div class="row"><span class="k">Boligmappa-partnerskap</span><span class="v">Lese boligens historikk (med samtykke) + arkivere rapporten på boligen – partneravtale, pris i dialog</span><span class="st todo">skaleringsfasen</span></div>
+        <div class="row"><span class="k">Drift</span><span class="v">Render-hosting, Postgres, medialagring – løpende småbeløp som i dag</span><span class="st live">✓ i drift</span></div>
+      </div>
+
+    </div>
+    <div class="callout">
+      <div class="bar"></div>
+      <p>
+        <strong>Bunnlinjen:</strong> hele geo- og eiendomsdata-underlaget er gratis – det som
+        koster penger er <strong>fagforankringen</strong> (SINTEF-lisensen, kritisk sti),
+        <strong>AI-bruken per sak</strong>, og to valgfrie bekvemmeligheter (plantegninger per
+        bestilling og Boligmappa-partnerskapet). Ingen av de private mellomleddene er nødvendige
+        for kjerneproduktet. På inntektssiden er stykkpris markedsvalidert i Norge: Befar tar
+        500 kr per rapport – vår flate månedspris (990–1 490 kr) blir volumfordel-argumentet.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    Status per 09.08.2026: alt merket «i drift» er bygget, typesjekket og live-verifisert i
+    nettleser mot kjørende app og ekte kilder – siden 05.08 også godkjenningsstempel med
+    serverhåndhevet delingsport, norsk fagterm-transkripsjon, tid-til-godkjent-metrikk,
+    offentlig demo (/demo?adresse=…) og salgsside med prisnivåer (/om). Se løsningsskissen for
+    arkitekturen, kundereisen for historien, ui-total for hele produktflaten og docs/ for
+    markeds- og konkurrentanalysene.
+  </footer>
+</div>

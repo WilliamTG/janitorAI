@@ -9,12 +9,37 @@ const requireTesterToken = require("./middleware/requireTesterToken");
 const { generalLimiter, heavyLimiter } = require("./middleware/rateLimiters");
 const requestLogger = require("./middleware/requestLogger");
 
+const { getPool, isDbEnabled } = require("./db");
+const { signedMediaUrl } = require("./mediaSign");
+
 const app = express();
 app.set("trust proxy", 1);
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(express.json());
+// CORS (S12): standard er åpen (auth er header-token, ikke cookies, så det er
+// ingen credentialed CSRF). Sett CORS_ORIGINS=komma,separert,liste i produksjon
+// for å låse API-et til webappens og admin-dashbordets origins.
+const CORS_ORIGINS = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+app.use(cors(CORS_ORIGINS.length ? { origin: CORS_ORIGINS } : {}));
+
+// Eksplisitt body-tak (S15): prosjekt-bloben lagres som JSONB; 300kb holder for
+// store befaringer med mange notater, og hindrer at en klient dytter inn
+// vilkårlig store payloads.
+app.use(express.json({ limit: "300kb" }));
+
+// ---------- SIKKERHETS-HEADERE (OWASP: Security Misconfiguration) ----------
+// Nøkterne, alltid-trygge headere på alt: hindrer MIME-sniffing, clickjacking
+// og referrer-lekkasje. (CSP holdes utenfor her fordi de statiske HTML-sidene
+// bruker inline-script; kan legges på per-side senere.)
+app.use((req, res, next) => {
+  res.set("X-Content-Type-Options", "nosniff");
+  res.set("X-Frame-Options", "SAMEORIGIN");
+  res.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  next();
+});
 
 // ---------- REQUEST LOGGER ----------
 // Minimal request logging (method, path, status, latency only)
@@ -35,6 +60,17 @@ if (!GEMINI_API_KEY) {
 // Helper function to sanitize errors for logging (avoid logging full error objects)
 function sanitizeError(err) {
   return err && err.message ? err.message : String(err);
+}
+
+// Utgående fetch med tidsavbrudd (Denial-of-Wallet-vern): et hengende
+// oppstrøms-kall (Gemini/AI-motor) skal aldri holde en forbindelse — og en
+// fakturerbar operasjon — åpen i det uendelige. Kaster ved timeout.
+function fetchWithTimeout(url, options = {}, timeoutMs = 60000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() =>
+    clearTimeout(timer)
+  );
 }
 
 // Multer config for uploads (audio / images) — 20 MB cap keeps Render RAM safe
@@ -82,17 +118,27 @@ app.get("/presentation", (req, res) => {
 // Pitch-, skisse- og sammenstillings-sidene er skrevet uten dokumentskall
 // (de publiseres også som artifacts); pakk dem inn her så nettleseren
 // rendrer i standards mode.
+// /kundereisen er bevisst offentlig (lenket + i sitemap); resten er interne
+// pitch-/strategisider som ikke skal indekseres selv om URL-en lekker.
+const PUBLIC_PRESENTATION = new Set(["kundereisen.html"]);
 function sendPresentationPage(res, filename) {
   const file = path.join(__dirname, "../../../presentation", filename);
   fs.readFile(file, "utf8", (err, html) => {
     if (err) return res.status(404).json({ error: "Not found" });
+    if (!PUBLIC_PRESENTATION.has(filename)) res.set("X-Robots-Tag", "noindex");
     res.type("html").send('<!DOCTYPE html>\n<html lang="nb">\n' + html + "\n</html>");
   });
 }
 
-app.get("/pitch", (req, res) => sendPresentationPage(res, "pitch.html"));
+app.get("/kundereisen", (req, res) => sendPresentationPage(res, "kundereisen.html"));
+// Gammelt navn på kundereise-siden — behold som alias.
+app.get("/pitch", (req, res) => sendPresentationPage(res, "kundereisen.html"));
 app.get("/losningsskisse", (req, res) => sendPresentationPage(res, "losningsskisse.html"));
 app.get("/ui-endringer", (req, res) => sendPresentationPage(res, "ui-endringer.html"));
+app.get("/underlag-demo", (req, res) => sendPresentationPage(res, "underlag-demo.html"));
+app.get("/totalbilde", (req, res) => sendPresentationPage(res, "totalbilde.html"));
+app.get("/ui-total", (req, res) => sendPresentationPage(res, "ui-total.html"));
+app.get("/fargealternativer", (req, res) => sendPresentationPage(res, "fargealternativer.html"));
 
 // ---------- SHARE PAGE (public HTML shell; data endpoints gate on PIN) ------
 // Registered before the static/SPA fallback so /share/:id is never swallowed
@@ -100,6 +146,72 @@ app.get("/ui-endringer", (req, res) => sendPresentationPage(res, "ui-endringer.h
 app.get("/share/:id", (req, res) => {
   res.sendFile(path.join(__dirname, "share-page.html"));
 });
+
+// ---------- DEMO (public — kampanjekroken, inkorporering A4) ----------------
+// /demo?adresse=… viser saksunderlaget for en adresse uten innlogging.
+app.get("/demo", (req, res) => {
+  res.sendFile(path.join(__dirname, "demo-page.html"));
+});
+
+// ---------- OM/SALGSSIDE (public — Befar/Wenn-mønsteret) --------------------
+// Landingsside med verdiløfte, prisnivåer og prøv-selv-inngang til /demo.
+app.get("/om", (req, res) => {
+  res.sendFile(path.join(__dirname, "om-page.html"));
+});
+
+// ---------- LANSERINGSSIDER (public — FAQ, personvern, takk, robots, og) ----
+app.get("/faq", (req, res) => {
+  res.sendFile(path.join(__dirname, "faq-page.html"));
+});
+app.get("/personvern", (req, res) => {
+  res.sendFile(path.join(__dirname, "personvern-page.html"));
+});
+app.get("/takk", (req, res) => {
+  res.sendFile(path.join(__dirname, "takk-page.html"));
+});
+app.get("/vilkar", (req, res) => {
+  res.sendFile(path.join(__dirname, "vilkar-page.html"));
+});
+app.get("/robots.txt", require("./routes/publikum").robotsHandler);
+// Sitemap (SEO): kun de offentlige, indekserbare salgssidene.
+app.get("/sitemap.xml", (req, res) => {
+  const base =
+    process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
+  const paths = ["/om", "/demo", "/faq", "/personvern", "/vilkar", "/kundereisen"];
+  const urls = paths
+    .map((p) => `  <url><loc>${base}${p}</loc></url>`)
+    .join("\n");
+  res
+    .type("application/xml")
+    .send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`
+    );
+});
+app.get("/og-bilde.png", (req, res) => {
+  res.sendFile(path.join(__dirname, "assets/og-bilde.png"));
+});
+// Favicon (W9): egen merkevare-ikon i tre størrelser. /favicon.ico peker på
+// PNG-en — nettlesere godtar det, og vi slipper 401 fra token-vakten.
+app.get(["/favicon.ico", "/favicon.png"], (req, res) => {
+  res.sendFile(path.join(__dirname, "assets/favicon.png"));
+});
+app.get("/apple-touch-icon.png", (req, res) => {
+  res.sendFile(path.join(__dirname, "assets/apple-touch-icon.png"));
+});
+app.get("/apple-touch-icon-precomposed.png", (req, res) => {
+  res.sendFile(path.join(__dirname, "assets/apple-touch-icon.png"));
+});
+
+// Merkevare-404 for HTML-forespørsler som ikke traff noen rute; JSON-klienter
+// får fortsatt JSON. Registrert som funksjon så både SPA-fallback og halen
+// kan bruke den.
+function sendNotFound(req, res) {
+  const acceptsHtml = (req.get("accept") || "").includes("text/html");
+  if (req.method === "GET" && acceptsHtml && !req.path.startsWith("/api/")) {
+    return res.status(404).sendFile(path.join(__dirname, "404-page.html"));
+  }
+  res.status(404).json({ error: "Not found" });
+}
 
 if (fs.existsSync(STATIC_DIR)) {
   app.use(express.static(STATIC_DIR, { extensions: ["html"] }));
@@ -118,6 +230,17 @@ if (fs.existsSync(STATIC_DIR)) {
   console.log(`Serving static web app from ${STATIC_DIR}`);
 }
 
+// HTML-forespørsler som ikke traff noen side (og ikke ble tatt av SPA-
+// fallbacken over) skal ha merkevare-404 — ikke 401 fra token-vakten lenger
+// ned. API-stier går videre til sine egne feilsvar.
+app.use((req, res, next) => {
+  const acceptsHtml = (req.get("accept") || "").includes("text/html");
+  if (req.method === "GET" && acceptsHtml && !req.path.startsWith("/api/")) {
+    return sendNotFound(req, res);
+  }
+  next();
+});
+
 // ---------- MEDIA (own auth: header or ?token= query) ----------
 // Mounted before the global guard because media URLs are used directly in
 // <Image>/audio players, which cannot set custom headers.
@@ -128,6 +251,15 @@ app.use("/api/media", mediaRouter);
 // recipient endpoints gate on PIN + view token) ----------
 const shareRouter = require("./routes/share");
 app.use("/api/share", shareRouter);
+
+// ---------- PUBLIKUM (public: pilotskjema + cookiefri besøkstelling) --------
+app.use("/api", require("./routes/publikum"));
+
+// ---------- KARTFLIS-PROXY (public: <img> kan ikke sette headere) ----------
+app.get("/api/flis/:z/:y/:x", require("./routes/underlag").tileHandler);
+// Demo-underlaget er offentlig, men bak heavyLimiter (30 kall/15 min per IP)
+// så det ikke kan misbrukes som gratis oppslagsproxy.
+app.get("/api/demo/underlag", heavyLimiter, require("./routes/underlag").demoHandler);
 
 // ---------- ADMIN (own auth: x-admin-secret header) ----------
 // Mounted before the global tester-token guard so it uses its own middleware.
@@ -150,12 +282,36 @@ app.use(requireTesterToken);
 const projectsRouter = require("./routes/projects");
 app.use("/api/projects", projectsRouter);
 
+// ---------- SAKSUNDERLAG (PROTECTED, proxyer offentlige API-er) ----------
+const underlagRouter = require("./routes/underlag");
+app.use("/api/underlag", underlagRouter);
+
 // ---------- WHOAMI (PROTECTED) ----------
 app.get("/whoami", (req, res) => {
   res.json({ authorized: true });
 });
 
 // ---------- TRANSCRIPTION (Gemini) ----------
+// Norsk fagterm-hint (inkorporering A2): befaringstale er bokmål/dialekt med
+// byggteknisk vokabular som generiske STT-modeller feiltolker. Termlisten
+// styrer modellen mot riktig fagspråk; mål og romnavn skal gjengis ordrett.
+const TRANSCRIPTION_PROMPT = [
+  "Transkriber lydopptaket ordrett på norsk (bokmål).",
+  "Dette er tale fra en takstperson på skadebefaring i en bygning, ofte med",
+  "dialekt og bakgrunnsstøy. Vanlige fagord som skal gjenkjennes korrekt:",
+  "sluk, klemring, membran, smøremembran, svill, bunnsvill, toppsvill,",
+  "diffusjonssperre, dampsperre, vindsperre, fuktsperre, grunnmurspapp,",
+  "drenering, drensrør, kapillærbrytende, fuktskjolder, fuktmåling, hulltaking,",
+  "krypkjeller, kryperom, bjelkelag, tilfarergulv, påstøp, avretting,",
+  "våtromsnormen, våtsone, downlights, rørgjennomføring, rør-i-rør, fordelerskap,",
+  "vannbåren varme, varmekabler, flis, fug, silikonfug, gips, sponplate, OSB,",
+  "råte, muggsopp, svertesopp, saltutslag, kalkutfelling, betong, lettklinker,",
+  "leca, ringmur, radonsperre, takstein, undertak, sutak, lekt, sløyfe,",
+  "beslag, takrenne, nedløp, terrengfall, kotehøyde, gradvis, akutt.",
+  "Gjengi tall, måleverdier (f.eks. «78 prosent», «15 millimeter») og romnavn",
+  "ordrett. Returner kun de talte ordene, uten kommentarer.",
+].join(" ");
+
 app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
@@ -166,14 +322,14 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
     const base64 = buffer.toString("base64");
     const mimeType = req.file.mimetype || "audio/mp4";
 
-    const response = await fetch(`${GEMINI_BASE_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetchWithTimeout(GEMINI_BASE_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
       body: JSON.stringify({
         contents: [{
           parts: [
             { inline_data: { mime_type: mimeType, data: base64 } },
-            { text: "Transcribe this audio exactly as spoken. Return only the spoken words, no commentary." },
+            { text: TRANSCRIPTION_PROMPT },
           ],
         }],
       }),
@@ -220,9 +376,9 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
     const base64 = buffer.toString("base64");
     const mimeType = req.file.mimetype || "image/jpeg";
 
-    const response = await fetch(`${GEMINI_BASE_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetchWithTimeout(GEMINI_BASE_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
       body: JSON.stringify({
         contents: [{
           parts: [
@@ -277,25 +433,49 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
       });
     }
 
+    // S4/S3: verifiser at videoen tilhører denne testeren. (Media-GET er også
+    // skopet på token, så dette feiler dessuten tidlig med en tydelig melding.)
+    if (isDbEnabled()) {
+      const pool = getPool();
+      const ownsVideo = await pool.query(
+        "SELECT 1 FROM media WHERE id = $1 AND tester_token = $2",
+        [String(video_filename), token]
+      );
+      if (ownsVideo.rows.length === 0) {
+        return res.status(404).json({ status: "error", message: "Video not found for this tester." });
+      }
+    }
+
     // Build a URL the AI engine can use to download the video directly from
-    // this API server's media storage. Token is embedded as ?token= so the
-    // AI engine can fetch it with a plain HTTP GET (no custom headers needed).
+    // this API server's media storage. S10: vi signerer en kortlevd URL i stedet
+    // for å legge tester-tokenet i ?token= — tokenet forlater aldri serveren.
     const apiBaseUrl =
       process.env.API_BASE_URL ||
       `${req.protocol}://${req.get("host")}`;
-    const tokenParam = encodeURIComponent(req.testerToken || "");
-    const videoUrl = `${apiBaseUrl}/api/media/${video_filename}?token=${tokenParam}`;
+    const videoUrl = signedMediaUrl(apiBaseUrl, video_filename);
 
     // Resolve photo URIs to absolute URLs and strip empty fields so the AI
     // engine receives a clean, self-contained context object.
+    // A1: romnavnet følger notatet — rommet er konteksten som skiller
+    // «fukt ved sluk på badet» fra «fukt i boden», og styrer hvilket
+    // Byggforsk-delsett som er relevant.
+    const roomsById = new Map(
+      (Array.isArray(project?.rooms) ? project.rooms : [])
+        .filter((r) => r && r.id && r.name)
+        .map((r) => [String(r.id), String(r.name)])
+    );
     const enrichedNotes = (Array.isArray(project?.notes) ? project.notes : [])
       .map((note) => {
         const enrichedPhotos = (Array.isArray(note.photos) ? note.photos : [])
           .filter((p) => p && (p.uri || p.remoteId))
           .map((p) => {
-            const mediaId = p.remoteId ?? p.uri;
+            // Signert URL for opplastede foto (remoteId); lokale uri-er (ikke
+            // ennå synket) sendes som de er.
+            const uri = p.remoteId
+              ? signedMediaUrl(apiBaseUrl, p.remoteId)
+              : String(p.uri);
             return {
-              uri: `${apiBaseUrl}/api/media/${mediaId}?token=${tokenParam}`,
+              uri,
               ...(p.caption ? { caption: p.caption } : {}),
             };
           });
@@ -303,6 +483,9 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
         const enriched = {};
         if (note.text) enriched.text = note.text;
         if (note.transcription) enriched.transcription = note.transcription;
+        if (note.roomId && roomsById.has(String(note.roomId))) {
+          enriched.room = roomsById.get(String(note.roomId));
+        }
         if (enrichedPhotos.length > 0) enriched.photos = enrichedPhotos;
         return enriched;
       })
@@ -321,7 +504,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     // the DB) — the AI engine authenticates against its own TESTER_TOKEN env var,
     // so the backend needs AI_ENGINE_TOKEN set to that same value.
     const aiToken = process.env.AI_ENGINE_TOKEN || "";
-    const response = await fetch(`${aiEngineUrl}/api/report`, {
+    const response = await fetchWithTimeout(`${aiEngineUrl}/api/report`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -354,23 +537,39 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
 //
 // Proxies an export request to the AI engine so the mobile app can receive
 // a PDF or Word file directly without needing a Google account.
-// The :id segment is kept for semantic clarity and future ownership checks;
-// the doc_id is extracted from the ?doc_url query parameter.
+//
+// Eierskap (S4): AI-motorens /api/export eksporterer via en servicekonto som
+// kan nå et hvilket som helst dokument. Vi stoler derfor ALDRI på ?doc_url fra
+// klienten — dokument-ID-en avledes fra prosjektets lagrede reportUrl, slått opp
+// skopet på denne testerens token. Da kan ingen tester eksportere en annens
+// rapport ved å gjette/lekke en doc-URL.
 app.get("/api/projects/:id/download/:format", async (req, res) => {
-  const { format } = req.params;
+  const { id, format } = req.params;
   if (!["pdf", "docx"].includes(format)) {
     return res.status(400).json({ error: "format must be 'pdf' or 'docx'" });
   }
 
-  const docUrl = req.query.doc_url;
-  if (!docUrl) {
-    return res.status(400).json({ error: "doc_url query parameter is required" });
+  if (!isDbEnabled()) {
+    return res.status(503).json({ error: "Persistence not configured" });
   }
 
-  // Extract the document ID from the Google Docs URL
-  const match = String(docUrl).match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
+  const pool = getPool();
+  const owned = await pool.query(
+    "SELECT data FROM projects WHERE id = $1 AND tester_token = $2",
+    [String(id), req.testerToken]
+  );
+  if (owned.rows.length === 0) {
+    return res.status(404).json({ error: "Project not found" });
+  }
+
+  const reportUrl = (owned.rows[0].data || {}).reportUrl;
+  const match = String(reportUrl || "").match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
   if (!match) {
-    return res.status(400).json({ error: "Invalid Google Doc URL" });
+    return res.status(409).json({
+      error: "Report not generated yet",
+      message:
+        "Generer og synkroniser rapporten før nedlasting — ingen lagret rapportlenke for dette prosjektet.",
+    });
   }
   const docId = match[1];
 
@@ -381,7 +580,7 @@ app.get("/api/projects/:id/download/:format", async (req, res) => {
 
   try {
     const aiToken = process.env.AI_ENGINE_TOKEN || "";
-    const aiRes = await fetch(
+    const aiRes = await fetchWithTimeout(
       `${aiEngineUrl}/api/export/${encodeURIComponent(docId)}?format=${format}`,
       { headers: { "x-tester-token": aiToken } }
     );
@@ -407,6 +606,30 @@ app.get("/api/projects/:id/download/:format", async (req, res) => {
     console.error("Backend /download error:", sanitizeError(err));
     res.status(500).json({ error: "Server error" });
   }
+});
+
+// ---------- 404 (alt som ikke traff noen rute) ----------
+app.use(sendNotFound);
+
+// ---------- GLOBAL FEILHÅNDTERER (S17) ----------
+// Uten denne faller JSON-parsefeil (uautentisert nåbar) og multer-feil til
+// Express' innebygde handler, som legger err.stack (med serverfilstier) i
+// responskroppen når NODE_ENV ikke er "production". Vi returnerer alltid en
+// generisk melding og logger detaljene serverside.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  console.error("Unhandled error:", req.method, req.path, sanitizeError(err));
+  if (err && err.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "Invalid JSON" });
+  }
+  if (err && err.type === "entity.too.large") {
+    return res.status(413).json({ error: "Payload too large" });
+  }
+  if (err && err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({ error: "File too large", code: "FILE_TOO_LARGE" });
+  }
+  res.status(err && err.status ? err.status : 500).json({ error: "Server error" });
 });
 
 // ---------- ORPHANED MEDIA CLEANUP ----------

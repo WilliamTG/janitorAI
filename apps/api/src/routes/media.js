@@ -18,6 +18,9 @@ const {
   isCritical,
   CRITICAL_PERCENT,
 } = require("../diskSpace");
+const { safeMimeForExt, applySafeMediaHeaders } = require("../mediaTypes");
+const { heavyLimiter } = require("../middleware/rateLimiters");
+const { verifyMedia } = require("../mediaSign");
 
 const router = express.Router();
 
@@ -43,6 +46,17 @@ function extractToken(req) {
 }
 
 async function requireTokenHeaderOrQuery(req, res, next) {
+  // S10: en gyldig kortlevd signatur autoriserer henting av ÉN bestemt medie-ID
+  // (GET /:id) uten token — brukt av AI-motoren så tester-tokenet aldri legges i
+  // URL-en. Signaturen er bundet til medie-ID-en, så den gir ikke bredere tilgang.
+  if (req.method === "GET") {
+    const signedId = decodeURIComponent(req.path.replace(/^\//, ""));
+    if (signedId && verifyMedia(signedId, req.query.exp, req.query.sig)) {
+      req.signedMediaId = signedId;
+      return next();
+    }
+  }
+
   const providedToken = extractToken(req);
 
   if (!providedToken) {
@@ -116,9 +130,14 @@ const storage = multer.diskStorage({
   },
 });
 
+// Én sannhet for opplastingstaket, så feilmelding og faktisk grense aldri
+// spriker (video kan være stor; 200 MB holder Render-RAM trygt).
+const MAX_UPLOAD_MB = 200;
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
 const upload = multer({
   storage,
-  limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB cap
+  limits: { fileSize: MAX_UPLOAD_BYTES },
 });
 
 async function rejectWhenDiskFull(req, res, next) {
@@ -156,7 +175,7 @@ function sha256OfFile(filePath) {
   });
 }
 
-router.post("/", rejectWhenDiskFull, upload.single("file"), async (req, res) => {
+router.post("/", heavyLimiter, rejectWhenDiskFull, upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
   }
@@ -169,6 +188,27 @@ router.post("/", rejectWhenDiskFull, upload.single("file"), async (req, res) => 
     const kind = req.body && req.body.kind ? String(req.body.kind) : null;
     const sha256 = await sha256OfFile(filePath);
 
+    // S3: hindre at tester B planter media under tester A sitt prosjekt. Vi
+    // avviser bare når prosjektet FINNES og eies av en annen tester — media
+    // lastes ofte opp før prosjektet er synket til serveren, så et prosjekt som
+    // ikke finnes ennå er legitimt (mediet knyttes uansett til denne testerens
+    // token, og delingslisten er skopet på token).
+    if (projectId) {
+      const pool = getPool();
+      const existing = await pool.query(
+        "SELECT tester_token FROM projects WHERE id = $1",
+        [projectId]
+      );
+      if (existing.rows.length > 0 && existing.rows[0].tester_token !== req.testerToken) {
+        fs.unlink(filePath, () => {});
+        return res.status(403).json({ error: "Project belongs to another tester" });
+      }
+    }
+
+    // S7: lagre en MIME-type avledet fra den (whitelistede) filendelsen — aldri
+    // klientens Content-Type, som kunne vært text/html.
+    const safeMime = safeMimeForExt(path.extname(filePath));
+
     const pool = getPool();
     await pool.query(
       `INSERT INTO media (id, project_id, kind, mime_type, original_name, size_bytes, file_path, tester_token, sha256)
@@ -177,7 +217,7 @@ router.post("/", rejectWhenDiskFull, upload.single("file"), async (req, res) => 
         id,
         projectId,
         kind,
-        req.file.mimetype || null,
+        safeMime,
         req.file.originalname || null,
         req.file.size || null,
         filePath,
@@ -196,33 +236,41 @@ router.post("/", rejectWhenDiskFull, upload.single("file"), async (req, res) => 
 
 // ── Multer error handler ─────────────────────────────────────────────────────
 // Must be a 4-arg Express error handler. Catches multer's LIMIT_FILE_SIZE error
-// (thrown when the uploaded file exceeds the 50 MB cap) and returns a structured
-// 413 response so the client can show a specific "file too large" banner instead
-// of treating it as a generic upload failure.
+// (thrown when the uploaded file exceeds the cap) and returns a structured 413
+// response so the client can show a specific "file too large" banner instead of
+// treating it as a generic upload failure.
 router.use((err, req, res, next) => {
   if (err && err.code === "LIMIT_FILE_SIZE") {
     return res.status(413).json({
-      error:
-        "File is too large. The maximum upload size is 50 MB. Please trim your video or export at a lower resolution.",
+      error: `File is too large. The maximum upload size is ${MAX_UPLOAD_MB} MB. Please trim your video or export at a lower resolution.`,
       code: "FILE_TOO_LARGE",
-      maxBytes: 50 * 1024 * 1024,
+      maxBytes: MAX_UPLOAD_BYTES,
     });
   }
   next(err);
 });
 
 // ── Download / stream ─────────────────────────────────────────────────────────
-// The media ID is a UUID (unguessable); the route is already auth-gated above.
-// We intentionally do not scope by tester_token here so the AI engine can
-// fetch any media file it has the ID for (it receives the URL from the API).
+// The media ID is a UUID (unguessable) AND the query is scoped to the caller's
+// tester_token (S3): a tester can only stream their own media. The AI engine
+// fetches with the requesting tester's own token (see /report/google-doc), so
+// legitimate own-media fetches still work while cross-tester access 404-er.
 router.get("/:id", async (req, res) => {
   try {
     const id = String(req.params.id);
     const pool = getPool();
-    const result = await pool.query(
-      "SELECT file_path, mime_type FROM media WHERE id = $1",
-      [id]
-    );
+    // Signert forespørsel (S10): signaturen autoriserer nettopp denne ID-en, så
+    // vi slår opp på id alene. Ellers krever vi at mediet eies av testerens token.
+    const result =
+      req.signedMediaId === id
+        ? await pool.query(
+            "SELECT file_path, mime_type FROM media WHERE id = $1",
+            [id]
+          )
+        : await pool.query(
+            "SELECT file_path, mime_type FROM media WHERE id = $1 AND tester_token = $2",
+            [id, req.testerToken]
+          );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Not found" });
@@ -234,7 +282,8 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ error: "File missing on server" });
     }
 
-    if (mimeType) res.type(mimeType);
+    // S7: server alltid med avledet, whitelistet MIME + nosniff.
+    applySafeMediaHeaders(res, mimeType);
     res.set("Cache-Control", "private, max-age=31536000, immutable");
     res.sendFile(path.resolve(filePath));
   } catch (err) {

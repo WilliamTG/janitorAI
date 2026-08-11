@@ -1,10 +1,10 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>DocrAI — Løsningsskisse</title>
+<title>DocrAI – Løsningsskisse</title>
 <style>
   :root {
     --paper: #FFFFFF;
-    --surface: #F4F7FA;
+    --surface: #F4F3EF;
     --ink: #16202B;
     --muted: #5C6B7A;
     --border: #DDE4EB;
@@ -31,7 +31,7 @@
     }
   }
   :root[data-theme="light"] {
-    --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
+    --paper: #FFFFFF; --surface: #F4F3EF; --ink: #16202B; --muted: #5C6B7A;
     --border: #DDE4EB; --accent: #3D5A80; --accent-fill: #3D5A80;
     --accent-pale: #E8F0F7; --amber: #A8681F; --amber-pale: #F7EEDD; --ok: #2E7D4F;
   }
@@ -168,7 +168,7 @@
     <h1>Fra befaringsvideo til forsikringsverdig skaderapport</h1>
     <p class="lede">
       Markedskartleggingen viser at <strong>ingen nordisk aktør</strong> leverer forensisk
-      skaderapport med norsk Byggforsk-forankring — befaringsverktøy, fuktsensorer og insurtech
+      skaderapport med norsk Byggforsk-forankring – befaringsverktøy, fuktsensorer og insurtech
       nærmer seg fra hver sin kant, men skjæringspunktet står åpent. Denne skissen setter sammen
       innspillene fra markedsanalysen, produktbackloggen og forskningsgrunnlaget til <strong>én
       løsning</strong>: hva som bygges, hvorfor den kan stoles på, og i hvilken rekkefølge.
@@ -184,7 +184,7 @@
     <p>
       Fem trinn fra kjeller til oppgjør. Alt AI-arbeid skjer innenfor EU/EØS (B12), hver
       bevispåstand er låst til et konkret bilde med tidsstempel, og <strong>takstmannen godkjenner
-      alltid</strong> før noe deles — det er både produktkrav og forskningsfunn. Rettelsene
+      alltid</strong> før noe deles – det er både produktkrav og forskningsfunn. Rettelsene
       takstmannen gjør, mates tilbake som evaluerings- og treningsdata og bygger datafortrinnet.
     </p>
     <figure>
@@ -229,7 +229,7 @@
         <text x="249" y="202" class="ds">forslag: vann · brann · fukt · råte (B8)</text>
         <rect x="235" y="226" width="330" height="54" class="db"/>
         <text x="249" y="248" class="dt">Bevisuttrekk</text>
-        <text x="249" y="266" class="ds">bilde + tidsstempel på millisekund — talen alene teller ikke</text>
+        <text x="249" y="266" class="ds">bilde + tidsstempel på millisekund – talen alene teller ikke</text>
         <rect x="235" y="290" width="330" height="54" class="db-accent"/>
         <text x="249" y="312" class="dt">Byggforsk-RAG</text>
         <text x="249" y="330" class="ds">hent anvisning → siter kun hentet tekst → verifiser punktnr.</text>
@@ -295,7 +295,7 @@
   <section>
     <div class="sec-head">
       <span class="eyebrow">02</span>
-      <h2>Saksunderlaget — ferdig før befaringen</h2>
+      <h2>Saksunderlaget – ferdig før befaringen</h2>
     </div>
     <p>
       Flyten over starter egentlig ett trinn tidligere: når adressen legges inn, hentes underlaget
@@ -303,9 +303,14 @@
       Byggforsk-versjon</strong> som gjaldt, nedbørshistorikken rundt skadedato peker mot
       <strong>akutt eller gradvis</strong>, og risikokartene gir konteksten forsikringen trenger.
       Kjernekildene er åpne (Kartverket uten nøkkel, NVE som åpne kartlag, MET med gratis
-      registrering); aggregatorer som Nordeca Insight, Norkart og Ambita samler de samme kildene
-      kommersielt med avtaler og SLA. At dette laget er verdifullt er globalt bevist — Moody's
-      kjøpte CAPE Analytics nettopp for adressespesifikk risikoinnsikt før noen drar ut.
+      registrering). Over datalaget ligger <strong>dokumentlaget</strong>, som krever avtale:
+      godkjente plantegninger fra kommunenes byggesaksarkiv (distribuert via Ambita Infoland,
+      Norkart e-Torg og ePlassen – produktet «Godkjente bygningstegninger»), og boligens
+      dokumenthistorikk fra Boligmappa (våtromsarbeid, elektro, tidligere utbedringer – med
+      boligeiers samtykke). Plantegningen gjør rom til organiserende enhet for bevisene, og
+      den godkjente rapporten kan <strong>arkiveres tilbake i Boligmappa</strong> på boligen.
+      At dette laget er verdifullt er globalt bevist – Moody's kjøpte CAPE Analytics nettopp
+      for adressespesifikk innsikt før noen drar ut.
     </p>
     <figure>
       <div class="fig-scroll">
@@ -324,7 +329,7 @@
         <rect x="10" y="178" width="190" height="74" class="db-accent"/>
         <text x="26" y="204" class="dt">Adressen legges inn</text>
         <text x="26" y="224" class="ds">Solbergveien 14, Rykkinn</text>
-        <text x="26" y="240" class="ds">— alt under hentes automatisk</text>
+        <text x="26" y="240" class="ds">– alt under hentes automatisk</text>
 
         <!-- buss inn -->
         <line x1="200" y1="215" x2="235" y2="215" class="darr"/>
@@ -339,24 +344,24 @@
         <text x="274" y="28" class="dnum">OFFENTLIGE API-ER</text>
         <rect x="270" y="40" width="300" height="48" class="db"/>
         <text x="284" y="60" class="dt">Kartverket adresse-API</text>
-        <text x="284" y="77" class="ds">koordinater · gnr/bnr — åpent, uten nøkkel</text>
+        <text x="284" y="77" class="ds">koordinater · gnr/bnr – åpent, uten nøkkel</text>
         <rect x="270" y="104" width="300" height="48" class="db"/>
         <text x="284" y="124" class="dt">Matrikkelen</text>
         <text x="284" y="141" class="ds">byggeår · bygningstype · areal</text>
         <rect x="270" y="168" width="300" height="48" class="db"/>
         <text x="284" y="188" class="dt">NVE aktsomhetskart</text>
-        <text x="284" y="205" class="ds">flom · overvann · kvikkleire — åpne kartlag</text>
+        <text x="284" y="205" class="ds">flom · overvann · kvikkleire – åpne kartlag</text>
         <rect x="270" y="232" width="300" height="48" class="db"/>
         <text x="284" y="252" class="dt">MET Frost</text>
-        <text x="284" y="269" class="ds">nedbør rundt skadedato — gratis nøkkel</text>
+        <text x="284" y="269" class="ds">nedbør rundt skadedato – gratis nøkkel</text>
         <rect x="270" y="296" width="300" height="48" class="db"/>
         <text x="284" y="316" class="dt">Norge i bilder</text>
-        <text x="284" y="333" class="ds">flyfoto av eiendommen — åpent</text>
+        <text x="284" y="333" class="ds">flyfoto av eiendommen – åpent</text>
 
         <!-- aggregator-spor -->
         <rect x="270" y="368" width="300" height="50" class="db-dash"/>
-        <text x="284" y="389" class="dt">Aggregator-spor</text>
-        <text x="284" y="406" class="ds">Nordeca Insight · Norkart · Ambita — samme kilder, med avtale</text>
+        <text x="284" y="389" class="dt">Avtale-spor (dokumentlaget)</text>
+        <text x="284" y="406" class="ds">Boligmappa · byggesaksarkiv (Ambita/Norkart) · matrikkel</text>
         <polyline points="570,393 605,393 605,344" class="darr-dash"/>
 
         <!-- buss ut -->
@@ -369,7 +374,7 @@
         <line x1="605" y1="192" x2="668" y2="192" class="darr" marker-end="url(#u-ink)"/>
 
         <!-- sakskortet -->
-        <text x="679" y="48" class="dnum">SAKSKORTET — FERDIG FØR BEFARING</text>
+        <text x="679" y="48" class="dnum">SAKSKORTET – FERDIG FØR BEFARING</text>
         <rect x="675" y="60" width="415" height="272" class="db-solid"/>
         <text x="693" y="88" class="dt-w">Solbergveien 14, Rykkinn</text>
         <text x="693" y="114" class="ds-w">Prosjektnavn = adressen (løser B17)</text>
@@ -377,19 +382,20 @@
         <text x="693" y="158" class="ds-w">Flomsone-flagg → risikokontekst i rapporten</text>
         <text x="693" y="180" class="ds-w">120 mm nedbør 19.–20. juli → støtter akutt hendelse</text>
         <text x="693" y="202" class="ds-w">Kart der bevisene plottes med geo-taggene (B9)</text>
-        <text x="693" y="224" class="ds-w">Rapportskjemaet auto-utfylt — mindre tasting i felt</text>
+        <text x="693" y="224" class="ds-w">Rapportskjemaet auto-utfylt – mindre tasting i felt</text>
         <text x="693" y="260" class="ds-w">Takstpersonen vet hva som venter</text>
-        <text x="693" y="278" class="ds-w">— før bilen har forlatt kontoret.</text>
+        <text x="693" y="278" class="ds-w">– før bilen har forlatt kontoret.</text>
 
         <!-- inn i befaringen -->
         <line x1="880" y1="332" x2="880" y2="392" class="darr-dash" marker-end="url(#u-mut)"/>
-        <text x="892" y="368" class="dl">inn i befaringsflyten — trinn 1–5 over</text>
+        <text x="892" y="368" class="dl">inn i befaringsflyten – trinn 1–5 over</text>
       </svg>
       </div>
       <figcaption>
-        Ett adressesøk fyller saken: de fem åpne kildene dekker kjernebehovet uten lisenskost,
-        mens aggregator-sporet (stiplet) er veien til full matrikkel og plantegninger med avtale.
-        Sakskortet mater både takstpersonens forberedelse og AI-pipelinens Byggforsk-oppslag.
+        Ett adressesøk fyller saken: de fem åpne kildene dekker kjernebehovet uten lisenskost.
+        Avtale-sporet (stiplet) er dokumentlaget: plantegninger fra byggesaksarkivet, boligens
+        historikk fra Boligmappa og full matrikkel – og retur-veien der den godkjente rapporten
+        arkiveres på boligen i Boligmappa.
       </figcaption>
     </figure>
   </section>
@@ -401,7 +407,7 @@
       <h2>Tre forskningsgrep som gjør den til å stole på</h2>
     </div>
     <p>
-      Forskningsgrunnlaget peker på tre risikoer — og tre mottiltak som allerede ligger i
+      Forskningsgrunnlaget peker på tre risikoer – og tre mottiltak som allerede ligger i
       backloggen. Dette er ikke polish: det er det som skiller et forsikringsverdig verktøy fra
       en demo, og det som gir Innovasjon Norge-søknaden innovasjonshøyde.
     </p>
@@ -413,7 +419,7 @@
           Så stor andel av kilde&shy;siteringer er oppdiktet selv <strong>med</strong> RAG, når
           oppslaget er svakt. Derfor: hent anvisningen, siter kun fra hentet tekst, og
           <strong>verifiser at punktnummeret finnes</strong> før det vises. Start med et rent
-          delsett — våtrom/vann — der Byggforsk er godt strukturert.
+          delsett – våtrom/vann – der Byggforsk er godt strukturert.
         </p>
         <div class="tagrow"><span class="tag hot">SINTEF-lisens</span><span class="tag">arXiv 2606.00898</span></div>
       </div>
@@ -421,16 +427,16 @@
         <span class="stat">Bilde &gt; tale</span>
         <h3>Bevis låst til bilde + tidsstempel</h3>
         <p>
-          Videomodeller «jukser» ofte ved å svare fra lyden alene — takstmannens tale kan bli til
+          Videomodeller «jukser» ofte ved å svare fra lyden alene – takstmannens tale kan bli til
           en skade modellen aldri har sett. Hver bevispåstand må derfor forankres i et
           <strong>konkret bilde med tidsstempel</strong>, og evalsettet bygges av ekte, mørke
-          kjelleropptak — ikke rene demovideoer.
+          kjelleropptak – ikke rene demovideoer.
         </p>
         <div class="tagrow"><span class="tag hot">B9</span><span class="tag hot">B11</span><span class="tag">Video-MME, CVPR 2025</span></div>
       </div>
       <div class="card">
         <span class="stat">Målt kvalitet</span>
-        <h3>Menneske i løkken — og bevis for det</h3>
+        <h3>Menneske i løkken – og bevis for det</h3>
         <p>
           Menneskelig verifisering pluss validert kilde er det som gjør AI forsvarlig i
           høyrisiko-domener. Godkjenningen vises <strong>i selve rapporten</strong>, og en fast
@@ -446,17 +452,18 @@
   <section>
     <div class="sec-head">
       <span class="eyebrow">04</span>
-      <h2>Posisjonen: tre fronter — ingen når inn</h2>
+      <h2>Posisjonen: tre fronter – ingen når inn</h2>
     </div>
     <p>
       Feltet nærmer seg DocrAIs område fra tre kanter, men hver front stopper før
-      skjæringspunktet: Wenn eier håndverkerens tilbudsfase, sensorene virker <strong>før</strong>
-      skaden, og insurtech automatiserer de enkle sakene. Dokumentasjonen av komplekse
-      bygningsskader står åpen — hvis fagforankringen sikres først.
+      skjæringspunktet: Wenn eier håndverkerens tilbudsfase, Befar strukturerer bolighandelens
+      NS 3600-rapport, sensorene virker <strong>før</strong> skaden, og insurtech automatiserer
+      de enkle sakene. Dokumentasjonen av komplekse bygningsskader – årsak, akutt/gradvis,
+      beviskjede – står åpen, hvis fagforankringen sikres først.
     </p>
     <figure>
       <div class="fig-scroll">
-      <svg viewBox="0 0 900 370" role="img" aria-label="Posisjonskart: befaringsverktøy, fuktsensorer og insurtech peker mot midten, men pilene stopper før DocrAIs felt — forensisk skaderapport med Byggforsk-forankring. SINTEF-lisensen er koblet på som forutsetning.">
+      <svg viewBox="0 0 900 370" role="img" aria-label="Posisjonskart: befaringsverktøy, fuktsensorer og insurtech peker mot midten, men pilene stopper før DocrAIs felt – forensisk skaderapport med Byggforsk-forankring. SINTEF-lisensen er koblet på som forutsetning.">
         <defs>
           <marker id="p-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" class="mk-mut"/>
@@ -471,12 +478,12 @@
         <text x="346" y="42" class="dt">Fuktsensorer</text>
         <text x="346" y="60" class="ds">Tector · 7Analytics · Smartvatten</text>
         <line x1="450" y1="76" x2="450" y2="122" class="darr-dash" marker-end="url(#p-mut)"/>
-        <text x="462" y="106" class="dl">varsler før skaden — partner</text>
+        <text x="462" y="106" class="dl">varsler før skaden – partner</text>
 
         <!-- venstre: befaringsverktøy -->
         <rect x="20" y="156" width="220" height="58" class="db"/>
         <text x="36" y="180" class="dt">Befaringsverktøy</text>
-        <text x="36" y="198" class="ds">Wenn · Hosta/Yembo · Zanus</text>
+        <text x="36" y="198" class="ds">Wenn · Befar · Hosta/Yembo</text>
         <line x1="240" y1="185" x2="308" y2="185" class="darr-dash" marker-end="url(#p-mut)"/>
         <text x="274" y="148" class="dl" text-anchor="middle">eier tilbudsfasen</text>
 
@@ -489,10 +496,10 @@
 
         <!-- midten: DocrAI -->
         <rect x="320" y="132" width="260" height="106" class="db-solid"/>
-        <text x="338" y="160" class="dt-w">DocrAI — den åpne flekken</text>
+        <text x="338" y="160" class="dt-w">DocrAI – den åpne flekken</text>
         <text x="338" y="182" class="ds-w">Forensisk rapport for komplekse</text>
         <text x="338" y="198" class="ds-w">bygningsskader: video → årsak,</text>
-        <text x="338" y="214" class="ds-w">akutt/gradvis, Byggforsk-sitat —</text>
+        <text x="338" y="214" class="ds-w">akutt/gradvis, Byggforsk-sitat –</text>
         <text x="338" y="230" class="ds-w">for norsk takst og forsikring</text>
 
         <!-- høyre: SINTEF -->
@@ -506,7 +513,7 @@
       <figcaption>
         Stiplede piler stopper før midten: hver front dekker sin del, ingen dekker
         skjæringspunktet. Den heltrukne pilen fra SINTEF er forutsetningen som avgjør om
-        fagforankringen blir DocrAIs — eller en konkurrents.
+        fagforankringen blir DocrAIs – eller en konkurrents.
       </figcaption>
     </figure>
   </section>
@@ -539,7 +546,7 @@
       <div class="sprint">
         <span class="s-num">Sprint 3</span>
         <h3>Differensiering</h3>
-        <p>Auto-skadetype, geo-tag, hash-signert bevis, PIN-lenker — pluss evalsett med 30–50 ekte Ocab-saker.</p>
+        <p>Auto-skadetype, geo-tag, hash-signert bevis, PIN-lenker – pluss evalsett med 30–50 ekte Ocab-saker.</p>
         <div class="tagrow"><span class="tag">B8</span><span class="tag">B9</span><span class="tag">B10</span><span class="tag">B11</span><span class="tag">B16</span></div>
         <p class="goal"><b>Mål:</b> beviskjeden er verifiserbar og målt</p>
       </div>
@@ -550,20 +557,26 @@
         <div class="tagrow"><span class="tag">B12</span><span class="tag">B17–B20</span></div>
         <p class="goal"><b>Mål:</b> klar for pilotsalg mot takst og forsikring</p>
       </div>
-    </div>
+      <div class="sprint">
+        <span class="s-num">Levert · aug 2026</span>
+        <h3>Saksunderlag + tillitslag</h3>
+        <p>Adressesøk med kart og sju åpne datalag, godkjenningsstempel med serverhåndhevet delingsport, norsk fagterm-transkripsjon, tid-til-godkjent-metrikk, offentlig demo (/demo?adresse=…) og salgsside med prisnivåer (/om).</p>
+        <div class="tagrow"><span class="tag">Kartverket</span><span class="tag">MET</span><span class="tag">Godkjenning</span><span class="tag">Demo</span><span class="tag">/om</span></div>
+        <p class="goal"><b>Levert:</b> saken er utfylt før avreise – og ingenting deles ugodkjent</p>
+      </div>
       <div class="sprint">
         <span class="s-num">Neste</span>
-        <h3>Saksunderlag</h3>
-        <p>Adressesøk med kart, byggeår fra matrikkelen, NVE-risikolag og nedbørshistorikk rundt skadedato.</p>
-        <div class="tagrow"><span class="tag hot">B17</span><span class="tag">Kartverket</span><span class="tag">NVE</span><span class="tag">MET</span></div>
-        <p class="goal"><b>Mål:</b> saken er ferdig utfylt før takstpersonen kjører</p>
+        <h3>Pilotmotoren</h3>
+        <p>Versjonslagret AI-utkast med felt-diff redigert i ferdig rapportvisning, romløype med adaptiv sjekkliste, in4mo-eksport – mønstrene fra Befar/Encircle-analysene.</p>
+        <div class="tagrow"><span class="tag hot">A5</span><span class="tag">A1</span><span class="tag">B1-eksport</span><span class="tag">SINTEF</span></div>
+        <p class="goal"><b>Mål:</b> pilot som måler seg selv – diff, tid og leveranse</p>
       </div>
     </div>
     <div class="callout">
       <div class="bar"></div>
       <p>
         <strong>Kritisk sti, løpende:</strong> avklar SINTEF-lisensen (Byggforsk) tidlig. Den er
-        forutsetningen for hele kildeforankringen — RAG-en i trinn 2, siteringsscoren i evalsettet
+        forutsetningen for hele kildeforankringen – RAG-en i trinn 2, siteringsscoren i evalsettet
         og den hvite flekken i markedet hviler alle på den.
       </p>
     </div>
@@ -579,25 +592,27 @@
       <div class="card">
         <h3><span class="dot red"></span>Overvåk</h3>
         <ul>
-          <li><b>Wenn Property</b> — nærmest; følg bevegelsen mot skadesegmentet (Reco er alt kunde)</li>
-          <li><b>Hosta / Yembo</b> — video-først for forsikring, kan gå inn i Norden</li>
-          <li><b>Forsikringens interne AI-team</b> — bygger selv der de kan</li>
+          <li><b>Wenn Property</b> – nærmest; 5,0★ i App Store og brukere som ber om «AI-agent»-kobling. LiDAR-skann → 3D med mengder, tale → rapport per rom og fag, PIN-deling; 350/999 kr/mnd uten binding (validerer vårt prispunkt) og MesterAlliansen-distribusjon. Følg bevegelsen mot skadesegmentet (Reco er alt kunde)</li>
+          <li><b>Befar</b> – fagfolk-bygget NS 3600-app for bolighandel (500 kr/rapport + 2 000 kr/år standardlisens); regelverk-i-felt-UX i toppklasse, og brukeravtalen røper et AI-lag på vei. Kan ekspandere mot skade – og NS 3600:2025 krever nå årsak/konsekvens/tiltak for TG2/TG3, altså vår motorstruktur</li>
+          <li><b>Hosta / Yembo</b> – video-først for forsikring, kan gå inn i Norden</li>
+          <li><b>Forsikringens interne AI-team</b> – bygger selv der de kan</li>
         </ul>
       </div>
       <div class="card">
         <h3><span class="dot green"></span>Alliér</h3>
         <ul>
-          <li><b>Tector</b> — sensor varsler → DocrAI dokumenterer: den mest åpenbare kjeden</li>
-          <li><b>SINTEF</b> — fagforankring og validert treningsdata (Kiwa-mønsteret)</li>
-          <li><b>In4mo / Propcloud</b> — distribusjon og data inn i skadeflyten</li>
+          <li><b>Tector</b> – sensor varsler → DocrAI dokumenterer: den mest åpenbare kjeden</li>
+          <li><b>SINTEF</b> – fagforankring og validert treningsdata (Kiwa-mønsteret)</li>
+          <li><b>In4mo (Solera)</b> – eier skadeflyten: oppdrag inn og rapport ut går via dem. Feltappen (Task Reporter, 1,9★) er samtidig DocrAIs sterkeste brukerargument: anmeldelsene klager på treghet, krasj, uauffinnbar chat, «tegneprogrammet» for planskisser og feil som har stått urettet i ti år – fra brukere bundet av If og Frende</li>
+          <li><b>Propcloud</b> – eiendomsdata inn i skadeflyten</li>
         </ul>
       </div>
       <div class="card">
         <h3><span class="dot blue"></span>Selg til</h3>
         <ul>
-          <li><b>Takstfolk og skadeteknikere</b> — brukeren i felt (Ocab-saker som evalsett)</li>
-          <li><b>Forsikringsselskapene</b> — sluttmarkedet; de kjøper heller dokumentasjon enn å bygge den</li>
-          <li><b>Markedet er utdannet</b> — av Wenn og insurtech; nisjen står fortsatt åpen</li>
+          <li><b>Takstfolk og skadeteknikere</b> – brukeren i felt (Ocab-saker som evalsett)</li>
+          <li><b>Forsikringsselskapene</b> – sluttmarkedet; de kjøper heller dokumentasjon enn å bygge den</li>
+          <li><b>Markedet er utdannet</b> – av Wenn og insurtech; nisjen står fortsatt åpen</li>
         </ul>
       </div>
     </div>
