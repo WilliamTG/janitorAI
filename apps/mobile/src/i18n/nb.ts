@@ -25,6 +25,14 @@ export const nb = {
     guide: 'Guide',
   },
 
+  notFound: {
+    headerTitle: 'Ikke funnet',
+    code: '404 — ikke funnet',
+    title: 'Denne siden finnes ikke.',
+    hint: 'Lenken kan være skrevet feil, eller siden er flyttet.',
+    goHome: 'Til prosjektene',
+  },
+
   sync: {
     idle: 'Skysynk',
     syncing: 'Synkroniserer …',
@@ -71,6 +79,7 @@ export const nb = {
     nameFromAddressHint: 'Tips: bruk adressen som prosjektnavn',
     useAddress: 'Bruk adressen',
     projectMenu: 'Prosjektmeny',
+    timeToApproved: (duration: string) => `Befaring → godkjent rapport: ${duration}`,
   },
 
   detail: {
@@ -122,6 +131,39 @@ export const nb = {
     unauthorized: 'Tilgangskoden er ugyldig eller utløpt.',
     details: 'Rapportdetaljer',
     approvedBy: 'Godkjent av takstperson',
+    draftBadge: 'AI-utkast — ikke godkjent',
+    approvalHint:
+      'AI-en har laget et utkast. Du står faglig ansvarlig for innholdet — les gjennom rapporten, kontroller årsak og om skaden er akutt eller gradvis, og godkjenn før deling.',
+    approve: 'Godkjenn rapport',
+    approveConfirmTitle: 'Godkjenn rapporten?',
+    approveConfirmMessage:
+      'Du bekrefter at du har lest rapporten og faglig vurdert innholdet, inkludert årsak og om skaden er akutt eller gradvis. Godkjenningen stemples i rapporten med navn og tidspunkt.',
+    approvedToast: 'Rapporten er godkjent',
+    approvedStamp: (name: string, when: string) => `Godkjent av ${name} · ${when}`,
+    withdraw: 'Trekk tilbake godkjenningen',
+    withdrawConfirmTitle: 'Trekke tilbake godkjenningen?',
+    withdrawConfirmMessage:
+      'Rapporten markeres som utkast igjen, og nye delingslenker kan ikke lages før den godkjennes på nytt.',
+    withdrawnToast: 'Godkjenningen er trukket tilbake',
+    approverNameMissing: 'Legg inn navnet ditt under Guide → Takstperson før du godkjenner.',
+    editTitle: 'Rapporten — rediger direkte',
+    editHint:
+      'Slik mottakeren får den. Trykk i et felt og rett rett i rapporten — AI-utkastet arkiveres uendret, og endringene dine merkes.',
+    draftVersionLine: (when: string) => `AI-utkast · ${when} — arkiveres uendret`,
+    fieldChanged: 'endret',
+    fieldArea: 'Skadested',
+    fieldSource: 'Kilde',
+    fieldCause: 'Årsak',
+    fieldDescription: 'Faglig beskrivelse',
+    fieldExtent: 'Omfang',
+    fieldRepairs: 'Tiltak',
+    editClearedApproval: 'Endringen fjernet godkjenningen — les gjennom og godkjenn på nytt.',
+    changesSummary: (n: number) =>
+      n === 0
+        ? 'Ingen felter endret fra AI-utkastet ennå.'
+        : n === 1
+          ? 'Ett felt endret fra AI-utkastet.'
+          : `${n} felter endret fra AI-utkastet.`,
   },
 
   underlag: {
@@ -162,6 +204,20 @@ export const nb = {
     municipalHint: 'Byggesaks- og VA-innsyn varierer per kommune — sjekk kommunens innsynsportal.',
   },
 
+  rooms: {
+    all: 'Alle',
+    add: '+ Rom',
+    addTitle: 'Nytt rom',
+    placeholder: 'F.eks. Kjeller bad',
+    confirm: 'Legg til',
+    added: (name: string) => `«${name}» lagt til`,
+    duplicate: 'Rommet finnes allerede',
+    capturingIn: (name: string) => `Fanger i: ${name}`,
+    wetChecklistTitle: 'Huskeliste — våtrom',
+    wetChecklistHint:
+      'Rommet er et våtrom. Dokumentér punktene under — de styrer også hvilke Byggforsk-anvisninger rapporten forankres i.',
+  },
+
   share: {
     title: 'Del rapporten',
     create: 'Lag delingslenke',
@@ -175,6 +231,7 @@ export const nb = {
     hint: 'Mottakeren åpner lenken uten konto og låser opp med PIN-koden. Send PIN-koden i en annen kanal enn selve lenken.',
     failed: 'Kunne ikke lage delingslenke',
     requiresToken: 'Skriv inn en gyldig tilgangskode for å dele.',
+    requiresApproval: 'Rapporten må godkjennes av takstperson før den kan deles.',
   },
 
   auth: {

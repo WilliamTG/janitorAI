@@ -1,9 +1,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>DocrAI — Totalbildet</title>
+<title>DocrAI – Totalbildet</title>
 <style>
   :root {
-    --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
+    --paper: #FFFFFF; --surface: #F4F3EF; --ink: #16202B; --muted: #5C6B7A;
     --border: #DDE4EB; --accent: #3D5A80; --accent-fill: #3D5A80; --accent-pale: #E8F0F7;
     --amber: #A8681F; --amber-pale: #F7EEDD; --ok: #2E7D4F; --bad: #A6453A;
   }
@@ -15,7 +15,7 @@
     }
   }
   :root[data-theme="light"] {
-    --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
+    --paper: #FFFFFF; --surface: #F4F3EF; --ink: #16202B; --muted: #5C6B7A;
     --border: #DDE4EB; --accent: #3D5A80; --accent-fill: #3D5A80; --accent-pale: #E8F0F7;
     --amber: #A8681F; --amber-pale: #F7EEDD; --ok: #2E7D4F; --bad: #A6453A;
   }
@@ -104,7 +104,7 @@
       <div class="brand-sq"></div>
       <span class="eyebrow">DocrAI · Totalbildet · 05.08.2026</span>
     </div>
-    <h1>Slik blir det til slutt — og hva det koster</h1>
+    <h1>Slik blir det til slutt – og hva det koster</h1>
     <p class="lede">
       Hele kjeden fra adresse til arkivert rapport, med ærlig merking av hva som er
       <strong>gratis</strong>, hva som krever <strong>gratis nøkkel eller avtale</strong>, og hva
@@ -115,7 +115,7 @@
 
   <!-- ══ 1 · Totalflyten ══ -->
   <section>
-    <div class="sec-head"><span class="eyebrow">01</span><h2>Totalflyten — sluttbildet</h2></div>
+    <div class="sec-head"><span class="eyebrow">01</span><h2>Totalflyten – sluttbildet</h2></div>
     <figure>
       <div class="fig-scroll">
       <svg viewBox="0 0 1150 330" role="img" aria-label="Sluttbildet: saksunderlag fra aapne kilder, fangst i felt, AI-utkast med Byggforsk-RAG, godkjenning, forensisk rapport, PIN-deling til forsikring, arkivering i Boligmappa og laeringssloyfe tilbake til AI-en.">
@@ -165,7 +165,7 @@
         <text x="585" y="92" class="dt">Takstperson</text>
         <text x="585" y="110" class="ds">korrigerer og</text>
         <text x="585" y="124" class="ds">godkjenner alltid</text>
-        <text x="585" y="138" class="ds">— stemples i rapport</text>
+        <text x="585" y="138" class="ds">– stemples i rapport</text>
         <text x="585" y="160" class="dl">menneske-i-løkken</text>
 
         <line x1="701" y1="130" x2="734" y2="130" class="darr" marker-end="url(#t-ink)"/>
@@ -214,50 +214,54 @@
 
   <!-- ══ 2 · Kostnadsbildet ══ -->
   <section>
-    <div class="sec-head"><span class="eyebrow">02</span><h2>Kilder og kostnader — hele stacken</h2></div>
+    <div class="sec-head"><span class="eyebrow">02</span><h2>Kilder og kostnader – hele stacken</h2></div>
     <div class="costs">
 
       <div class="cost-group">
-        <div class="cg-head"><span class="pill free">GRATIS · uten nøkkel</span><h3>Åpne offentlige kilder</h3><span class="sum">0 kr — for alltid</span></div>
+        <div class="cg-head"><span class="pill free">GRATIS · uten nøkkel</span><h3>Åpne offentlige kilder</h3><span class="sum">0 kr – for alltid</span></div>
         <div class="row"><span class="k">Kartverket adresse-API</span><span class="v">Adresse, gnr/bnr, koordinater, kommune</span><span class="st live">✓ i drift</span></div>
         <div class="row"><span class="k">Åpen matrikkel (Geonorge WFS)</span><span class="v">Bygningstype, bygningsstatus, kulturminne/SEFRAK-flagg</span><span class="st live">✓ i drift</span></div>
-        <div class="row"><span class="k">Kartverket kartfliser (WMTS)</span><span class="v">Kartutsnitt med markør — proxyet gjennom eget API</span><span class="st live">✓ i drift</span></div>
-        <div class="row"><span class="k">NVE aktsomhetskart</span><span class="v">Flom-, overvanns- og kvikkleirelag</span><span class="st ready">klar — kobles på</span></div>
-        <div class="row"><span class="k">Norge i bilder</span><span class="v">Flyfoto av eiendommen</span><span class="st ready">klar — kobles på</span></div>
+        <div class="row"><span class="k">Kartverket kartfliser (WMTS)</span><span class="v">Kartutsnitt med markør – proxyet gjennom eget API</span><span class="st live">✓ i drift</span></div>
+        <div class="row"><span class="k">NVE aktsomhetskart</span><span class="v">Flom-, overvanns- og kvikkleirelag</span><span class="st ready">klar – kobles på</span></div>
+        <div class="row"><span class="k">Norge i bilder</span><span class="v">Flyfoto av eiendommen</span><span class="st ready">klar – kobles på</span></div>
         <div class="row"><span class="k">Kommunale innsynsportaler</span><span class="v">Byggesaksinnsyn (gratis, men manuelt per kommune)</span><span class="st todo">manuelt spor</span></div>
       </div>
 
       <div class="cost-group">
-        <div class="cg-head"><span class="pill key">GRATIS · med nøkkel/avtale</span><h3>Offentlige kilder som krever registrering</h3><span class="sum">0 kr — litt papirarbeid</span></div>
-        <div class="row"><span class="k">MET Frost</span><span class="v">Nedbørshistorikk rundt skadedato (akutt/gradvis-indikasjon)</span><span class="st ready">kode klar — trenger FROST_CLIENT_ID</span></div>
-        <div class="row"><span class="k">Kartverket full Matrikkel-API</span><span class="v">Byggeår, areal, bruksenheter — gratis avtale direkte med Kartverket</span><span class="st todo">søknad i pilotfasen</span></div>
+        <div class="cg-head"><span class="pill key">GRATIS · med nøkkel/avtale</span><h3>Offentlige kilder som krever registrering</h3><span class="sum">0 kr – litt papirarbeid</span></div>
+        <div class="row"><span class="k">MET Frost</span><span class="v">Nedbørshistorikk rundt skadedato (akutt/gradvis-indikasjon)</span><span class="st ready">kode klar – trenger FROST_CLIENT_ID</span></div>
+        <div class="row"><span class="k">Kartverket full Matrikkel-API</span><span class="v">Byggeår, areal, bruksenheter – gratis avtale direkte med Kartverket</span><span class="st todo">søknad i pilotfasen</span></div>
       </div>
 
       <div class="cost-group">
         <div class="cg-head"><span class="pill pay">BETALT</span><h3>Det som faktisk koster penger</h3><span class="sum">fire poster</span></div>
-        <div class="row"><span class="k">SINTEF Byggforsk-lisens</span><span class="v">Anvisningene til RAG-en — selve fagforankringen. Kritisk sti, må prises i dialog med SINTEF</span><span class="st todo">forhandling</span></div>
-        <div class="row"><span class="k">AI-modellbruk</span><span class="v">Transkripsjon, bildeanalyse, rapportutkast (Gemini i dag → Vertex AI EU-region for B12). Betales per sak — kroner, ikke hundrelapper</span><span class="st live">✓ i drift</span></div>
-        <div class="row"><span class="k">Plantegninger per sak</span><span class="v">«Godkjente bygningstegninger» fra Ambita Infoland / Norkart e-Torg — typisk noen hundrelapper per bestilling, kun ved behov</span><span class="st todo">pilotfasen</span></div>
-        <div class="row"><span class="k">Boligmappa-partnerskap</span><span class="v">Lese boligens historikk (med samtykke) + arkivere rapporten på boligen — partneravtale, pris i dialog</span><span class="st todo">skaleringsfasen</span></div>
-        <div class="row"><span class="k">Drift</span><span class="v">Render-hosting, Postgres, medialagring — løpende småbeløp som i dag</span><span class="st live">✓ i drift</span></div>
+        <div class="row"><span class="k">SINTEF Byggforsk-lisens</span><span class="v">Anvisningene til RAG-en – selve fagforankringen. Kritisk sti, må prises i dialog med SINTEF. Befar viser modellen: standardlisensen kan selges som egen årslinje (deres NS 3600-lisens: 2 000 kr/år)</span><span class="st todo">forhandling</span></div>
+        <div class="row"><span class="k">AI-modellbruk</span><span class="v">Transkripsjon, bildeanalyse, rapportutkast (Gemini i dag → Vertex AI EU-region for B12). Betales per sak – kroner, ikke hundrelapper</span><span class="st live">✓ i drift</span></div>
+        <div class="row"><span class="k">Plantegninger per sak</span><span class="v">«Godkjente bygningstegninger» fra Ambita Infoland / Norkart e-Torg – typisk noen hundrelapper per bestilling, kun ved behov</span><span class="st todo">pilotfasen</span></div>
+        <div class="row"><span class="k">Boligmappa-partnerskap</span><span class="v">Lese boligens historikk (med samtykke) + arkivere rapporten på boligen – partneravtale, pris i dialog</span><span class="st todo">skaleringsfasen</span></div>
+        <div class="row"><span class="k">Drift</span><span class="v">Render-hosting, Postgres, medialagring – løpende småbeløp som i dag</span><span class="st live">✓ i drift</span></div>
       </div>
 
     </div>
     <div class="callout">
       <div class="bar"></div>
       <p>
-        <strong>Bunnlinjen:</strong> hele geo- og eiendomsdata-underlaget er gratis — det som
+        <strong>Bunnlinjen:</strong> hele geo- og eiendomsdata-underlaget er gratis – det som
         koster penger er <strong>fagforankringen</strong> (SINTEF-lisensen, kritisk sti),
         <strong>AI-bruken per sak</strong>, og to valgfrie bekvemmeligheter (plantegninger per
         bestilling og Boligmappa-partnerskapet). Ingen av de private mellomleddene er nødvendige
-        for kjerneproduktet.
+        for kjerneproduktet. På inntektssiden er stykkpris markedsvalidert i Norge: Befar tar
+        500 kr per rapport – vår flate månedspris (990–1 490 kr) blir volumfordel-argumentet.
       </p>
     </div>
   </section>
 
   <footer>
-    Status per 05.08.2026: alt merket «i drift» er bygget, typesjekket og live-verifisert i
-    nettleser mot kjørende app og ekte kilder. Se løsningsskissen for arkitekturen,
-    kundereise-presentasjonen for historien og ui-endringer for før/etter-dokumentasjonen.
+    Status per 09.08.2026: alt merket «i drift» er bygget, typesjekket og live-verifisert i
+    nettleser mot kjørende app og ekte kilder – siden 05.08 også godkjenningsstempel med
+    serverhåndhevet delingsport, norsk fagterm-transkripsjon, tid-til-godkjent-metrikk,
+    offentlig demo (/demo?adresse=…) og salgsside med prisnivåer (/om). Se løsningsskissen for
+    arkitekturen, kundereisen for historien, ui-total for hele produktflaten og docs/ for
+    markeds- og konkurrentanalysene.
   </footer>
 </div>

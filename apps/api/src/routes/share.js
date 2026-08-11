@@ -18,6 +18,7 @@ const fs = require("fs");
 const path = require("path");
 const { getPool, requireDb } = require("../db");
 const requireTesterToken = require("../middleware/requireTesterToken");
+const { applySafeMediaHeaders } = require("../mediaTypes");
 const {
   PIN_LENGTH,
   generateShareId,
@@ -94,6 +95,20 @@ function buildReportPayload(project, mediaById) {
       ),
   }));
 
+  // A5: mottakeren får den godkjente versjonen (final), og en liste over
+  // hvilke felter takstpersonen faglig korrigerte fra AI-utkastet — et
+  // tillitssignal, ikke en svakhet.
+  const CONTENT_FIELDS = [
+    "area", "source", "cause", "description", "extentDescription", "repairsDescription",
+  ];
+  const draftContent = (project.reportDraft && project.reportDraft.content) || null;
+  const finalContent = (project.reportFinal && project.reportFinal.content) || draftContent;
+  const pickContent = (c) =>
+    CONTENT_FIELDS.reduce(
+      (acc, f) => (c[f] ? { ...acc, [f]: String(c[f]) } : acc),
+      typeof c.isHabitable === "boolean" ? { isHabitable: c.isHabitable } : {}
+    );
+
   return {
     name: project.name || "",
     inspectionDate: project.inspectionDate || null,
@@ -102,6 +117,20 @@ function buildReportPayload(project, mediaById) {
     descriptionTranscription: project.projectDescriptionTranscription || null,
     reportMeta: project.reportMeta || {},
     reportStatus: project.reportStatus || null,
+    content: finalContent ? pickContent(finalContent) : null,
+    draftChangedFields:
+      draftContent && finalContent
+        ? CONTENT_FIELDS.filter(
+            (f) => String(finalContent[f] || "").trim() !== String(draftContent[f] || "").trim()
+          )
+        : [],
+    approval:
+      project.reportApproval && project.reportApproval.approvedAt
+        ? {
+            approvedBy: String(project.reportApproval.approvedBy || ""),
+            approvedAt: project.reportApproval.approvedAt,
+          }
+        : null,
     notes,
   };
 }
@@ -122,11 +151,21 @@ router.post("/", requireTesterToken, async (req, res) => {
 
     const pool = getPool();
     const owned = await pool.query(
-      "SELECT 1 FROM projects WHERE id = $1 AND tester_token = $2",
+      "SELECT data FROM projects WHERE id = $1 AND tester_token = $2",
       [projectId, req.testerToken]
     );
     if (owned.rows.length === 0) {
       return res.status(404).json({ error: "Project not found" });
+    }
+
+    // Godkjenningsport: bare rapporter takstpersonen aktivt har godkjent kan
+    // deles — AI-utkast skal aldri nå en mottaker. Håndheves her (ikke bare i
+    // appen) så porten holder uansett klient.
+    const approval = (owned.rows[0].data || {}).reportApproval;
+    if (!approval || !approval.approvedAt) {
+      return res
+        .status(409)
+        .json({ error: "Report not approved", code: "REPORT_NOT_APPROVED" });
     }
 
     const id = generateShareId();
@@ -245,9 +284,11 @@ router.get("/:id/report", requireViewToken, async (req, res) => {
       return res.status(410).json({ error: "Prosjektet finnes ikke lenger" });
     }
 
+    // S3: skoper også på eierens tester_token, så eventuelle rader plantet under
+    // prosjektet av en annen tester aldri når mottakeren.
     const mediaResult = await pool.query(
-      "SELECT id, sha256, mime_type, created_at FROM media WHERE project_id = $1",
-      [req.share.project_id]
+      "SELECT id, sha256, mime_type, created_at FROM media WHERE project_id = $1 AND tester_token = $2",
+      [req.share.project_id, req.share.tester_token]
     );
     const mediaById = new Map(mediaResult.rows.map((row) => [String(row.id), row]));
 
@@ -266,8 +307,8 @@ router.get("/:id/media/:mediaId", requireViewToken, async (req, res) => {
   try {
     const pool = getPool();
     const result = await pool.query(
-      "SELECT file_path, mime_type FROM media WHERE id = $1 AND project_id = $2",
-      [String(req.params.mediaId), req.share.project_id]
+      "SELECT file_path, mime_type FROM media WHERE id = $1 AND project_id = $2 AND tester_token = $3",
+      [String(req.params.mediaId), req.share.project_id, req.share.tester_token]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Not found" });
@@ -278,7 +319,8 @@ router.get("/:id/media/:mediaId", requireViewToken, async (req, res) => {
       return res.status(404).json({ error: "File missing on server" });
     }
 
-    if (mimeType) res.type(mimeType);
+    // S7: avledet, whitelistet MIME + nosniff også på mottaker-strømmen.
+    applySafeMediaHeaders(res, mimeType);
     res.set("Cache-Control", "private, max-age=3600");
     res.sendFile(path.resolve(filePath));
   } catch (err) {

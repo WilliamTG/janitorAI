@@ -61,12 +61,15 @@ apps/mobile/*.tsbuildinfo
 ########################################
 
 # Environment vars
-apps/api/.env
-.env        # root-level .env if any
+# NB: kommentar må stå på egen linje — en kommentar bak mønsteret blir del av
+# mønsteret i gitignore-syntaks, så «.env  # ...» matcher aldri en faktisk .env.
+# Mønster uten skråstrek matcher på alle nivåer (rot, apps/mobile, apps/api …).
+.env
 .env.*
 
 # Uploads (temporary, not committed)
 apps/api/uploads/
+apps/api/media-uploads/
 
 # Build outputs
 apps/api/dist/

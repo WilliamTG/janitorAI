@@ -7,7 +7,7 @@
 <title>DocrAI — Delt skaderapport</title>
 <style>
   :root {
-    --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
+    --paper: #FFFFFF; --surface: #F4F3EF; --ink: #16202B; --muted: #5C6B7A;
     --border: #DDE4EB; --accent: #3D5A80; --accent-pale: #E8F0F7;
     --ok: #14532D; --ok-bg: #DCFCE7; --ok-border: #86EFAC;
     --warn: #7F5A1D; --warn-bg: #FCF3DC; --warn-border: #E3C98A;
@@ -101,6 +101,7 @@
   <div id="report" class="hidden" style="display: flex; flex-direction: column; gap: 20px;">
     <div class="card">
       <h1 id="rTitle"></h1>
+      <div id="rStamp" class="hidden" style="margin: 4px 0 10px;"></div>
       <dl class="kv" id="rFacts"></dl>
     </div>
     <div class="card hidden" id="rDamageCard">
@@ -219,6 +220,19 @@
     var meta = r.reportMeta || {};
 
     $('rTitle').textContent = r.name || 'Skaderapport';
+
+    // Godkjenningsstempelet: hvem som står faglig ansvarlig, og når.
+    if (r.approval && r.approval.approvedAt) {
+      var stamp = document.createElement('span');
+      stamp.className = 'badge-ok';
+      stamp.textContent =
+        'Faglig vurdert og godkjent av ' +
+        (r.approval.approvedBy || 'takstperson') +
+        ' · ' + fmtDate(r.approval.approvedAt);
+      $('rStamp').appendChild(stamp);
+      show('rStamp');
+    }
+
     kvRows($('rFacts'), [
       ['Adresse', [meta.addressStreet, meta.addressPostcodeCity].filter(Boolean).join(', ')],
       ['Befaringsdato', fmtDate(meta.inspectionDate || r.inspectionDate)],
@@ -227,7 +241,16 @@
       ['Takstperson', r.inspector && r.inspector !== 'Unknown inspector' ? r.inspector : ''],
     ]);
 
+    // A5: strukturert, godkjent rapportinnhold vises først; skjema-metadata under.
+    var c = r.content || {};
     var damageAny = kvRows($('rDamage'), [
+      ['Skadested', c.area],
+      ['Kilde', c.source],
+      ['Årsak', c.cause],
+      ['Faglig beskrivelse', c.description],
+      ['Omfang', c.extentDescription],
+      ['Tiltak', c.repairsDescription],
+      ['Beboelig', typeof c.isHabitable === 'boolean' ? (c.isHabitable ? 'Ja' : 'Nei') : null],
       ['Skadet område', meta.damagedAreaDescription || (meta.buildings && meta.buildings[0] && meta.buildings[0].damagedAreaDescription)],
       ['Mulig regress', meta.possibleRecourse],
       ['Tiltak mot ny skade', meta.measuresToPreventFutureDamage],
@@ -235,6 +258,17 @@
       ['Oppsummering', meta.summaryText],
     ]);
     if (damageAny) show('rDamageCard');
+    if (r.draftChangedFields && r.draftChangedFields.length > 0) {
+      var corr = document.createElement('p');
+      corr.className = 'muted';
+      corr.style.margin = '0';
+      corr.style.fontSize = '12.5px';
+      corr.textContent =
+        r.draftChangedFields.length +
+        (r.draftChangedFields.length === 1 ? ' felt' : ' felter') +
+        ' er faglig korrigert av takstpersonen fra AI-utkastet før godkjenning.';
+      $('rDamageCard').appendChild(corr);
+    }
 
     var desc = r.description || r.descriptionTranscription;
     if (desc) { $('rDesc').textContent = desc; show('rDescCard'); }

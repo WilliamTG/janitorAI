@@ -156,10 +156,15 @@ router.delete("/:id", async (req, res) => {
       "DELETE FROM media WHERE project_id = $1 AND tester_token = $2",
       [id, token]
     );
+    // S14: behold eierens tester_token ved konflikt — en annen tester skal
+    // aldri kunne kapre en tombstone via samme id. (Prosjekt-IDer er nå
+    // uforutsigbare UUID-er fra klienten, så kryss-tester-kollisjon er uansett
+    // praktisk umulig; dette er forsvar i dybden mot den globale primærnøkkelen.)
     await pool.query(
       `INSERT INTO deleted_projects (id, deleted_at, tester_token)
        VALUES ($1, now(), $2)
-       ON CONFLICT (id) DO UPDATE SET deleted_at = now(), tester_token = EXCLUDED.tester_token`,
+       ON CONFLICT (id) DO UPDATE SET deleted_at = now()
+         WHERE deleted_projects.tester_token = EXCLUDED.tester_token`,
       [id, token]
     );
 

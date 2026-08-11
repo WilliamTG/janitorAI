@@ -3,6 +3,7 @@
 // Mount BEFORE the global requireTesterToken guard in index.js.
 
 const express = require("express");
+const crypto = require("crypto");
 const { getPool, requireDb } = require("../db");
 
 const router = express.Router();
@@ -11,13 +12,23 @@ function sanitizeError(err) {
   return err && err.message ? err.message : String(err);
 }
 
+// Timing-sikker strengsammenligning (S11): unngår at responstid lekker hvor
+// mange tegn av hemmeligheten som stemmer.
+function safeEqual(a, b) {
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 // ── Admin secret guard ────────────────────────────────────────────────────────
 function requireAdminSecret(req, res, next) {
   const secret = process.env.ADMIN_SECRET;
   if (!secret) {
     return res.status(503).json({ error: "ADMIN_SECRET not configured on server" });
   }
-  if (req.headers["x-admin-secret"] !== secret) {
+  const provided = req.headers["x-admin-secret"];
+  if (typeof provided !== "string" || !safeEqual(provided, secret)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   next();

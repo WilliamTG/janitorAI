@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="/favicon.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<title>DocrAI – Fra befaring til forsikringsklar skaderapport</title>
+<meta name="description" content="DocrAI gjør befaringsvideo og tale om til forsikringsklar skaderapport med årsak, akutt/gradvis-vurdering og Byggforsk-henvisninger. Du kontrollerer og godkjenner – AI-en skriver utkastet." />
+<meta property="og:title" content="DocrAI – Fra befaring til forsikringsklar skaderapport" />
+<meta property="og:description" content="Snakk deg gjennom befaringen – AI-en skriver utkastet med årsak og Byggforsk-henvisninger. Du kontrollerer, korrigerer og godkjenner." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="/og-bilde.png" />
+<meta property="og:locale" content="nb_NO" />
+<meta name="twitter:card" content="summary_large_image" />
+<style>
+  :root {
+    --paper: #FFFFFF; --surface: #F4F3EF; --ink: #16202B; --muted: #5C6B7A;
+    --border: #DDE4EB; --accent: #3D5A80; --accent-strong: #2E4763; --accent-pale: #E8F0F7;
+    --ok: #14532D; --ok-bg: #DCFCE7; --ok-border: #86EFAC;
+    --warn: #7F5A1D; --warn-bg: #FCF3DC;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #131920; --surface: #0F141A; --ink: #E4EAF1; --muted: #97A6B5;
+      --border: #2A3542; --accent: #94B9DE; --accent-strong: #B7D2EC; --accent-pale: #1B2634;
+      --ok: #86EFAC; --ok-bg: #103524; --ok-border: #166534;
+      --warn: #E3C08A; --warn-bg: #2B2214;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface); color: var(--ink);
+    font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 16px; line-height: 1.6;
+  }
+  .page { max-width: 760px; margin: 0 auto; padding: 40px 18px 64px; display: flex; flex-direction: column; gap: 40px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .sq { width: 22px; height: 22px; background: #3D5A80; flex: none;  display:flex; align-items:center; justify-content:center; color:#F4F3EF; font-weight:700; font-size:13px; line-height:1; }
+  .brand b { font-size: 16px; }
+  .brand a { margin-left: auto; color: var(--accent); font-size: 14px; font-weight: 600; text-decoration: none; }
+
+  .hero { display: flex; flex-direction: column; gap: 14px; }
+  h1 { margin: 0; font-size: clamp(28px, 5.5vw, 40px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; text-wrap: balance; }
+  .hero p { margin: 0; color: var(--muted); font-size: 17px; max-width: 58ch; }
+  .hero p strong { color: var(--ink); }
+  .cta-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .btn {
+    display: inline-block; text-decoration: none; font-weight: 700; font-size: 15px;
+    border-radius: 10px; padding: 13px 22px; min-height: 48px;
+  }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.ghost { border: 1.5px solid var(--border); color: var(--ink); background: var(--paper); }
+
+  .stat-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .stat { flex: 1; min-width: 150px; background: var(--paper); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .stat b { display: block; font-size: 22px; color: var(--accent-strong); letter-spacing: -0.01em; }
+  .stat span { font-size: 13px; color: var(--muted); }
+
+  h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+  section { display: flex; flex-direction: column; gap: 16px; }
+  .reasons { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; counter-reset: r; }
+  .reasons li {
+    background: var(--paper); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px 14px 54px; position: relative; font-size: 15px; color: var(--muted);
+  }
+  .reasons li b { color: var(--ink); display: block; margin-bottom: 2px; font-size: 15.5px; }
+  .reasons li::before {
+    counter-increment: r; content: counter(r);
+    position: absolute; left: 14px; top: 16px; width: 26px; height: 26px;
+    background: var(--accent-pale); color: var(--accent-strong); font-weight: 700; font-size: 13px;
+    border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  }
+
+  .steps { display: flex; gap: 10px; flex-wrap: wrap; }
+  .step { flex: 1; min-width: 190px; background: var(--paper); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .step .n { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; color: var(--accent); text-transform: uppercase; }
+  .step h3 { margin: 6px 0 4px; font-size: 16px; }
+  .step p { margin: 0; font-size: 13.5px; color: var(--muted); }
+
+  .trust { background: var(--paper); border: 1px solid var(--border); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+  .trust p { margin: 0; font-size: 15px; color: var(--muted); }
+  .trust p b { color: var(--ink); }
+  .stamp { align-self: flex-start; border: 1.5px solid var(--ok-border); color: var(--ok); background: var(--ok-bg); padding: 3px 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; font-size: 11px; border-radius: 6px; }
+
+  .tiers { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+  .tier { flex: 1; min-width: 200px; background: var(--paper); border: 1.5px solid var(--border); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .tier.hot { border-color: var(--accent); }
+  .tier h3 { margin: 0; font-size: 15px; }
+  .tier .price { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+  .tier .price span { font-size: 13px; font-weight: 400; color: var(--muted); }
+  .tier ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+  .tier .tag { align-self: flex-start; font-size: 11px; font-weight: 700; color: var(--warn); background: var(--warn-bg); border-radius: 999px; padding: 2px 10px; }
+  .fineprint { font-size: 12.5px; color: var(--muted); }
+
+  footer { border-top: 1px solid var(--border); padding-top: 16px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+  a { color: var(--accent); }
+
+  .pilot-form { background: var(--paper); border: 1.5px solid var(--accent); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+  .pilot-form label { font-size: 13px; font-weight: 600; display: flex; flex-direction: column; gap: 4px; }
+  .pilot-form input, .pilot-form textarea {
+    font: inherit; font-size: 15px; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; width: 100%;
+  }
+  .pilot-form textarea { resize: vertical; min-height: 64px; }
+  .pilot-form button { font: inherit; font-weight: 700; font-size: 15px; background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 13px 22px; min-height: 48px; cursor: pointer; align-self: flex-start; }
+  .pilot-form .svartid { font-size: 12.5px; color: var(--muted); }
+  .hp { position: absolute; left: -9999px; top: -9999px; height: 0; overflow: hidden; }
+
+  .sticky-cta { display: none; }
+  @media (max-width: 640px) {
+    .page { padding-bottom: 96px; }
+    .sticky-cta {
+      display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+      background: var(--paper); border-top: 1px solid var(--border);
+      padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); gap: 10px;
+    }
+    .sticky-cta a { flex: 1; text-align: center; text-decoration: none; font-weight: 700; font-size: 15px; border-radius: 10px; padding: 13px 0; }
+    .sticky-cta .p { background: var(--accent); color: #fff; }
+    .sticky-cta .g { border: 1.5px solid var(--border); color: var(--ink); }
+  }
+  @media (prefers-color-scheme: dark) {
+    .btn.primary, .pilot-form button, .sticky-cta .p { color: #0F141A; }
+  }
+
+  /* Tilgjengelighet (WCAG 2.4.7): tydelig fokusmarkering for tastaturbrukere. */
+  a:focus-visible, button:focus-visible, summary:focus-visible,
+  input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="brand"><span class="sq">D</span><b>DocrAI</b><a href="/demo">Prøv demoen →</a></div>
+
+  <div class="hero">
+    <h1>Fra befaring til forsikringsklar skaderapport. På minutter – ikke timer.</h1>
+    <p>
+      To timer rapportskriving i bilen etterpå. Notater på små knapper med våte hansker.
+      Dokumentasjon som ikke holder i oppgjøret. <strong>DocrAI snur det:</strong> snakk deg
+      gjennom befaringen, så skriver AI-en utkastet – med årsak, akutt/gradvis-vurdering og
+      Byggforsk-henvisninger. Du kontrollerer, korrigerer og godkjenner. Ingenting deles uten
+      stempelet ditt.
+    </p>
+    <div class="cta-row">
+      <a class="btn primary" href="/demo">Se din egen adresse på 2 sekunder</a>
+      <a class="btn ghost" href="#pilot">Bli pilotdeltaker</a>
+    </div>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat"><b>2 t → 15 min</b><span>målet per rapport – og appen måler tiden på hver sak</span></div>
+    <div class="stat"><b>7 datalag</b><span>saksunderlag hentet automatisk fra åpne kilder før avreise</span></div>
+    <div class="stat"><b>SHA-256</b><span>hvert bevis forsegles med geo, tid og sjekksum ved fangst</span></div>
+  </div>
+
+  <section>
+    <h2>Fem grunner til at takstpersoner velger DocrAI</h2>
+    <ol class="reasons">
+      <li><b>Saken er klar før bilen starter.</b> Skriv inn adressen – kart, matrikkel, bygningstype, terreng og vær hentes automatisk fra Kartverket og MET. Ingen avtaler, ingen oppslag i sju systemer.</li>
+      <li><b>Snakk – ikke tast.</b> Store knapper laget for våte hansker, og transkripsjon trent på norsk fagspråk: klemring, svill, diffusjonssperre. Talen din blir strukturen i rapporten.</li>
+      <li><b>AI-en skriver utkastet. Du eier konklusjonen.</b> Årsak og akutt/gradvis foreslås – aldri fastslås. Du redigerer direkte i den ferdige rapportvisningen og stempler med navn og tidspunkt.</li>
+      <li><b>Bevis som holder i oppgjøret.</b> Geo, klokkeslett og kryptografisk sjekksum settes i fangstøyeblikket. Mottakeren åpner en PIN-beskyttet rapport – uten konto – og kan verifisere at ingenting er endret.</li>
+      <li><b>Leverer inn i flyten forsikringen krever.</b> Uavhengig av forsikringsselskapene – men bygget for å levere strukturert rett inn i saksflyten deres. Gjør befaringen i DocrAI, lever som før.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Slik virker det</h2>
+    <div class="steps">
+      <div class="step"><span class="n">1 · Før</span><h3>Adressen inn</h3><p>Ett søk gir saksunderlaget: kart, gnr/bnr, bygningstype, terreng og vær – ferdig utfylt sak før avreise.</p></div>
+      <div class="step"><span class="n">2 · I felt</span><h3>Fang og snakk</h3><p>Video, foto og lydnotater rom for rom. Alt lagres lokalt først – appen virker uten dekning i kjelleren.</p></div>
+      <div class="step"><span class="n">3 · Etter</span><h3>Godkjenn og del</h3><p>AI-utkastet er klart når du setter deg i bilen. Kontrollér, stemple – og del PIN-beskyttet med forsikringen.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="trust">
+      <span class="stamp">Godkjent av takstperson</span>
+      <p><b>AI foreslår. Du avgjør. Det er systemet – ikke et forbehold.</b></p>
+      <p>Rapporten er merket som utkast til du aktivt godkjenner den, og delingslenker kan ikke
+        lages før stempelet er satt – det håndheves av serveren, ikke bare av appen. Byggforsk-
+        henvisninger vises kun med verifisert punktnummer. All databehandling flyttes til EU/EØS
+        før pilot, med databehandleravtale.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pris – enkel og uten binding</h2>
+    <div class="tiers">
+      <div class="tier">
+        <h3>Pilot</h3>
+        <div class="price">Gratis <span>· 3 måneder</span></div>
+        <ul>
+          <li>Alt inkludert, maks 8 foretak</li>
+          <li>Motytelse: ukentlig tilbakemelding</li>
+          <li>50 % rabatt første år etterpå</li>
+        </ul>
+        <span class="tag">opptak nå</span>
+      </div>
+      <div class="tier hot">
+        <h3>Takstperson</h3>
+        <div class="price">990 kr <span>/mnd eks. mva., veiledende</span></div>
+        <ul>
+          <li>Ubegrensede saker og rapporter</li>
+          <li>Saksunderlag, AI-utkast, godkjenning, PIN-deling</li>
+          <li>Én rapport sparer inn måneden</li>
+        </ul>
+      </div>
+      <div class="tier">
+        <h3>Foretak</h3>
+        <div class="price">Dialog <span>· fra 5 takstpersoner</span></div>
+        <ul>
+          <li>Samlefakturering og felles maler</li>
+          <li>Prioritert støtte</li>
+          <li>In4mo-eksport når den lanseres</li>
+        </ul>
+      </div>
+    </div>
+    <p class="fineprint">Veiledende priser i pilotfasen – endelig prising settes sammen med pilotdeltakerne. Ingen bindingstid.</p>
+  </section>
+
+  <section>
+    <h2>Prøv det på 2 sekunder</h2>
+    <p style="margin:0;color:var(--muted);">Skriv inn en adresse du kjenner, og se saksunderlaget slik det ligger klart i DocrAI før hver befaring – hentet live fra åpne offentlige kilder.</p>
+    <div class="cta-row">
+      <a class="btn primary" href="/demo">Åpne demoen</a>
+    </div>
+  </section>
+
+  <section id="pilot">
+    <h2>Bli pilotdeltaker</h2>
+    <form class="pilot-form" method="post" action="/api/pilot-interesse">
+      <label>Navn
+        <input name="navn" required autocomplete="name" maxlength="200" />
+      </label>
+      <label>E-post
+        <input name="epost" type="email" required autocomplete="email" maxlength="200" />
+      </label>
+      <label>Melding <span style="font-weight:400;color:var(--muted);">(valgfritt – f.eks. foretak og antall takstpersoner)</span>
+        <textarea name="melding" maxlength="2000"></textarea>
+      </label>
+      <div class="hp" aria-hidden="true">
+        <label>Firma<input name="firmafelt" tabindex="-1" autocomplete="off" /></label>
+      </div>
+      <button type="submit">Meld interesse for piloten</button>
+      <span class="svartid"><b>Vi svarer innen én virkedag.</b> Navn og e-post brukes kun til å kontakte deg om piloten – se <a href="/personvern">personvern</a>.</span>
+    </form>
+  </section>
+
+  <footer>
+    <span>Kontakt: <a href="mailto:fdalen.97@gmail.com">fdalen.97@gmail.com</a> · vi svarer innen én virkedag.</span>
+    <span><a href="/demo">Demo</a> · <a href="/faq">Ofte stilte spørsmål</a> · <a href="/personvern">Personvern</a> · <a href="/vilkar">Vilkår</a> · <a href="/kundereisen">Kundereisen</a></span>
+    <span>DocrAI er under utvikling mot pilot. Kilder i demoen: Kartverket, åpen matrikkel (Geonorge) og Meteorologisk institutt.</span>
+  </footer>
+
+</div>
+
+<nav class="sticky-cta" aria-label="Hurtigvalg">
+  <a class="p" href="/demo">Prøv demoen</a>
+  <a class="g" href="#pilot">Bli pilot</a>
+</nav>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "DocrAI",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "iOS, Android, Web",
+  "description": "Gjør befaringsvideo og tale om til forsikringsklar skaderapport med årsak, akutt/gradvis-vurdering og Byggforsk-henvisninger. Takstpersonen kontrollerer og godkjenner.",
+  "inLanguage": "nb",
+  "offers": { "@type": "Offer", "price": "990", "priceCurrency": "NOK", "description": "Veiledende månedspris per takstperson i pilotfasen, uten bindingstid." }
+}
+</script>
+<script>
+  try { navigator.sendBeacon('/api/besok', new Blob([JSON.stringify({ sti: '/om', kilde: new URLSearchParams(location.search).get('k') || undefined })], { type: 'application/json' })); } catch (e) {}
+</script>
+</body>
+</html>

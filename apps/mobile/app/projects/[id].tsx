@@ -17,9 +17,29 @@ import apiFetch, {
 import { Image as ExpoImage } from 'expo-image';
 
 import { getCurrentGeo } from '@/src/lib/geo';
+import { newId } from '@/src/lib/ids';
+import { loadProfile } from '@/src/storage/profileStorage';
+import { formatMinutes, minutesToApproved } from '@/src/features/projects/metrics';
 import { tileForCoordinate } from '@/src/lib/kartverket';
 import { logError, logAction } from '@/src/lib/logger';
-import { GeoPoint, NO_DATE_SET, Note, Project, ReportMeta, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
+import {
+  GeoPoint,
+  NO_DATE_SET,
+  Note,
+  Project,
+  REPORT_CONTENT_FIELDS,
+  ReportContent,
+  ReportContentField,
+  ReportMeta,
+  UNKNOWN_INSPECTOR,
+} from '@/src/features/projects/types';
+import { contentFromAnalysis } from '@/src/features/projects/reportVersions';
+import {
+  ROOM_SUGGESTIONS,
+  WET_ROOM_CHECKLIST,
+  isWetRoom,
+  roomNameById,
+} from '@/src/features/projects/rooms';
 import { ReportDetailsSection } from '@/src/features/projects/ReportDetailsSection';
 import { ReportGeneratingOverlay } from '@/src/features/projects/ReportGeneratingOverlay';
 import { applyNoteChanges } from '@/src/features/projects/noteChanges';
@@ -320,6 +340,16 @@ export default function ProjectDetailScreen() {
     loadProject();
   }, [loadProject]);
 
+  // Keep UI in sync when pushProject writes remote IDs back to storage
+  // (e.g. videoRemoteId after upload completes) without requiring navigation.
+  useEffect(() => {
+    if (!projectId) return;
+    const unsub = subscribeToProjectUpdates(projectId, (updated) => {
+      setState((prev) => ({ ...prev, project: updated }));
+    });
+    return unsub;
+  }, [projectId]);
+
   // «Prøv igjen» fra prosjektlisten (?retry=1): åpne rapport-fanen og start
   // genereringen på nytt — men først når tilgangskoden er ferdig validert,
   // og aldri mer enn én gang per besøk.
@@ -422,14 +452,42 @@ export default function ProjectDetailScreen() {
     setIsEditingDescription(false);
   };
 
+  // A1 — befaringsløypa: aktivt rom er fangstkonteksten. Alt som fanges mens
+  // et rom er valgt, knyttes dit; «Alle» (null) er fortsatt gyldig fangst.
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [addingRoom, setAddingRoom] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+
+  const addRoom = async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || !project) return;
+    const existing = (project.rooms || []).find(
+      (r) => r.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (existing) {
+      setActiveRoomId(existing.id);
+      setAddingRoom(false);
+      setNewRoomName('');
+      toast.show({ message: nb.rooms.duplicate, variant: 'info' });
+      return;
+    }
+    const room = { id: newId(), name: trimmed };
+    await updateProjectLocally({ ...project, rooms: [...(project.rooms || []), room] });
+    setActiveRoomId(room.id);
+    setAddingRoom(false);
+    setNewRoomName('');
+    toast.show({ message: nb.rooms.added(trimmed), variant: 'success' });
+  };
+
   const addTextNote = async () => {
     const trimmed = noteText.trim();
     if (!trimmed || !project) return;
 
     const newNote: Note = {
-      id: Date.now().toString(),
+      id: newId(),
       text: trimmed,
       createdAt: new Date().toISOString(),
+      ...(activeRoomId ? { roomId: activeRoomId } : {}),
     };
 
     const newNotes = [newNote, ...(project.notes || [])];
@@ -505,10 +563,11 @@ export default function ProjectDetailScreen() {
       const textForNote = trimmed || 'Lydnotat (ingen tekst ennå – transkriberes senere)';
 
       const newNote: Note = {
-        id: Date.now().toString(),
+        id: newId(),
         text: textForNote,
         createdAt: new Date().toISOString(),
         audioUri: durableUri,
+        ...(activeRoomId ? { roomId: activeRoomId } : {}),
       };
 
       const newNotes = [newNote, ...(project.notes || [])];
@@ -920,11 +979,12 @@ export default function ProjectDetailScreen() {
 
       const geo = await geoPromise;
       const newNote: Note = {
-        id: Date.now().toString(),
+        id: newId(),
         text: textForNote,
         createdAt: new Date().toISOString(),
+        ...(activeRoomId ? { roomId: activeRoomId } : {}),
         photos: [{
-          id: Date.now().toString(),
+          id: newId(),
           uri,
           caption: '',
           aiGenerated: false,
@@ -1030,7 +1090,7 @@ export default function ProjectDetailScreen() {
 
         // Generate the note ID before persisting so we can pass it to
         // persistMediaLocally — on web it uses the ID as the IndexedDB key.
-        const noteId = Date.now().toString();
+        const noteId = newId();
         const uri = await persistMediaLocally(asset.uri, noteId);
         const trimmed = noteText.trim();
         const textForNote = trimmed || 'Videonotat (ingen tekst ennå)';
@@ -1043,6 +1103,7 @@ export default function ProjectDetailScreen() {
           videoUri: uri,
           videoCapturedAt: new Date().toISOString(),
           ...(geo ? { videoGeo: geo } : {}),
+          ...(activeRoomId ? { roomId: activeRoomId } : {}),
         };
 
         const newNotes = [newNote, ...(project.notes || [])];
@@ -1194,7 +1255,15 @@ export default function ProjectDetailScreen() {
     try {
       setIsGeneratingGoogleDoc(true);
       setGoogleDocUrl(null);
-      await updateProjectLocally({ ...snap, reportStatus: 'processing', reportError: undefined });
+      // Ny generering gir en ny rapportversjon — godkjenningen gjelder den
+      // gamle og nullstilles. Feiler genereringen, gjenoppretter feilbanene
+      // (...snap) både forrige rapport og stempelet dens.
+      await updateProjectLocally({
+        ...snap,
+        reportStatus: 'processing',
+        reportError: undefined,
+        reportApproval: undefined,
+      });
 
       // Require an uploaded video — no demo fallback
       const videoNote = (snap.notes || []).find(n => n.videoRemoteId);
@@ -1213,6 +1282,7 @@ export default function ProjectDetailScreen() {
         .map(n => ({
           ...(n.text ? { text: n.text } : {}),
           ...(n.transcription ? { transcription: n.transcription } : {}),
+          ...(n.roomId ? { roomId: n.roomId } : {}),
           photos: (n.photos || [])
             .filter(p => p.remoteId || p.uri)
             .map(p => ({
@@ -1227,6 +1297,8 @@ export default function ProjectDetailScreen() {
         inspector: snap.inspector,
         ...(snap.projectDescriptionText ? { projectDescriptionText: snap.projectDescriptionText } : {}),
         ...(snap.projectDescriptionTranscription ? { projectDescriptionTranscription: snap.projectDescriptionTranscription } : {}),
+        // A1: rommene følger med så API-et kan sette romnavn på hvert notat.
+        ...(snap.rooms && snap.rooms.length > 0 ? { rooms: snap.rooms } : {}),
         notes: enrichedNotes,
       };
 
@@ -1259,7 +1331,20 @@ export default function ProjectDetailScreen() {
       if (data.url) {
         logAction('generate-google-doc', Date.now() - t0).catch(() => {});
         setGoogleDocUrl(data.url);
-        await updateProjectLocally({ ...snap, reportUrl: data.url, reportStatus: 'ready', reportError: undefined });
+        // A5: motoren returnerer den strukturerte analysen sammen med URL-en.
+        // Utkastet arkiveres uendret; final starter som kopi og redigeres.
+        const draftContent = contentFromAnalysis(data.analysis);
+        const draftAt = new Date().toISOString();
+        await updateProjectLocally({
+          ...snap,
+          reportUrl: data.url,
+          reportStatus: 'ready',
+          reportError: undefined,
+          // Ny rapport er et nytt AI-utkast — aldri arv forrige godkjenning.
+          reportApproval: undefined,
+          reportDraft: draftContent ? { content: draftContent, at: draftAt } : undefined,
+          reportFinal: draftContent ? { content: { ...draftContent }, at: draftAt } : undefined,
+        });
         toast.show({ message: nb.report.ready, variant: 'success' });
       } else {
         const errMsg = 'Fikk ingen dokumentlenke fra AI-motoren.';
@@ -1375,8 +1460,101 @@ export default function ProjectDetailScreen() {
     };
   }, [project?.caseFile, isTokenValid]);
 
+  // A5 — versjonslagring: reportDraft (AI-utkastet, uforanderlig) og
+  // reportFinal (redigeres i ferdig rapportvisning). Lokal redigeringstilstand
+  // synkes fra prosjektet og persisteres på blur; enhver endring etter
+  // godkjenning nullstiller stempelet.
+  const [reportEdit, setReportEdit] = useState<ReportContent | null>(null);
+  useEffect(() => {
+    setReportEdit(project?.reportFinal?.content ?? project?.reportDraft?.content ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id, project?.reportDraft?.at, project?.reportFinal?.at]);
+
+  const reportFieldChanged = (field: ReportContentField): boolean => {
+    const draft = project?.reportDraft?.content;
+    if (!draft || !reportEdit) return false;
+    return (reportEdit[field] ?? '').trim() !== (draft[field] ?? '').trim();
+  };
+
+  const saveReportEdits = async () => {
+    if (!project || !reportEdit) return;
+    const persisted = project.reportFinal?.content ?? project.reportDraft?.content ?? null;
+    const dirty = REPORT_CONTENT_FIELDS.some(
+      (f) => (persisted?.[f] ?? '') !== (reportEdit[f] ?? '')
+    );
+    if (!dirty) return;
+    const hadApproval = Boolean(project.reportApproval);
+    await updateProjectLocally({
+      ...project,
+      reportFinal: { content: { ...persisted, ...reportEdit }, at: new Date().toISOString() },
+      // Stempelet gjelder den konkrete teksten som forelå ved godkjenning —
+      // en rettelse etterpå krever ny gjennomlesing og nytt stempel.
+      reportApproval: undefined,
+    });
+    if (hadApproval) {
+      toast.show({ message: nb.report.editClearedApproval, variant: 'info', durationMs: 4500 });
+    }
+  };
+
+  // Godkjenningsflyt: takstpersonen leser AI-utkastet og stempler det med navn
+  // og tidspunkt. Uten stempel nekter både appen og serveren å dele rapporten.
+  const stampApproval = async () => {
+    if (!project) return;
+    const profile = await loadProfile();
+    const name =
+      profile.name.trim() ||
+      (project.inspector && project.inspector !== UNKNOWN_INSPECTOR ? project.inspector : '');
+    if (!name) {
+      toast.show({ message: nb.report.approverNameMissing, variant: 'error', durationMs: 4500 });
+      return;
+    }
+    await updateProjectLocally({
+      ...project,
+      reportApproval: { approvedBy: name, approvedAt: new Date().toISOString() },
+    });
+    logAction('approve-report', 0).catch(() => {});
+    toast.show({ message: nb.report.approvedToast, variant: 'success' });
+  };
+
+  const confirmApproveReport = () => {
+    if (Platform.OS === 'web') {
+      // Alert.alert er no-op på web — bruk window.confirm i stedet.
+      if (window.confirm(`${nb.report.approveConfirmTitle}\n\n${nb.report.approveConfirmMessage}`)) {
+        void stampApproval();
+      }
+      return;
+    }
+    Alert.alert(nb.report.approveConfirmTitle, nb.report.approveConfirmMessage, [
+      { text: nb.common.cancel, style: 'cancel' },
+      { text: nb.report.approve, onPress: () => void stampApproval() },
+    ]);
+  };
+
+  const removeApproval = async () => {
+    if (!project) return;
+    await updateProjectLocally({ ...project, reportApproval: undefined });
+    toast.show({ message: nb.report.withdrawnToast, variant: 'success' });
+  };
+
+  const confirmWithdrawApproval = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${nb.report.withdrawConfirmTitle}\n\n${nb.report.withdrawConfirmMessage}`)) {
+        void removeApproval();
+      }
+      return;
+    }
+    Alert.alert(nb.report.withdrawConfirmTitle, nb.report.withdrawConfirmMessage, [
+      { text: nb.common.cancel, style: 'cancel' },
+      { text: nb.report.withdraw, style: 'destructive', onPress: () => void removeApproval() },
+    ]);
+  };
+
   const createShare = async () => {
     if (!project || isCreatingShare) return;
+    if (!project.reportApproval) {
+      toast.show({ message: nb.share.requiresApproval, variant: 'error', durationMs: 4500 });
+      return;
+    }
     try {
       setIsCreatingShare(true);
       const response = await apiFetch(`${getApiBaseUrl()}/api/share`, {
@@ -1385,7 +1563,10 @@ export default function ProjectDetailScreen() {
         body: JSON.stringify({ projectId: project.id }),
       });
       if (!response.ok) {
-        toast.show({ message: nb.share.failed, variant: 'error' });
+        // 409: serveren har ikke fått synket godkjenningen ennå (eller den er
+        // trukket tilbake fra en annen enhet) — si hvorfor, ikke bare «feilet».
+        const message = response.status === 409 ? nb.share.requiresApproval : nb.share.failed;
+        toast.show({ message, variant: 'error', durationMs: 4500 });
         return;
       }
       const data: any = await response.json();
@@ -1510,7 +1691,11 @@ export default function ProjectDetailScreen() {
     <Animated.View entering={FadeInDown.duration(300).delay(index * 40)}>
       <GlassCard style={{ marginBottom: theme.spacing.sm, gap: theme.spacing.xs }}>
         <Body>{item.text}</Body>
-        <Caption muted>{formatDateTime(item.createdAt)}</Caption>
+        <Caption muted>
+          {[roomNameById(project, item.roomId), formatDateTime(item.createdAt)]
+            .filter(Boolean)
+            .join(' · ')}
+        </Caption>
 
         {/* Video clip — show whenever local URI or remote copy exists */}
         {(item.videoUri || item.videoRemoteId) && (
@@ -1762,6 +1947,110 @@ export default function ProjectDetailScreen() {
           </GlassCard>
         )}
 
+        {/* A5: utkastet redigeres i ferdig rapportvisning (Befar-mønsteret).
+            AI-utkastet arkiveres uendret; endrede felter merkes, og diffen
+            lagres per sak. */}
+        {reportEdit && (
+          <GlassCard style={{ gap: theme.spacing.sm }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+              <Ionicons name="document-text-outline" size={18} color={theme.colors.accent} />
+              <Title style={{ fontSize: 18 }}>{nb.report.editTitle}</Title>
+            </View>
+            {project?.reportDraft?.at ? (
+              <Caption muted>
+                {nb.report.draftVersionLine(formatDateTime(project.reportDraft.at))}
+              </Caption>
+            ) : null}
+            <Caption muted>{nb.report.editHint}</Caption>
+            {(
+              [
+                ['area', nb.report.fieldArea, false],
+                ['source', nb.report.fieldSource, false],
+                ['cause', nb.report.fieldCause, true],
+                ['description', nb.report.fieldDescription, true],
+                ['extentDescription', nb.report.fieldExtent, true],
+                ['repairsDescription', nb.report.fieldRepairs, true],
+              ] as [ReportContentField, string, boolean][]
+            ).map(([field, label, multiline]) => (
+              <View key={field} style={{ gap: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Caption muted>{label}</Caption>
+                  {reportFieldChanged(field) && (
+                    <View
+                      style={{
+                        paddingHorizontal: 8,
+                        paddingVertical: 1,
+                        borderRadius: 999,
+                        backgroundColor: `${theme.colors.accent}22`,
+                      }}
+                    >
+                      <Caption style={{ color: theme.colors.accent, fontWeight: '600' }}>
+                        {nb.report.fieldChanged}
+                      </Caption>
+                    </View>
+                  )}
+                </View>
+                <TextField
+                  value={reportEdit[field] ?? ''}
+                  onChangeText={(text) =>
+                    setReportEdit((prev) => ({ ...(prev ?? {}), [field]: text }))
+                  }
+                  onBlur={() => void saveReportEdits()}
+                  multiline={multiline}
+                  style={multiline ? { minHeight: 72, textAlignVertical: 'top' } : undefined}
+                />
+              </View>
+            ))}
+            <Caption muted>
+              {nb.report.changesSummary(REPORT_CONTENT_FIELDS.filter(reportFieldChanged).length)}
+            </Caption>
+          </GlassCard>
+        )}
+
+        {/* Godkjenningsflyt: AI-en foreslår, takstpersonen står ansvarlig.
+            Rapporten er et utkast til den aktivt stemples — og uten stempel
+            nekter både appen og serveren å dele den. */}
+        {displayUrl && (
+          <GlassCard style={{ gap: theme.spacing.sm }}>
+            {project?.reportApproval ? (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+                  <Ionicons name="shield-checkmark" size={18} color={theme.colors.accent} />
+                  <Body style={{ fontWeight: '600', flex: 1 }}>
+                    {nb.report.approvedStamp(
+                      project.reportApproval.approvedBy,
+                      formatDateTime(project.reportApproval.approvedAt)
+                    )}
+                  </Body>
+                </View>
+                {(() => {
+                  const minutes = minutesToApproved(project);
+                  return minutes !== null ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Ionicons name="timer-outline" size={13} color={theme.colors.muted} />
+                      <Caption muted>{nb.projects.timeToApproved(formatMinutes(minutes))}</Caption>
+                    </View>
+                  ) : null;
+                })()}
+                <SecondaryButton onPress={confirmWithdrawApproval}>
+                  {nb.report.withdraw}
+                </SecondaryButton>
+              </>
+            ) : (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+                  <Ionicons name="alert-circle-outline" size={18} color={theme.colors.danger} />
+                  <Body style={{ fontWeight: '600' }}>{nb.report.draftBadge}</Body>
+                </View>
+                <Caption muted>{nb.report.approvalHint}</Caption>
+                <PrimaryButton style={{ minHeight: 56 }} onPress={confirmApproveReport}>
+                  {nb.report.approve}
+                </PrimaryButton>
+              </>
+            )}
+          </GlassCard>
+        )}
+
         {/* B7/B10: kontoløs deling med PIN + utløp */}
         <GlassCard style={{ gap: theme.spacing.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
@@ -1809,13 +2098,16 @@ export default function ProjectDetailScreen() {
               style={{ minHeight: 56 }}
               onPress={createShare}
               loading={isCreatingShare}
-              disabled={!isTokenValid || isCreatingShare}
+              disabled={!isTokenValid || isCreatingShare || !project?.reportApproval}
               icon={<Ionicons name="share-outline" size={18} color="#fff" />}
             >
               {isCreatingShare ? nb.share.creating : nb.share.create}
             </PrimaryButton>
           )}
           {!isTokenValid && <Caption muted>{nb.share.requiresToken}</Caption>}
+          {isTokenValid && !shareInfo && !project?.reportApproval && (
+            <Caption muted>{nb.share.requiresApproval}</Caption>
+          )}
         </GlassCard>
       </View>
     );
@@ -2266,13 +2558,118 @@ export default function ProjectDetailScreen() {
     </GlassCard>
   );
 
+  // A1: romstripen — «Alle» + rommene + «+ Rom», med hurtigvalg fra
+  // taksonomien. Aktivt rom er fangstkontekst og filter samtidig.
+  const renderRoomStrip = () => {
+    const rooms = project?.rooms || [];
+    const activeName = roomNameById(project, activeRoomId ?? undefined);
+    const chip = (label: string, selected: boolean, onPress: () => void, key: string) => (
+      <TouchableOpacity
+        key={key}
+        onPress={onPress}
+        accessibilityRole="button"
+        style={{
+          paddingHorizontal: 14,
+          paddingVertical: 8,
+          minHeight: 36,
+          borderRadius: theme.radii.pill,
+          borderWidth: 1,
+          borderColor: selected ? theme.colors.accent : theme.colors.border,
+          backgroundColor: selected ? `${theme.colors.accent}1A` : theme.colors.surfaceSecondary,
+        }}
+      >
+        <Caption style={{ color: selected ? theme.colors.accent : theme.colors.muted, fontWeight: '600' }}>
+          {label}
+        </Caption>
+      </TouchableOpacity>
+    );
+
+    return (
+      <View style={{ gap: theme.spacing.xs }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {chip(nb.rooms.all, activeRoomId === null, () => setActiveRoomId(null), 'all')}
+          {rooms.map((room) =>
+            chip(room.name, activeRoomId === room.id, () => setActiveRoomId(room.id), room.id)
+          )}
+          {chip(nb.rooms.add, false, () => setAddingRoom((v) => !v), 'add')}
+        </ScrollView>
+        {activeName ? <Caption muted>{nb.rooms.capturingIn(activeName)}</Caption> : null}
+        {addingRoom && (
+          <GlassCard style={{ gap: theme.spacing.sm }}>
+            <Caption muted>{nb.rooms.addTitle}</Caption>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {ROOM_SUGGESTIONS.filter(
+                (name) => !rooms.some((r) => r.name.toLowerCase() === name.toLowerCase())
+              ).map((name) => (
+                <TouchableOpacity
+                  key={name}
+                  onPress={() => void addRoom(name)}
+                  accessibilityRole="button"
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 7,
+                    borderRadius: theme.radii.pill,
+                    borderWidth: 1,
+                    borderColor: theme.colors.border,
+                    backgroundColor: theme.colors.surface,
+                  }}
+                >
+                  <Caption style={{ color: theme.colors.foreground }}>{name}</Caption>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={{ flexDirection: 'row', gap: theme.spacing.sm, alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <TextField
+                  value={newRoomName}
+                  onChangeText={setNewRoomName}
+                  placeholder={nb.rooms.placeholder}
+                  onSubmitEditing={() => void addRoom(newRoomName)}
+                />
+              </View>
+              <SecondaryButton onPress={() => void addRoom(newRoomName)}>
+                {nb.rooms.confirm}
+              </SecondaryButton>
+            </View>
+          </GlassCard>
+        )}
+      </View>
+    );
+  };
+
+  // A1: adaptiv huskeliste (Befar-mønsteret) — vises kun når det aktive
+  // rommet er et våtrom. Statisk påminnelse, ingen falske «✓».
+  const renderWetRoomChecklist = () => {
+    const activeName = roomNameById(project, activeRoomId ?? undefined);
+    if (!activeName || !isWetRoom(activeName)) return null;
+    return (
+      <GlassCard style={{ gap: theme.spacing.xs }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+          <Ionicons name="water-outline" size={16} color={theme.colors.accent} />
+          <Title style={{ fontSize: 15 }}>{nb.rooms.wetChecklistTitle}</Title>
+        </View>
+        <Caption muted>{nb.rooms.wetChecklistHint}</Caption>
+        {WET_ROOM_CHECKLIST.map((item) => (
+          <View key={item} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
+            <Caption style={{ color: theme.colors.accent }}>—</Caption>
+            <Caption muted style={{ flex: 1 }}>{item}</Caption>
+          </View>
+        ))}
+      </GlassCard>
+    );
+  };
+
   const renderNotesTab = () => {
-    const noteData = project?.notes || [];
+    const allNotes = project?.notes || [];
+    const noteData = activeRoomId
+      ? allNotes.filter((n) => n.roomId === activeRoomId)
+      : allNotes;
 
     return (
       <Animated.View entering={FadeInRight.duration(320)} style={{ flex: 1 }}>
         {/* B13: fangst-knappene ligger fast øverst, utenfor scrollingen. */}
-        <View style={{ marginTop: theme.spacing.md }}>
+        <View style={{ marginTop: theme.spacing.md, gap: theme.spacing.sm }}>
+          {renderRoomStrip()}
           {renderCaptureButtons()}
         </View>
 
@@ -2283,6 +2680,7 @@ export default function ProjectDetailScreen() {
             renderItem={renderNoteItem}
             ListHeaderComponent={
               <View style={{ gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
+                {renderWetRoomChecklist()}
                 {renderUnderlagCard()}
                 {renderInfoCard()}
                 {renderProjectDescription()}

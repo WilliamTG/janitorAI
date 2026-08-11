@@ -1,9 +1,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>DocrAI — UI-endringer vs. eksisterende løsning</title>
+<title>DocrAI – UI-endringer vs. eksisterende løsning</title>
 <style>
   :root {
-    --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
+    --paper: #FFFFFF; --surface: #F4F3EF; --ink: #16202B; --muted: #5C6B7A;
     --border: #DDE4EB; --accent: #3D5A80; --accent-fill: #3D5A80; --accent-pale: #E8F0F7;
     --amber: #A8681F; --amber-pale: #F7EEDD; --ok: #2E7D4F; --bad: #A6453A;
     --before-bg: #FAF6F3; --after-bg: #F3F8F5;
@@ -17,7 +17,7 @@
     }
   }
   :root[data-theme="light"] {
-    --paper: #FFFFFF; --surface: #F4F7FA; --ink: #16202B; --muted: #5C6B7A;
+    --paper: #FFFFFF; --surface: #F4F3EF; --ink: #16202B; --muted: #5C6B7A;
     --border: #DDE4EB; --accent: #3D5A80; --accent-fill: #3D5A80; --accent-pale: #E8F0F7;
     --amber: #A8681F; --amber-pale: #F7EEDD; --ok: #2E7D4F; --bad: #A6453A;
     --before-bg: #FAF6F3; --after-bg: #F3F8F5;
@@ -90,7 +90,7 @@
       <div class="brand-sq"></div>
       <span class="eyebrow">DocrAI · UI-endringer · 04.08.2026</span>
     </div>
-    <h1>Endringene i UI — mot eksisterende løsning</h1>
+    <h1>Endringene i UI – mot eksisterende løsning</h1>
     <p class="lede">
       Sammenstilling av hvert grep fra backloggen: hva den eksisterende løsningen gjorde, og hva
       som er endret. Alt merket <strong>bygget</strong> er implementert i prototypen og verifisert
@@ -100,7 +100,7 @@
       <span class="pill ok">bygget</span>
       <span class="pill part">delvis</span>
       <span class="pill todo">gjenstår</span>
-      <span class="exp">— status per grep</span>
+      <span class="exp">– status per grep</span>
     </div>
   </header>
 
@@ -151,7 +151,7 @@
           <p>Indikator lå i den scrollende listetoppen og forsvant ved scrolling; fantes ikke på detaljskjermen.</p>
         </div>
         <div class="cell after"><span class="lbl">Endring</span>
-          <p>Fast topprad på begge skjermer: «Lagret i skyen» / «Venter på nett — lagret lokalt», med varsel ved feilede opplastinger.</p>
+          <p>Fast topprad på begge skjermer: «Lagret i skyen» / «Venter på nett – lagret lokalt», med varsel ved feilede opplastinger.</p>
         </div>
       </div>
     </div>
@@ -192,7 +192,7 @@
           <p>Fire knapper på ~42 px i 2×2-rutenett med emoji (📷 🎬), som scrollet bort med resten av siden.</p>
         </div>
         <div class="cell after"><span class="lbl">Endring</span>
-          <p>Tre fullbredde-knapper på minst 56 px — Lydnotat · Bilde · Video — med ikoner og tydelig opptakstilstand. Laget for våte hansker.</p>
+          <p>Tre fullbredde-knapper på minst 56 px – Lydnotat · Bilde · Video – med ikoner og tydelig opptakstilstand. Laget for våte hansker.</p>
         </div>
       </div>
     </div>
@@ -204,7 +204,7 @@
           <p>Lå inne i det scrollende innholdet og forsvant ut av syne.</p>
         </div>
         <div class="cell after"><span class="lbl">Endring</span>
-          <p>Fast forankret i bunnen av skjermen — alltid ett trykk unna, skjult når rapportfanen alt er åpen.</p>
+          <p>Fast forankret i bunnen av skjermen – alltid ett trykk unna, skjult når rapportfanen alt er åpen.</p>
         </div>
       </div>
     </div>
@@ -213,7 +213,7 @@
       <div class="i-head"><span class="i-id">B18</span><h3>Varsler</h3><span class="pill ok">bygget</span></div>
       <div class="i-body">
         <div class="cell before"><span class="lbl">Eksisterende</span>
-          <p>57 avbrytende systemdialoger — også for suksess («Transcription ready»).</p>
+          <p>57 avbrytende systemdialoger – også for suksess («Transcription ready»).</p>
         </div>
         <div class="cell after"><span class="lbl">Endring</span>
           <p>Stille kvitteringer med AA-kontrast som bekrefter i forbifarten. Dialog kun ved sletting og kildevalg.</p>
@@ -237,10 +237,10 @@
       <div class="i-head"><span class="i-id">B9 + B11</span><h3>Bevisets opprinnelse</h3><span class="pill ok">bygget</span></div>
       <div class="i-body">
         <div class="cell before"><span class="lbl">Eksisterende</span>
-          <p>Foto og video uten sporbarhet — ingen posisjon, intet fangsttidspunkt, ingen sjekksum.</p>
+          <p>Foto og video uten sporbarhet – ingen posisjon, intet fangsttidspunkt, ingen sjekksum.</p>
         </div>
         <div class="cell after"><span class="lbl">Endring</span>
-          <p>Tid og posisjon stemples ved fangst (uten å blokkere flyten), og serveren setter SHA-256 ved opplasting — synlig som metadatalinje med skjold-merke.</p>
+          <p>Tid og posisjon stemples ved fangst (uten å blokkere flyten), og serveren setter SHA-256 ved opplasting – synlig som metadatalinje med skjold-merke.</p>
         </div>
       </div>
     </div>
@@ -252,7 +252,7 @@
           <p>Rå Google Doc-lenke; bevisbildene i dokumentet ble delt offentlig («anyone»). Ingen delingsfunksjon i API-et.</p>
         </div>
         <div class="cell after"><span class="lbl">Endring</span>
-          <p>Delingskort med lenke + sekssifret PIN og «PIN-beskyttet · utløper …». Kopier på web, delingsark på mobil — PIN-koden holdes utenfor delingsmeldingen.</p>
+          <p>Delingskort med lenke + sekssifret PIN og «PIN-beskyttet · utløper …». Kopier på web, delingsark på mobil – PIN-koden holdes utenfor delingsmeldingen.</p>
         </div>
       </div>
     </div>
@@ -260,7 +260,7 @@
 
   <!-- ══ Mottakersiden ══ -->
   <section>
-    <div class="sec-head"><span class="eyebrow">03</span><h2>Mottakersiden — helt ny flate</h2></div>
+    <div class="sec-head"><span class="eyebrow">03</span><h2>Mottakersiden – helt ny flate</h2></div>
     <div class="item">
       <div class="i-head"><span class="i-id">B7 + B10</span><h3>/share/…</h3><span class="pill ok">bygget</span></div>
       <div class="i-body">
@@ -268,7 +268,7 @@
           <p>Fantes ikke. Mottakeren måtte ha Google-tilgang og fikk et rådokument uten struktur eller tilgangskontroll.</p>
         </div>
         <div class="cell after"><span class="lbl">Endring</span>
-          <p>Kontoløs side med PIN-port og synlig utløpsstatus (fem feilforsøk gir kvarters pause). Bak porten: forensisk rapport — saksfakta, skade og årsak, bevisgalleri med fangsttid, posisjon og full sjekksum, og notater fra befaringen.</p>
+          <p>Kontoløs side med PIN-port og synlig utløpsstatus (fem feilforsøk gir kvarters pause). Bak porten: forensisk rapport – saksfakta, skade og årsak, bevisgalleri med fangsttid, posisjon og full sjekksum, og notater fra befaringen.</p>
         </div>
       </div>
     </div>
@@ -277,20 +277,20 @@
   <!-- ══ Gjenstår ══ -->
   <section>
     <div class="sec-head"><span class="eyebrow">04</span><h2>Fortsatt bare forslag</h2></div>
-    <p>Neste byggetrinn — beskrevet i løsningsskissen og backloggen, men ikke implementert ennå.</p>
+    <p>Neste byggetrinn – beskrevet i løsningsskissen og backloggen, men ikke implementert ennå.</p>
     <div class="todo-list">
       <div class="todo-item"><span class="i-id">B17</span><p><b>Adresse som prosjektnavn:</b> adressen fra rapportskjemaet foreslås automatisk ved opprettelse (duplikatvarselet er på plass).</p></div>
-      <div class="todo-item"><span class="i-id">B8</span><p><b>Auto-forslag på skadetype:</b> vann / brann / fukt / råte foreslås fra videoen — takstpersonen bekrefter eller endrer.</p></div>
+      <div class="todo-item"><span class="i-id">B8</span><p><b>Auto-forslag på skadetype:</b> vann / brann / fukt / råte foreslås fra videoen – takstpersonen bekrefter eller endrer.</p></div>
       <div class="todo-item"><span class="i-id">B6</span><p><b>Demo-modus:</b> ferdig demoprosjekt fra video til rapport, uten innlogging.</p></div>
-      <div class="todo-item"><span class="i-id">B12</span><p><b>EU/EØS-databehandling:</b> AI-kjøring i EU-region og docx-nedlasting uten Google-konto — i dag går rapporten via Google Docs og Gemini.</p></div>
+      <div class="todo-item"><span class="i-id">B12</span><p><b>EU/EØS-databehandling:</b> AI-kjøring i EU-region og docx-nedlasting uten Google-konto – i dag går rapporten via Google Docs og Gemini.</p></div>
       <div class="todo-item"><span class="i-id">B1 + B4</span><p><b>Transkripsjonsflyten:</b> backend leser lyd via mediaId med norsk språkhint; auto-transkribering ved opptaksstopp.</p></div>
-      <div class="todo-item"><span class="i-id">—</span><p><b>Godkjenningsstempel og Byggforsk-RAG:</b> synlig takstperson-godkjenning i rapporten og verifiserte kildesitater — kjernen i løsningsskissens neste fase.</p></div>
+      <div class="todo-item"><span class="i-id">–</span><p><b>Godkjenningsstempel og Byggforsk-RAG:</b> synlig takstperson-godkjenning i rapporten og verifiserte kildesitater – kjernen i løsningsskissens neste fase.</p></div>
     </div>
   </section>
 
   <footer>
     Grunnlag: backloggen (B1–B20), kartleggingen av <code>apps/mobile</code>, <code>apps/api</code>
     og <code>ai-engine</code>, og endringene på branchen <code>claude/visualisering-losning-xa7udi</code>
-    per 04.08.2026 — verifisert med typesjekk, enhetstester og ende-til-ende-test av delingskjeden.
+    per 04.08.2026 – verifisert med typesjekk, enhetstester og ende-til-ende-test av delingskjeden.
   </footer>
 </div>

@@ -223,4 +223,7 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
             print(f"⚠️  Could not share doc with {tester_email}: {e}")
 
     print(f"✅ Pipeline Complete: https://docs.google.com/document/d/{doc_id}")
-    return doc_id
+    # A5 (versjonslagring): den strukturerte analysen returneres sammen med
+    # dokument-ID-en slik at API/app kan lagre AI-utkastet som egen versjon —
+    # ikke bare det ferdig flettede dokumentet.
+    return doc_id, analysis
