@@ -11,6 +11,7 @@ const requestLogger = require("./middleware/requestLogger");
 
 const { getPool, isDbEnabled } = require("./db");
 const { signedMediaUrl } = require("./mediaSign");
+const { extractGeminiUsage, recordCost } = require("./costTracking");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -50,8 +51,8 @@ app.use(requestLogger);
 app.use(generalLimiter);
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_BASE_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 if (!GEMINI_API_KEY) {
   console.warn("⚠️  GEMINI_API_KEY is not set — transcription and image description will fail");
@@ -316,6 +317,7 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
   const filePath = req.file.path;
+  const startedAt = Date.now();
 
   try {
     const buffer = await fs.promises.readFile(filePath);
@@ -348,6 +350,15 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
       return res.status(500).json({ error: "No transcription returned from Gemini" });
     }
 
+    // COGS-måling (fire-and-forget, blokkerer aldri svaret).
+    recordCost({
+      testerToken: req.testerToken,
+      operation: "transcribe",
+      model: GEMINI_MODEL,
+      usage: extractGeminiUsage(data),
+      durationMs: Date.now() - startedAt,
+    });
+
     res.json({ text });
   } catch (err) {
     console.error("Backend /transcribe error:", sanitizeError(err));
@@ -370,6 +381,7 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
   const filePath = req.file.path;
+  const startedAt = Date.now();
 
   try {
     const buffer = await fs.promises.readFile(filePath);
@@ -402,6 +414,14 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
     if (!description) {
       return res.status(500).json({ error: "No description returned from Gemini" });
     }
+
+    recordCost({
+      testerToken: req.testerToken,
+      operation: "describe_image",
+      model: GEMINI_MODEL,
+      usage: extractGeminiUsage(data),
+      durationMs: Date.now() - startedAt,
+    });
 
     res.json({ description });
   } catch (err) {
@@ -504,24 +524,46 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     // the DB) — the AI engine authenticates against its own TESTER_TOKEN env var,
     // so the backend needs AI_ENGINE_TOKEN set to that same value.
     const aiToken = process.env.AI_ENGINE_TOKEN || "";
-    const response = await fetchWithTimeout(`${aiEngineUrl}/api/report`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-tester-token": aiToken,
+    const startedAt = Date.now();
+    const response = await fetchWithTimeout(
+      `${aiEngineUrl}/api/report`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-tester-token": aiToken,
+        },
+        body: JSON.stringify({
+          video_url: videoUrl,
+          report_meta: report_meta || {},
+          project: projectContext,
+          tester_email: req.testerEmail || "",
+        }),
       },
-      body: JSON.stringify({
-        video_url: videoUrl,
-        report_meta: report_meta || {},
-        project: projectContext,
-        tester_email: req.testerEmail || "",
-      }),
-    });
+      120000 // rapportgenerering er tung — 2 min
+    );
 
     const data = await response.json();
     if (!response.ok) {
       console.error("AI engine /api/report error:", { status: response.status });
       return res.status(502).json({ error: "AI engine error" });
+    }
+
+    // COGS: AI-motoren returnerer token_usage fra Gemini-analysen (den store
+    // kostnadsdriveren). Fire-and-forget.
+    const tu = data && data.token_usage;
+    if (tu) {
+      recordCost({
+        testerToken: req.testerToken,
+        operation: "report",
+        model: tu.model || "gemini-2.5-flash",
+        usage: {
+          input: tu.input_tokens || 0,
+          output: tu.output_tokens || 0,
+          total: tu.total_tokens || (tu.input_tokens || 0) + (tu.output_tokens || 0),
+        },
+        durationMs: Date.now() - startedAt,
+      });
     }
 
     res.json(data);
@@ -641,4 +683,11 @@ startMediaSweepScheduler();
 // ---------- START SERVER ----------
 app.listen(PORT, () => {
   console.log(`Backend listening on port ${PORT}`);
+  // Opprett skjemaet ved oppstart (idempotent) i stedet for kun lazy via
+  // requireDb, så alle tabeller — inkl. cost_events — finnes umiddelbart.
+  if (isDbEnabled()) {
+    require("./db")
+      .initDb()
+      .catch((err) => console.error("initDb at boot failed:", err && err.message));
+  }
 });

@@ -135,7 +135,7 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
     contents = [video_file] + photo_files + knowledge_files + context_parts + [main_prompt()]
 
     print("🧠 Sending content to Gemini for analysis...")
-    analysis = genai_client.models.generate_content(
+    gemini_response = genai_client.models.generate_content(
         model="gemini-2.5-flash",
         contents=contents,
         config={"response_mime_type": "application/json",
@@ -145,7 +145,20 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
                 "top_p": 0.1,         # Velger kun de mest sannsynlige ordene
                 "top_k": 1,           # Velger kun det aller beste ordet for hvert steg
                 "seed": 42}
-    ).parsed
+    )
+    analysis = gemini_response.parsed
+
+    # COGS: fang tokenforbruk fra rå-responsen før den forkastes, så backend kan
+    # måle faktisk kostnad per rapport (docs/prising-bruksbasert.md).
+    token_usage = None
+    usage = getattr(gemini_response, "usage_metadata", None)
+    if usage is not None:
+        token_usage = {
+            "model": "gemini-2.5-flash",
+            "input_tokens": getattr(usage, "prompt_token_count", None),
+            "output_tokens": getattr(usage, "candidates_token_count", None),
+            "total_tokens": getattr(usage, "total_token_count", None),
+        }
 
     # Free memory after analysis - contents list can be large
     del contents, knowledge_files, video_file, photo_files
@@ -225,5 +238,5 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
     print(f"✅ Pipeline Complete: https://docs.google.com/document/d/{doc_id}")
     # A5 (versjonslagring): den strukturerte analysen returneres sammen med
     # dokument-ID-en slik at API/app kan lagre AI-utkastet som egen versjon —
-    # ikke bare det ferdig flettede dokumentet.
-    return doc_id, analysis
+    # ikke bare det ferdig flettede dokumentet. token_usage gir COGS-måling.
+    return doc_id, analysis, token_usage
