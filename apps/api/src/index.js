@@ -118,10 +118,14 @@ app.get("/presentation", (req, res) => {
 // Pitch-, skisse- og sammenstillings-sidene er skrevet uten dokumentskall
 // (de publiseres også som artifacts); pakk dem inn her så nettleseren
 // rendrer i standards mode.
+// /kundereisen er bevisst offentlig (lenket + i sitemap); resten er interne
+// pitch-/strategisider som ikke skal indekseres selv om URL-en lekker.
+const PUBLIC_PRESENTATION = new Set(["kundereisen.html"]);
 function sendPresentationPage(res, filename) {
   const file = path.join(__dirname, "../../../presentation", filename);
   fs.readFile(file, "utf8", (err, html) => {
     if (err) return res.status(404).json({ error: "Not found" });
+    if (!PUBLIC_PRESENTATION.has(filename)) res.set("X-Robots-Tag", "noindex");
     res.type("html").send('<!DOCTYPE html>\n<html lang="nb">\n' + html + "\n</html>");
   });
 }
