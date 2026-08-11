@@ -12,6 +12,54 @@ Forutsetning avklart: **kundene er bedrifter** (takstfolk/proffbrukere), ikke
 forbrukere. Det forenkler jussen betydelig og flytter kravene til leverandør-
 compliance (DPA/underleverandørliste).
 
+## Anbefalt pris (utgangspunkt — bekreftes mot ekte COGS)
+
+**TL;DR: 149 kr per rapport (B2B, eks. mva), forhåndsbetalt i kredittpakker,
+med volumrabatt og gratis startkreditter. Behold 990 kr/mnd flat som alternativ
+for storbrukere.**
+
+- **Enhet:** 1 rapport = 10 kreditter. Transkripsjon og bildebeskrivelse er
+  *inkludert* i rapporten — de er små, og separat måling skaper taksameter-angst.
+- **Veiledende pris og pakker:**
+
+  | Pakke | Rapporter | Pris | Per rapport |
+  |---|---|---|---|
+  | Start (gratis) | 5 | 0 kr | — |
+  | Liten | 10 | 1 490 kr | 149 kr |
+  | Medium | 50 | 5 900 kr | 118 kr |
+  | Stor | 100 | 9 900 kr | 99 kr |
+  | Flat abonnement | ubegrenset | 990 kr/mnd | break-even ~7/mnd |
+
+**Hvorfor 149 kr — verdibasert, ikke kostnad-pluss:**
+- En rapport sparer ~2 timer. Takstpersonens time ~800–1 500 kr →
+  **1 400–2 600 kr spart verdi per rapport**. 149 kr er ~6–10 % av verdien.
+- **Under Befar (500 kr/rapport)** — vi underbyr etablert per-rapport-pris klart,
+  med bedre feltopplevelse.
+- **Marginen er >95 %** over kostnad (se under). Prisen begrenses av verdi og
+  konkurranse, ikke av COGS.
+
+**COGS-gulvet — målt via `GET /api/admin/cost`** (Gemini-tokenforbruk per
+operasjon; ~10 kr/USD):
+
+  | Operasjon | Tokens (typisk) | Est. kostnad |
+  |---|---|---|
+  | Rapport (Gemini 2.5 Flash) | ~55–62k inn / ~2k ut | ~0,20–0,24 kr |
+  | Transkripsjon | ~8k inn / 0,4k ut | ~0,01 kr |
+  | Bildebeskrivelse ×5 | ~1,3k inn hver | ~0,01 kr |
+  | **Sum LLM per rapport** | | **~0,25 kr** |
+
+> ⚠️ **Tallene er estimater basert på realistisk rapportstørrelse — video-tokens
+> er jokeren** (lang video kan mangedoble input-tokens). De bekreftes med ekte
+> pilotrapporter via `/api/admin/cost` (`maks_total_tokens` gir verste-falls-
+> grunnlaget). Legg til infrastruktur (AI-motor-hosting, Google Docs, lagring) og
+> sett **kalkylegulvet til ~2–3 kr/rapport** for margin-trygghet. Selv da er 149 kr
+> ~98 % margin.
+
+**Beslutning gruppen må ta:** godkjenne 149 kr/rapport som veiledende startpris
+(eller justere), og pakkestrukturen over. Priser på `/om` og `/vilkar` endres
+først når vedtaket foreligger — og etter at 10–20 ekte pilotrapporter har
+bekreftet COGS-gulvet.
+
 ## Hvorfor det passer DocrAI
 
 - **Kostnad = bruk.** COGS er per rapport (transkripsjon + rapportgenerering).
