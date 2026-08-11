@@ -94,8 +94,21 @@ const API_PATHS = new Set([
   "/describe-image",
 ]);
 // ---------- ADMIN DASHBOARD (public HTML shell, API calls carry the secret) --
+// Inject the server's own API_BASE_URL so the dashboard can warn when its
+// configured target differs from the URL the app itself uses.
 app.get("/admin-dashboard", (req, res) => {
-  res.sendFile(path.join(__dirname, "admin-dashboard.html"));
+  const htmlPath = path.join(__dirname, "admin-dashboard.html");
+  const appApiBase =
+    process.env.API_BASE_URL || "https://janitorai-backend.onrender.com";
+  try {
+    let html = fs.readFileSync(htmlPath, "utf8");
+    // Replace all occurrences of placeholder with the actual app API base URL
+    html = html.replaceAll("__APP_API_BASE_PLACEHOLDER__", appApiBase);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  } catch (err) {
+    res.status(500).send("Failed to load admin dashboard");
+  }
 });
 
 app.get("/presentation", (req, res) => {

@@ -283,6 +283,28 @@
     .sign-out:hover { color: var(--danger); }
 
     .section-gap { margin-top: 1.5rem; }
+
+    /* ── Mismatch warning banner ── */
+    #mismatch-banner {
+      display: none;
+      background: rgba(245,158,11,0.12);
+      border: 1px solid rgba(245,158,11,0.45);
+      border-radius: var(--radius);
+      color: #fcd34d;
+      font-size: 0.83rem;
+      padding: 0.6rem 1rem;
+      margin-bottom: 1.25rem;
+      line-height: 1.5;
+    }
+    #mismatch-banner.visible { display: block; }
+    #mismatch-banner strong { color: #fef3c7; }
+    #mismatch-banner code {
+      font-family: 'Menlo','Consolas',monospace;
+      font-size: 0.78rem;
+      background: rgba(0,0,0,0.25);
+      border-radius: 4px;
+      padding: 0.1em 0.35em;
+    }
   </style>
 </head>
 <body>
@@ -341,6 +363,14 @@
         All admin API calls (tokens, logs) are sent to this URL. Change it if you want to manage a different environment.
         The dashboard will re-authenticate against the new URL.
       </div>
+    </div>
+
+    <!-- ── Mismatch warning banner ── -->
+    <div id="mismatch-banner" role="alert">
+      ⚠️ <strong>Database mismatch:</strong> this dashboard is managing tokens on
+      <code id="mismatch-dashboard-url"></code> but the app is configured to validate
+      tokens against <code id="mismatch-app-url"></code>.
+      Tokens created here will be <strong>rejected by the live app</strong>.
     </div>
 
     <div id="status"></div>
@@ -417,12 +447,17 @@
   </div>
 
 <script>
+  // ── App's canonical API base (injected by the server at serve time) ───────────
+  // This is the URL the mobile/web app itself is built to talk to.
+  // The server replaces __APP_API_BASE_PLACEHOLDER__ before sending this HTML.
+  const APP_API_BASE = '__APP_API_BASE_PLACEHOLDER__';
+
   // ── Backend URL ───────────────────────────────────────────────────────────────
   // Stored in localStorage so it persists across page loads.
-  // Defaults to the Render production server so token management always hits
-  // the right database regardless of where this HTML page is served from.
+  // Defaults to the app's own API base (injected above) so the dashboard always
+  // targets the same database the app uses unless explicitly changed.
   const BACKEND_KEY   = 'janitor_admin_api_base';
-  const PRODUCTION_URL = 'https://janitorai-backend.onrender.com';
+  const PRODUCTION_URL = APP_API_BASE || 'https://janitorai-backend.onrender.com';
 
   function getApiBase() {
     return localStorage.getItem(BACKEND_KEY) || PRODUCTION_URL;
@@ -437,12 +472,28 @@
     }
     updateBackendBadge();
     updatePresentationLinks();
+    updateMismatchBanner();
   }
 
   function updateBackendBadge() {
     const url = getApiBase();
     document.getElementById('backend-url-text').textContent = url || PRODUCTION_URL;
     document.getElementById('backendUrlInput').value = url;
+  }
+
+  function updateMismatchBanner() {
+    const dashboardUrl = getApiBase();
+    const appUrl = APP_API_BASE;
+    const banner = document.getElementById('mismatch-banner');
+    // Normalise by stripping trailing slashes for comparison
+    const norm = s => (s || '').trim().replace(/\/$/, '');
+    if (appUrl && norm(dashboardUrl) !== norm(appUrl)) {
+      document.getElementById('mismatch-dashboard-url').textContent = dashboardUrl;
+      document.getElementById('mismatch-app-url').textContent = appUrl;
+      banner.classList.add('visible');
+    } else {
+      banner.classList.remove('visible');
+    }
   }
 
   function updatePresentationLinks() {
@@ -800,6 +851,7 @@
     document.getElementById('modalBackendInput').value = getApiBase();
     updateBackendBadge();
     updatePresentationLinks();
+    updateMismatchBanner();
 
     const stored = getSecret();
     if (stored) {
