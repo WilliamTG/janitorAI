@@ -85,9 +85,16 @@ def _upload_inspector_photos(genai_client, project: dict) -> list:
                     with os.fdopen(fd, "wb") as f:
                         f.write(resp.content)
                     photo_file = genai_client.files.upload(file=tmp_path)
+                    # Denial-of-Wallet-vern: bind ventingen (som videostien),
+                    # ellers kan et foto som henger i PROCESSING låse jobben.
+                    photo_deadline = time.monotonic() + 120  # maks 2 min
                     while photo_file.state.name == "PROCESSING":
+                        if time.monotonic() > photo_deadline:
+                            raise TimeoutError("Gemini foto-prosessering tok for lang tid (>2 min)")
                         time.sleep(1)
                         photo_file = genai_client.files.get(name=photo_file.name)
+                    if photo_file.state.name == "FAILED":
+                        raise RuntimeError("Gemini klarte ikke å prosessere inspektørfotoet")
                     uploaded.append(photo_file)
                     print(f"✅ Inspector photo uploaded to Gemini: {photo_file.name}")
                 finally:
@@ -108,9 +115,16 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
     # 2. Gemini Analysis (Multimodal)
     print("🤖 Gemini is analyzing video...")
     video_file = genai_client.files.upload(file=video_path)
+    # Denial-of-Wallet-vern: bind ventingen på videoprosessering (ellers kan en
+    # fil som henger i PROCESSING holde en fakturerbar jobb åpen i det uendelige).
+    video_deadline = time.monotonic() + 300  # maks 5 min
     while video_file.state.name == "PROCESSING":
+        if time.monotonic() > video_deadline:
+            raise TimeoutError("Gemini video-prosessering tok for lang tid (>5 min)")
         time.sleep(2)
         video_file = genai_client.files.get(name=video_file.name)
+    if video_file.state.name == "FAILED":
+        raise RuntimeError("Gemini klarte ikke å prosessere videoen")
 
     # Upload inspector photos (if any) so Gemini can analyse them alongside the video
     photo_files = []
@@ -135,7 +149,7 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
     contents = [video_file] + photo_files + knowledge_files + context_parts + [main_prompt()]
 
     print("🧠 Sending content to Gemini for analysis...")
-    analysis = genai_client.models.generate_content(
+    gemini_response = genai_client.models.generate_content(
         model="gemini-2.5-flash",
         contents=contents,
         config={"response_mime_type": "application/json",
@@ -144,8 +158,24 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
                 "temperature": 0.0,    # Setter kreativiteten til null
                 "top_p": 0.1,         # Velger kun de mest sannsynlige ordene
                 "top_k": 1,           # Velger kun det aller beste ordet for hvert steg
-                "seed": 42}
-    ).parsed
+                "seed": 42,
+                # Denial-of-Wallet-vern: hard timeout (ms) på selve analysekallet —
+                # den største og tidligere ubundne kostnadsdriveren.
+                "http_options": {"timeout": 120000}}
+    )
+    analysis = gemini_response.parsed
+
+    # COGS: fang tokenforbruk fra rå-responsen før den forkastes, så backend kan
+    # måle faktisk kostnad per rapport (docs/prising-bruksbasert.md).
+    token_usage = None
+    usage = getattr(gemini_response, "usage_metadata", None)
+    if usage is not None:
+        token_usage = {
+            "model": "gemini-2.5-flash",
+            "input_tokens": getattr(usage, "prompt_token_count", None),
+            "output_tokens": getattr(usage, "candidates_token_count", None),
+            "total_tokens": getattr(usage, "total_token_count", None),
+        }
 
     # Free memory after analysis - contents list can be large
     del contents, knowledge_files, video_file, photo_files
@@ -225,5 +255,5 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
     print(f"✅ Pipeline Complete: https://docs.google.com/document/d/{doc_id}")
     # A5 (versjonslagring): den strukturerte analysen returneres sammen med
     # dokument-ID-en slik at API/app kan lagre AI-utkastet som egen versjon —
-    # ikke bare det ferdig flettede dokumentet.
-    return doc_id, analysis
+    # ikke bare det ferdig flettede dokumentet. token_usage gir COGS-måling.
+    return doc_id, analysis, token_usage

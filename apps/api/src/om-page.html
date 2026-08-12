@@ -13,6 +13,7 @@
 <meta property="og:image" content="/og-bilde.png" />
 <meta property="og:locale" content="nb_NO" />
 <meta name="twitter:card" content="summary_large_image" />
+<link rel="canonical" href="/om" />
 <style>
   :root {
     --paper: #FFFFFF; --surface: #F4F3EF; --ink: #16202B; --muted: #5C6B7A;
@@ -277,6 +278,9 @@
 </script>
 <script>
   try { navigator.sendBeacon('/api/besok', new Blob([JSON.stringify({ sti: '/om', kilde: new URLSearchParams(location.search).get('k') || undefined })], { type: 'application/json' })); } catch (e) {}
+</script>
+<script type="application/ld+json">
+{ "@context":"https://schema.org","@type":"Organization","name":"DocrAI","url":"/om","logo":"/apple-touch-icon.png","email":"fdalen.97@gmail.com","description":"Gjør befaringsvideo og tale om til forsikringsklar skaderapport med årsak, akutt/gradvis-vurdering og Byggforsk-henvisninger."}
 </script>
 </body>
 </html>

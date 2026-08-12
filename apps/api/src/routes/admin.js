@@ -96,6 +96,41 @@ router.get("/tokens", async (req, res) => {
   }
 });
 
+// ── GET /api/admin/cost – COGS-aggregat per operasjon ────────────────────────
+// Grunnlaget for å sette en kredittpris (docs/prising-bruksbasert.md): faktisk
+// tokenforbruk og estimert kostnad per operasjonstype. ?days=N (standard 30).
+router.get("/cost", async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 1), 365);
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT
+         operation,
+         COUNT(*)::int                             AS antall,
+         ROUND(AVG(input_tokens))::int             AS snitt_input_tokens,
+         ROUND(AVG(output_tokens))::int            AS snitt_output_tokens,
+         ROUND(AVG(total_tokens))::int             AS snitt_total_tokens,
+         MAX(total_tokens)::int                    AS maks_total_tokens,
+         ROUND(AVG(est_cost_usd)::numeric, 6)      AS snitt_kostnad_usd,
+         ROUND(SUM(est_cost_usd)::numeric, 4)      AS sum_kostnad_usd,
+         ROUND(AVG(duration_ms))::int              AS snitt_ms
+       FROM cost_events
+       WHERE created_at >= now() - ($1 || ' days')::interval
+       GROUP BY operation
+       ORDER BY sum_kostnad_usd DESC NULLS LAST`,
+      [String(days)]
+    );
+    res.json({
+      windowDays: days,
+      note: "Kostnad er ESTIMAT (verifiser priser mot Google før kredittpris settes).",
+      operations: result.rows,
+    });
+  } catch (err) {
+    console.error("GET /api/admin/cost error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // ── GET /api/admin/logs – 200 most recent errors + actions ───────────────────
 router.get("/logs", async (req, res) => {
   try {

@@ -77,14 +77,13 @@ def connect_to_google_api(creds_path):
    "outputs": [],
    "source": [
     "# 3. Run Pipeline\\n",
-    "report_url = create_report(\\n",
+    "doc_id, analysis, token_usage = create_report(\\n",
     "    video_path=VIDEO_PATH, \\n",
-    "    creds_path=CREDS_PATH, \\n",
     "    master_id=MASTER_ID, \\n",
-    "    folder_id=FOLDER_ID, \\n",
+    "    output_folder=FOLDER_ID, \\n",
     "    gemini_key=GEMINI_KEY\\n",
     ")\\n",
-    "print(f'Done! Check your report here: {report_url}')"
+    "print(f'Done! Check your report here: https://docs.google.com/document/d/{doc_id}')"
    ]
   }
  ],

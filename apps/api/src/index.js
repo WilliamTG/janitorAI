@@ -11,6 +11,7 @@ const requestLogger = require("./middleware/requestLogger");
 
 const { getPool, isDbEnabled } = require("./db");
 const { signedMediaUrl } = require("./mediaSign");
+const { extractGeminiUsage, recordCost } = require("./costTracking");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -50,8 +51,8 @@ app.use(requestLogger);
 app.use(generalLimiter);
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_BASE_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 if (!GEMINI_API_KEY) {
   console.warn("⚠️  GEMINI_API_KEY is not set — transcription and image description will fail");
@@ -115,30 +116,63 @@ app.get("/presentation", (req, res) => {
   res.sendFile(path.join(__dirname, "../../../presentation/index.html"));
 });
 
+// Basis-URL for absolutte SEO-lenker: PUBLIC_BASE_URL i drift, ellers request-
+// origin (robust uansett hvilket domene som serverer).
+function publicBase(req) {
+  return process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
+}
+
+// Absolutiser SEO-URL-er kirurgisk (OG-protokollen og Googles rich-results krever
+// absolutte URL-er): kun og:image, canonical og JSON-LD item/url/logo — aldri
+// body-lenker. Injiser og:url. Mønstrene forekommer bare i <head>/ld+json.
+function absolutizeSeo(html, base, routePath) {
+  html = html
+    .replace(/(<meta property="og:image" content=")(\/[^"]*)(")/g, `$1${base}$2$3`)
+    .replace(/(<link rel="canonical" href=")(\/[^"]*)(")/g, `$1${base}$2$3`)
+    .replace(/("(?:item|url|logo)":")(\/[^"]*)(")/g, `$1${base}$2$3`);
+  if (routePath && !/property="og:url"/.test(html) && /<meta property="og:image"/.test(html)) {
+    html = html.replace(
+      /(<meta property="og:image"[^>]*>\n?)/,
+      `$1<meta property="og:url" content="${base}${routePath}" />\n`
+    );
+  }
+  return html;
+}
+
+// Server en offentlig salgsside med absolutte SEO-URL-er.
+function sendPublicPage(req, res, filename, routePath) {
+  fs.readFile(path.join(__dirname, filename), "utf8", (err, html) => {
+    if (err) return sendNotFound(req, res);
+    res.type("html").send(absolutizeSeo(html, publicBase(req), routePath));
+  });
+}
+
 // Pitch-, skisse- og sammenstillings-sidene er skrevet uten dokumentskall
 // (de publiseres også som artifacts); pakk dem inn her så nettleseren
 // rendrer i standards mode.
 // /kundereisen er bevisst offentlig (lenket + i sitemap); resten er interne
 // pitch-/strategisider som ikke skal indekseres selv om URL-en lekker.
 const PUBLIC_PRESENTATION = new Set(["kundereisen.html"]);
-function sendPresentationPage(res, filename) {
+function sendPresentationPage(req, res, filename, routePath) {
   const file = path.join(__dirname, "../../../presentation", filename);
   fs.readFile(file, "utf8", (err, html) => {
     if (err) return res.status(404).json({ error: "Not found" });
-    if (!PUBLIC_PRESENTATION.has(filename)) res.set("X-Robots-Tag", "noindex");
+    const isPublic = PUBLIC_PRESENTATION.has(filename);
+    if (!isPublic) res.set("X-Robots-Tag", "noindex");
+    if (isPublic) html = absolutizeSeo(html, publicBase(req), routePath);
     res.type("html").send('<!DOCTYPE html>\n<html lang="nb">\n' + html + "\n</html>");
   });
 }
 
-app.get("/kundereisen", (req, res) => sendPresentationPage(res, "kundereisen.html"));
+app.get("/kundereisen", (req, res) => sendPresentationPage(req, res, "kundereisen.html", "/kundereisen"));
 // Gammelt navn på kundereise-siden — behold som alias.
-app.get("/pitch", (req, res) => sendPresentationPage(res, "kundereisen.html"));
-app.get("/losningsskisse", (req, res) => sendPresentationPage(res, "losningsskisse.html"));
-app.get("/ui-endringer", (req, res) => sendPresentationPage(res, "ui-endringer.html"));
-app.get("/underlag-demo", (req, res) => sendPresentationPage(res, "underlag-demo.html"));
-app.get("/totalbilde", (req, res) => sendPresentationPage(res, "totalbilde.html"));
-app.get("/ui-total", (req, res) => sendPresentationPage(res, "ui-total.html"));
-app.get("/fargealternativer", (req, res) => sendPresentationPage(res, "fargealternativer.html"));
+app.get("/pitch", (req, res) => sendPresentationPage(req, res, "kundereisen.html", "/kundereisen"));
+app.get("/losningsskisse", (req, res) => sendPresentationPage(req, res, "losningsskisse.html"));
+app.get("/ui-endringer", (req, res) => sendPresentationPage(req, res, "ui-endringer.html"));
+app.get("/underlag-demo", (req, res) => sendPresentationPage(req, res, "underlag-demo.html"));
+app.get("/totalbilde", (req, res) => sendPresentationPage(req, res, "totalbilde.html"));
+app.get("/ui-total", (req, res) => sendPresentationPage(req, res, "ui-total.html"));
+app.get("/fargealternativer", (req, res) => sendPresentationPage(req, res, "fargealternativer.html"));
 
 // ---------- SHARE PAGE (public HTML shell; data endpoints gate on PIN) ------
 // Registered before the static/SPA fallback so /share/:id is never swallowed
@@ -149,29 +183,20 @@ app.get("/share/:id", (req, res) => {
 
 // ---------- DEMO (public — kampanjekroken, inkorporering A4) ----------------
 // /demo?adresse=… viser saksunderlaget for en adresse uten innlogging.
-app.get("/demo", (req, res) => {
-  res.sendFile(path.join(__dirname, "demo-page.html"));
-});
+// Absolutte SEO-URL-er via sendPublicPage (OG-preview krever absolutt og:image).
+app.get("/demo", (req, res) => sendPublicPage(req, res, "demo-page.html", "/demo"));
 
 // ---------- OM/SALGSSIDE (public — Befar/Wenn-mønsteret) --------------------
 // Landingsside med verdiløfte, prisnivåer og prøv-selv-inngang til /demo.
-app.get("/om", (req, res) => {
-  res.sendFile(path.join(__dirname, "om-page.html"));
-});
+app.get("/om", (req, res) => sendPublicPage(req, res, "om-page.html", "/om"));
 
 // ---------- LANSERINGSSIDER (public — FAQ, personvern, takk, robots, og) ----
-app.get("/faq", (req, res) => {
-  res.sendFile(path.join(__dirname, "faq-page.html"));
-});
-app.get("/personvern", (req, res) => {
-  res.sendFile(path.join(__dirname, "personvern-page.html"));
-});
+app.get("/faq", (req, res) => sendPublicPage(req, res, "faq-page.html", "/faq"));
+app.get("/personvern", (req, res) => sendPublicPage(req, res, "personvern-page.html", "/personvern"));
 app.get("/takk", (req, res) => {
   res.sendFile(path.join(__dirname, "takk-page.html"));
 });
-app.get("/vilkar", (req, res) => {
-  res.sendFile(path.join(__dirname, "vilkar-page.html"));
-});
+app.get("/vilkar", (req, res) => sendPublicPage(req, res, "vilkar-page.html", "/vilkar"));
 app.get("/robots.txt", require("./routes/publikum").robotsHandler);
 // Sitemap (SEO): kun de offentlige, indekserbare salgssidene.
 app.get("/sitemap.xml", (req, res) => {
@@ -316,6 +341,7 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
   const filePath = req.file.path;
+  const startedAt = Date.now();
 
   try {
     const buffer = await fs.promises.readFile(filePath);
@@ -348,6 +374,15 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
       return res.status(500).json({ error: "No transcription returned from Gemini" });
     }
 
+    // COGS-måling (fire-and-forget, blokkerer aldri svaret).
+    recordCost({
+      testerToken: req.testerToken,
+      operation: "transcribe",
+      model: GEMINI_MODEL,
+      usage: extractGeminiUsage(data),
+      durationMs: Date.now() - startedAt,
+    }).catch(() => {});
+
     res.json({ text });
   } catch (err) {
     console.error("Backend /transcribe error:", sanitizeError(err));
@@ -370,6 +405,7 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
   const filePath = req.file.path;
+  const startedAt = Date.now();
 
   try {
     const buffer = await fs.promises.readFile(filePath);
@@ -402,6 +438,14 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
     if (!description) {
       return res.status(500).json({ error: "No description returned from Gemini" });
     }
+
+    recordCost({
+      testerToken: req.testerToken,
+      operation: "describe_image",
+      model: GEMINI_MODEL,
+      usage: extractGeminiUsage(data),
+      durationMs: Date.now() - startedAt,
+    }).catch(() => {});
 
     res.json({ description });
   } catch (err) {
@@ -464,21 +508,48 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
         .filter((r) => r && r.id && r.name)
         .map((r) => [String(r.id), String(r.name)])
     );
+
+    // S3/S10: bare foto denne testeren faktisk eier skal signeres og sendes til
+    // AI-motoren. Videoen eierskapssjekkes over; her verifiseres alle foto-
+    // remoteId-er i én spørring, og ikke-eide utelates (kan ellers omgå tenant-
+    // skopingen fordi signert media-GET slår opp på id alene).
+    const requestedPhotoIds = [
+      ...new Set(
+        (Array.isArray(project?.notes) ? project.notes : [])
+          .flatMap((n) => (Array.isArray(n.photos) ? n.photos : []))
+          .map((p) => (p && p.remoteId ? String(p.remoteId) : null))
+          .filter(Boolean)
+      ),
+    ];
+    let ownedPhotoIds = new Set();
+    if (isDbEnabled() && requestedPhotoIds.length > 0) {
+      const owned = await getPool().query(
+        "SELECT id FROM media WHERE id = ANY($1) AND tester_token = $2",
+        [requestedPhotoIds, token]
+      );
+      ownedPhotoIds = new Set(owned.rows.map((r) => String(r.id)));
+    }
+
     const enrichedNotes = (Array.isArray(project?.notes) ? project.notes : [])
       .map((note) => {
         const enrichedPhotos = (Array.isArray(note.photos) ? note.photos : [])
           .filter((p) => p && (p.uri || p.remoteId))
           .map((p) => {
-            // Signert URL for opplastede foto (remoteId); lokale uri-er (ikke
-            // ennå synket) sendes som de er.
-            const uri = p.remoteId
-              ? signedMediaUrl(apiBaseUrl, p.remoteId)
-              : String(p.uri);
+            // Signer bare eide foto; lokale uri-er (ikke synket ennå) sendes som
+            // de er; ikke-eide remoteId-er droppes.
+            let uri;
+            if (p.remoteId) {
+              if (!ownedPhotoIds.has(String(p.remoteId))) return null;
+              uri = signedMediaUrl(apiBaseUrl, p.remoteId);
+            } else {
+              uri = String(p.uri);
+            }
             return {
               uri,
               ...(p.caption ? { caption: p.caption } : {}),
             };
-          });
+          })
+          .filter(Boolean);
 
         const enriched = {};
         if (note.text) enriched.text = note.text;
@@ -504,24 +575,46 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     // the DB) — the AI engine authenticates against its own TESTER_TOKEN env var,
     // so the backend needs AI_ENGINE_TOKEN set to that same value.
     const aiToken = process.env.AI_ENGINE_TOKEN || "";
-    const response = await fetchWithTimeout(`${aiEngineUrl}/api/report`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-tester-token": aiToken,
+    const startedAt = Date.now();
+    const response = await fetchWithTimeout(
+      `${aiEngineUrl}/api/report`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-tester-token": aiToken,
+        },
+        body: JSON.stringify({
+          video_url: videoUrl,
+          report_meta: report_meta || {},
+          project: projectContext,
+          tester_email: req.testerEmail || "",
+        }),
       },
-      body: JSON.stringify({
-        video_url: videoUrl,
-        report_meta: report_meta || {},
-        project: projectContext,
-        tester_email: req.testerEmail || "",
-      }),
-    });
+      120000 // rapportgenerering er tung — 2 min
+    );
 
     const data = await response.json();
     if (!response.ok) {
       console.error("AI engine /api/report error:", { status: response.status });
       return res.status(502).json({ error: "AI engine error" });
+    }
+
+    // COGS: AI-motoren returnerer token_usage fra Gemini-analysen (den store
+    // kostnadsdriveren). Fire-and-forget.
+    const tu = data && data.token_usage;
+    if (tu) {
+      recordCost({
+        testerToken: req.testerToken,
+        operation: "report",
+        model: tu.model || "gemini-2.5-flash",
+        usage: {
+          input: tu.input_tokens || 0,
+          output: tu.output_tokens || 0,
+          total: tu.total_tokens || (tu.input_tokens || 0) + (tu.output_tokens || 0),
+        },
+        durationMs: Date.now() - startedAt,
+      }).catch(() => {});
     }
 
     res.json(data);
@@ -641,4 +734,11 @@ startMediaSweepScheduler();
 // ---------- START SERVER ----------
 app.listen(PORT, () => {
   console.log(`Backend listening on port ${PORT}`);
+  // Opprett skjemaet ved oppstart (idempotent) i stedet for kun lazy via
+  // requireDb, så alle tabeller — inkl. cost_events — finnes umiddelbart.
+  if (isDbEnabled()) {
+    require("./db")
+      .initDb()
+      .catch((err) => console.error("initDb at boot failed:", err && err.message));
+  }
 });
