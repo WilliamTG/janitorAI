@@ -57,6 +57,15 @@ ikke får verdi uten den — ikke på gründer-entusiasme. (Kilde: `inkorporerin
 4. **Steelman konkurrentene.** Argumentér for hvorfor Befar/Wenn vinner — så svar.
 5. **Oppdater `docs/` og denne fila** når arkitektur/scope endres.
 
+## Beslutningskommandoer (`.claude/commands/`)
+Delte slash-kommandoer for de disiplinene playbooken krever — bruk dem før
+pitcher og store valg:
+- `/steelman` — sterkeste argument MOT egen idé (overlever den, er den klar).
+- `/brutal` — ærlig kritikk uten høflighet; hva er faktisk galt.
+- `/gaps` — pre-mortem: finn hullene før de blir dyre.
+- `/10xthis` — bygg idéen på nytt med 10x ambisjon.
+- `/eli5` — forklar kontrakt/jus/fagterm enkelt (+ flagg risiko).
+
 ## Branch & commit
 Utvikle på `claude/visualisering-losning-xa7udi`. Commit + push når arbeid er
 verifisert. Ikke opprett PR uten at det er bedt om.
