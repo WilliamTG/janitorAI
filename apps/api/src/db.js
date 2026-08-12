@@ -136,6 +136,23 @@ CREATE TABLE IF NOT EXISTS sidevisninger (
 );
 CREATE INDEX IF NOT EXISTS sidevisninger_created_idx ON sidevisninger (created_at DESC);
 
+-- COGS-måling per KI-operasjon: faktisk tokenforbruk og estimert kostnad, så
+-- en kredittpris kan settes på reelle tall (se docs/prising-bruksbasert.md).
+-- Dette er kostnadssynlighet/analyse — ikke fakturagrunnlag ennå.
+CREATE TABLE IF NOT EXISTS cost_events (
+  id            BIGSERIAL   PRIMARY KEY,
+  tester_token  VARCHAR,
+  operation     TEXT        NOT NULL,   -- 'transcribe' | 'describe_image' | 'report'
+  model         TEXT,
+  input_tokens  INTEGER,
+  output_tokens INTEGER,
+  total_tokens  INTEGER,
+  est_cost_usd  NUMERIC(12,6),
+  duration_ms   INTEGER,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS cost_events_op_created_idx ON cost_events (operation, created_at DESC);
+
 -- Incremental migrations for pre-existing deployments
 ALTER TABLE projects        ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
 ALTER TABLE deleted_projects ADD COLUMN IF NOT EXISTS tester_token   VARCHAR;

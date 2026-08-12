@@ -191,7 +191,7 @@ async def run_analysis(fastapi_req: Request, request: ReportRequest):
 
     # 3. Run the analysis pipeline
     try:
-        doc_id, analysis = create_report(
+        doc_id, analysis, token_usage = create_report(
             video_path=video_path,
             master_id=os.getenv("MASTER_ID"),
             output_folder=os.getenv("OUTPUT_FOLDER") or os.getenv("FOLDER_ID"),
@@ -203,11 +203,13 @@ async def run_analysis(fastapi_req: Request, request: ReportRequest):
         report_url = f"https://docs.google.com/document/d/{doc_id}"
         # A5: den strukturerte analysen følger med som eget felt, slik at
         # appen kan lagre AI-utkastet som uendret versjon og la takstpersonen
-        # redigere en egen godkjent versjon med felt-diff.
+        # redigere en egen godkjent versjon med felt-diff. token_usage gir
+        # backend COGS-måling per rapport (docs/prising-bruksbasert.md).
         return {
             "status": "success",
             "url": report_url,
             "analysis": analysis.model_dump() if analysis is not None else None,
+            "token_usage": token_usage,
         }
     except Exception as e:
         print(f"❌ Error during analysis: {str(e)}")
