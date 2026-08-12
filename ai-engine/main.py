@@ -108,9 +108,16 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
     # 2. Gemini Analysis (Multimodal)
     print("🤖 Gemini is analyzing video...")
     video_file = genai_client.files.upload(file=video_path)
+    # Denial-of-Wallet-vern: bind ventingen på videoprosessering (ellers kan en
+    # fil som henger i PROCESSING holde en fakturerbar jobb åpen i det uendelige).
+    video_deadline = time.monotonic() + 300  # maks 5 min
     while video_file.state.name == "PROCESSING":
+        if time.monotonic() > video_deadline:
+            raise TimeoutError("Gemini video-prosessering tok for lang tid (>5 min)")
         time.sleep(2)
         video_file = genai_client.files.get(name=video_file.name)
+    if video_file.state.name == "FAILED":
+        raise RuntimeError("Gemini klarte ikke å prosessere videoen")
 
     # Upload inspector photos (if any) so Gemini can analyse them alongside the video
     photo_files = []
@@ -144,7 +151,10 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
                 "temperature": 0.0,    # Setter kreativiteten til null
                 "top_p": 0.1,         # Velger kun de mest sannsynlige ordene
                 "top_k": 1,           # Velger kun det aller beste ordet for hvert steg
-                "seed": 42}
+                "seed": 42,
+                # Denial-of-Wallet-vern: hard timeout (ms) på selve analysekallet —
+                # den største og tidligere ubundne kostnadsdriveren.
+                "http_options": {"timeout": 120000}}
     )
     analysis = gemini_response.parsed
 
