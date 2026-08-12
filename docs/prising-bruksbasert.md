@@ -55,7 +55,7 @@ rapporter igjen denne måneden». Varsle ved lav saldo, tilby påfyll/oppgraderi
 
 **Hvorfor dette prisnivået — verdibasert, ikke kostnad-pluss:**
 - En rapport sparer ~2 timer. Takstpersonens time ~800–1 500 kr →
-  **1 400–2 600 kr spart verdi per rapport**. Effektiv pris (80–149 kr) er
+  **1 600–3 000 kr spart verdi per rapport**. Effektiv pris (80–149 kr) er
   ~5–10 % av verdien.
 - **Under Befar (500 kr/rapport)** — vi underbyr etablert per-rapport-pris klart.
 - **Marginen er >95 %** over kostnad (se under).

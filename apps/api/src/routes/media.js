@@ -50,7 +50,14 @@ async function requireTokenHeaderOrQuery(req, res, next) {
   // (GET /:id) uten token — brukt av AI-motoren så tester-tokenet aldri legges i
   // URL-en. Signaturen er bundet til medie-ID-en, så den gir ikke bredere tilgang.
   if (req.method === "GET") {
-    const signedId = decodeURIComponent(req.path.replace(/^\//, ""));
+    // decodeURIComponent kaster URIError på ugyldig prosentkoding (f.eks. %ZZ);
+    // fang det og fall gjennom til normal token-vakt i stedet for en generisk 500.
+    let signedId = null;
+    try {
+      signedId = decodeURIComponent(req.path.replace(/^\//, ""));
+    } catch {
+      signedId = null;
+    }
     if (signedId && verifyMedia(signedId, req.query.exp, req.query.sig)) {
       req.signedMediaId = signedId;
       return next();

@@ -40,7 +40,7 @@ Tre spørsmål. Anbefaling i **fet**.
   internt (`/api/admin/cost`).
 - **Vi har råd til det.** COGS ~0,25–3 kr/rapport mot pris ~80–149 kr → >95 %
   margin. Vi trenger ikke token-presisjon for å beskytte marginen.
-- **Verdibasert:** en rapport sparer ~2 t (1 400–2 600 kr verdi). Prisen er
+- **Verdibasert:** en rapport sparer ~2 t (1 600–3 000 kr verdi). Prisen er
   5–10 % av verdien, og under Befar (500 kr/rapport).
 - **Begge innpakninger** treffer begge kundetyper: klippekort for sporadiske,
   abonnement for faste (gir forutsigbar MRR og capper COGS-risiko).

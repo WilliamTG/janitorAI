@@ -85,9 +85,16 @@ def _upload_inspector_photos(genai_client, project: dict) -> list:
                     with os.fdopen(fd, "wb") as f:
                         f.write(resp.content)
                     photo_file = genai_client.files.upload(file=tmp_path)
+                    # Denial-of-Wallet-vern: bind ventingen (som videostien),
+                    # ellers kan et foto som henger i PROCESSING låse jobben.
+                    photo_deadline = time.monotonic() + 120  # maks 2 min
                     while photo_file.state.name == "PROCESSING":
+                        if time.monotonic() > photo_deadline:
+                            raise TimeoutError("Gemini foto-prosessering tok for lang tid (>2 min)")
                         time.sleep(1)
                         photo_file = genai_client.files.get(name=photo_file.name)
+                    if photo_file.state.name == "FAILED":
+                        raise RuntimeError("Gemini klarte ikke å prosessere inspektørfotoet")
                     uploaded.append(photo_file)
                     print(f"✅ Inspector photo uploaded to Gemini: {photo_file.name}")
                 finally:
