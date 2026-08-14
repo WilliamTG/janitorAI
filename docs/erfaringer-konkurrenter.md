@@ -156,6 +156,70 @@ kjernen. Segmentene er naboer med samme bruker, ikke samme jobb.
 - Deres uavhengighets-posisjonering tvinger frem vår: «uavhengig av
   forsikringsselskapene — men leverer rett inn i flyten deres.»
 
+## Statusoppdatering 14. august 2026 — verifisert mot primærkilder
+
+Full re-research av konkurrentbildet (selskapssider, brukeravtaler, App Store/
+Google Play, Brønnøysund, Forskningsrådets prosjektbank, presse). Kun endringer
+og nye funn under — alt annet i dokumentet står uendret og er re-verifisert.
+
+### in4mo (Solera) — fortsatt 1,9★, fortsatt uten AI
+- Task Reporter 17.0.0 slapp 13. aug 2026 (ansiktssladding, romdetaljer på
+  foto, stabilitet) — appen utvikles aktivt, men uten AI-funksjoner.
+- Soleras AI-satsing («Solera AI Engine» apr 2026, Qapter-fotoanalyse) er
+  eksplisitt kun bil. AI i property-skinnen: reell, ikke-materialisert trussel.
+- **Merk:** in4mo skygget Ocab — vår pilotpartner — i felt i mai 2025
+  («customer collaboration»). De kjenner Ocabs arbeidsflyt og smertepunkter.
+
+### Befar — uendret produkt, tidligere fase enn antatt
+- Prising (500 kr/rapport + 2 000 kr/år), gated onboarding og
+  bolighandel-scope uendret; brukeravtalen (oppdatert 16.06.2026) har nå en
+  eksplisitt AI-klausul med verifiseringsplikt.
+- BEFAR AS ble stiftet 08.04.2026 (Sarpsborg, aksjekapital 30 000 kr, ingen
+  registrerte ansatte, ikke MVA-registrert) — svært tidlig fase. Ingen app i
+  App Store/Google Play (webbasert), null presseomtale funnet.
+- Ny uttalt ambisjon på hjelpesidene: hele arbeidsflyten «fra booking til
+  fakturering».
+
+### Wenn Property — beveger seg mot skadedomenet via FoU
+- Prising uendret (350/999 kr/mnd). ARR >2 MNOK (apr 2026), 100+ betalende
+  bedrifter, churn 4 %; regnskap 2025: 0,5 MNOK omsetning, −3,3 MNOK resultat.
+  Android-app mai 2026 (50+ nedlastinger); App Store fortsatt 5,0★/3.
+- Feb 2026: API/MCP-kobling — kundene kan koble Claude/ChatGPT til
+  prosjektdataene sine.
+- **Viktigst:** Wenn leder FoU-prosjektet CliVa (Forskningsrådet, 10,9 MNOK,
+  2025–2027): AI-basert skadevurdering og klimarisiko per bygg, med SINTEF
+  Byggforsk-levetidsdata og forsikringsbransjen som uttalt interessent.
+  FoU, ikke produkt — men dokumentert kurs mot vårt domene; trussel 2 i
+  USA-analysen er skjerpet. Produktflatene er fortsatt 100 % håndverker/
+  tilbudsfase.
+- **Korreksjon:** MesterAlliansen-avtalen er ikke lenger synlig hos noen av
+  partene; profilerte partnere nå: Bygghåndverk Norge, NKF, Byggmann,
+  VestlandsHus.
+
+### Skinnene automatiserer rundt rapporten — ikke rapporten
+- Gjensidige utvidet Scalepoint-samarbeidet til bygningsskader 11.05.2026
+  («AI Cost Control»): regelbasert sanntidsgodkjenning av håndverkertilbud —
+  kostnadskontroll, ikke rapportskriving eller fotoanalyse.
+- CAB/MEPS: første AI-verktøy sep 2025 (CABAS Assistant, kun bil — «første i
+  en serie»), videobefaring i MEPS okt 2025. If bruker MEPS for byggskader i
+  hele Norden (siden 2023) parallelt med in4mo.
+
+### Nye aktører inn i analysen
+| Aktør | Hva | Trussel |
+|---|---|---|
+| **Pretakst** (pretakst.no) | Tal inn under befaringen → AI skriver tilstandsrapporten (bolighandel/avhendingslova). 149 kr/rapport. Pre-lansering. | Samme mekanikk som oss i nabosegmentet — direkte konkurrent ved pivot til skade. Prisen treffer vårt veiledende klippekortnivå (jf. `beslutningsnotat-prising.md`). |
+| **Smarttakst** | Etablert takstverktøy (15 000+ rapporter), dekker også skadetakst. AI = skrivehjelp. 190 kr/rapport el. 2 490–3 690 kr/mnd. | I vårt segment, men uten media-analyse og årsaksvurdering. |
+| **Bdeo** (via CAB) | Kunden filmer skaden, AI vurderer — selvbetjent triage for forsikringsselskap, nordisk distribusjon via CAB. | Foto/video-AI i forsikringsflyten — men uten fagperson og årsaksrapport. |
+| **Simplifai** (Oslo) | Dokument-AI for skadeoppgjør (kunde: Claims Link). | Angriper flyten fra back-office, ikke befaringen. |
+| **iVerdi/IVIT** | ~100 000 tilstandsrapporter/år, regelbasert TG-forslag. | Største distribusjonsrisikoen hvis de legger gen-AI oppå. Overvåk. |
+
+### Konklusjon — nisjen står åpen, men konvergensen er dokumentert
+Fortsatt ingen aktør i Norden som kombinerer befaringsmedia → AI-utkast med
+årsak og akutt/gradvis → Byggforsk-forankring → godkjenningsstempel →
+forsikringsklar rapport. Men presset kommer nå fra tre kanter samtidig: Wenn
+(FoU mot skadevurdering), Pretakst (samme mekanikk i nabosegmentet) og
+skinnene (automatisering tett rundt rapporten). Farten vår er forsvaret.
+
 ## Oppsummert kobling til backlog
 
 | Erfaring | Dekkes av | Nytt/utestående |
