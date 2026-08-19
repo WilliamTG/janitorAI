@@ -16,8 +16,8 @@ Språk: produkt/salgsflater på norsk (bokmål); pitch-deck på engelsk.
   (legg til `--clear` kun ved config-endring). Designsystem i `src/ui/theme.tsx`.
 - **apps/api** — Express + Postgres (JSONB-prosjekter per `tester_token`). Skjema
   i `src/db.js` (idempotent `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`).
-  Offentlige salgssider (`/om /demo /faq /personvern /vilkar /kundereisen`) serveres
-  herfra.
+  Offentlige salgssider (`/om /demo /faq /personvern /vilkar /kontakt /kundereisen`)
+  serveres herfra. `/kontakt`-bookinglenken styres av `BOOKING_URL` (e-post-fallback).
 - **ai-engine** — Python/FastAPI; Gemini-analyse → strukturert `DamageAnalysis` +
   Google Doc. Returnerer `(doc_id, analysis, token_usage)`.
 
