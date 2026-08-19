@@ -918,7 +918,7 @@ export default function ProjectDetailScreen() {
     await updateProjectNotes(newNotes);
   };
 
-  const MAX_PHOTO_BYTES = 8 * 1024 * 1024; // 8 MB
+  const MAX_PHOTO_BYTES = 50 * 1024 * 1024; // 50 MB
   const MAX_VIDEO_DURATION_SECONDS = 120;   // 2 minutes
 
   const addPhotoNote = async () => {
@@ -966,7 +966,7 @@ export default function ProjectDetailScreen() {
       if (asset.fileSize && asset.fileSize > MAX_PHOTO_BYTES) {
         const sizeMb = (asset.fileSize / 1024 / 1024).toFixed(1).replace('.', ',');
         toast.show({
-          message: `Bildet er ${sizeMb} MB. Velg et bilde under 8 MB.`,
+          message: `Bildet er ${sizeMb} MB. Velg et bilde under 50 MB.`,
           variant: 'error',
           durationMs: 4200,
         });
@@ -1076,12 +1076,12 @@ export default function ProjectDetailScreen() {
           return;
         }
 
-        // Guard: check file size (must fit within server's 200 MB cap)
-        const MAX_VIDEO_BYTES = 200 * 1024 * 1024; // 200 MB
+        // Guard: check file size (must fit within server's 50 MB cap)
+        const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB
         if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
           const sizeMb = (asset.fileSize / 1024 / 1024).toFixed(0);
           toast.show({
-            message: `Videoen er ${sizeMb} MB. Velg et klipp under 200 MB.`,
+            message: `Videoen er ${sizeMb} MB. Velg et klipp under 50 MB.`,
             variant: 'error',
             durationMs: 4200,
           });
@@ -1166,11 +1166,11 @@ export default function ProjectDetailScreen() {
           return;
         }
 
-        const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
+        const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
         if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
           Alert.alert(
             'Video too large',
-            `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 200 MB.`,
+            `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 50 MB.`,
           );
           return;
         }

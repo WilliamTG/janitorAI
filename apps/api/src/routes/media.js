@@ -138,8 +138,8 @@ const storage = multer.diskStorage({
 });
 
 // Én sannhet for opplastingstaket, så feilmelding og faktisk grense aldri
-// spriker (video kan være stor; 200 MB holder Render-RAM trygt).
-const MAX_UPLOAD_MB = 200;
+// spriker (bilder og videoer kan være store; 50 MB er grensen på tvers av klienter).
+const MAX_UPLOAD_MB = 50;
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
 const upload = multer({
@@ -167,7 +167,7 @@ async function rejectWhenDiskFull(req, res, next) {
 }
 
 // Stream-hash the uploaded file (B11: tamper-evident media). Never buffers the
-// whole file — videos can be 200 MB. Returns null instead of failing the
+// whole file — videos can be 50 MB. Returns null instead of failing the
 // upload if hashing goes wrong; the checksum is provenance, not a gate.
 function sha256OfFile(filePath) {
   return new Promise((resolve) => {
