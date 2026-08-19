@@ -919,7 +919,10 @@ export default function ProjectDetailScreen() {
     await updateProjectNotes(newNotes);
   };
 
-  const MAX_PHOTO_BYTES = 8 * 1024 * 1024; // 8 MB
+  // Pilotfunn (aug 2026): 8 MB avviste vanlige kamerabilder. 20 MB speiler
+  // serverens multer-tak for /describe-image (AI-bildebeskrivelse) — media-
+  // opplastingen tåler 200 MB. Bilder over taket nedskaleres, ikke avvises.
+  const MAX_PHOTO_BYTES = 20 * 1024 * 1024; // 20 MB
   const MAX_VIDEO_DURATION_SECONDS = 120;   // 2 minutes
 
   const addPhotoNote = async () => {
@@ -993,7 +996,7 @@ export default function ProjectDetailScreen() {
       if (acceptedUris.length === 0) {
         if (skippedOversized > 0) {
           toast.show({
-            message: `Bildet er over 8 MB og kunne ikke komprimeres. Velg et mindre bilde.`,
+            message: `Bildet er over 20 MB og kunne ikke komprimeres. Velg et mindre bilde.`,
             variant: 'error',
             durationMs: 4200,
           });
@@ -1026,7 +1029,7 @@ export default function ProjectDetailScreen() {
       setNoteText('');
       if (skippedOversized > 0) {
         toast.show({
-          message: `${acceptedUris.length} bilder lagt til – ${skippedOversized} hoppet over (over 8 MB).`,
+          message: `${acceptedUris.length} bilder lagt til – ${skippedOversized} hoppet over (over 20 MB).`,
           variant: 'info',
           durationMs: 4200,
         });
