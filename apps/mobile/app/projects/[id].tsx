@@ -1076,12 +1076,12 @@ export default function ProjectDetailScreen() {
           return;
         }
 
-        // Guard: check file size (must fit within server's 50 MB cap)
-        const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB
+        // Guard: check file size (must fit within server's 500 MB video cap)
+        const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // 500 MB
         if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
           const sizeMb = (asset.fileSize / 1024 / 1024).toFixed(0);
           toast.show({
-            message: `Videoen er ${sizeMb} MB. Velg et klipp under 50 MB.`,
+            message: `Videoen er ${sizeMb} MB. Velg et klipp under 500 MB.`,
             variant: 'error',
             durationMs: 4200,
           });
@@ -1166,11 +1166,11 @@ export default function ProjectDetailScreen() {
           return;
         }
 
-        const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+        const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
         if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
           Alert.alert(
             'Video too large',
-            `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 50 MB.`,
+            `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 500 MB.`,
           );
           return;
         }

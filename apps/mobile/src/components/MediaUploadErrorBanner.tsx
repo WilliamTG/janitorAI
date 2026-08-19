@@ -65,8 +65,8 @@ export default function MediaUploadErrorBanner() {
         >
           <Ionicons name="alert-circle-outline" size={18} color={AMBER_TEXT} />
           <Caption style={{ flex: 1, color: AMBER_TEXT }}>
-            Én eller flere filer er for store til å lastes opp (maks 50 MB). Kort ned videoene
-            eller eksporter i lavere oppløsning.
+            Én eller flere filer er for store til å lastes opp (bilder maks 50 MB, videoer maks
+            500 MB). Kort ned videoene eller eksporter i lavere oppløsning.
           </Caption>
           <Pressable
             onPress={() => setOversizedDismissed(true)}

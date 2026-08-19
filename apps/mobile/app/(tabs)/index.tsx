@@ -672,9 +672,12 @@ export default function Index() {
                 onChange={(e: any) => {
                   const files = Array.from((e.target as HTMLInputElement).files || []) as File[];
                   setWizardMediaFiles(files.map((f) => ({ name: f.name, size: f.size, type: f.type })));
-                  // Warn immediately if any selected file already exceeds the 50 MB server cap
-                  const FILE_SIZE_LIMIT = 50 * 1024 * 1024;
-                  if (files.some((f) => f.size > FILE_SIZE_LIMIT)) {
+                  // Warn immediately if any selected file exceeds its media-type cap.
+                  const exceedsMediaLimit = (f: File) =>
+                    f.size > (f.type.startsWith('video')
+                      ? 500 * 1024 * 1024
+                      : 50 * 1024 * 1024);
+                  if (files.some(exceedsMediaLimit)) {
                     recordOversizedFile();
                   }
                 }}

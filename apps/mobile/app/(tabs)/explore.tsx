@@ -181,7 +181,7 @@ export default function GuideScreen() {
             <Title style={{ fontSize: 16 }}>Tips for best resultat</Title>
           </View>
           <View style={{ gap: theme.spacing.xs }}>
-            <TipRow text="Hold bilder og videoer under 50 MB — appen varsler deg hvis de er for store." />
+            <TipRow text="Hold bilder under 50 MB og videoer under 500 MB — appen varsler deg hvis de er for store." />
             <TipRow text="Videoklipp må være 2 minutter eller kortere for pålitelig opplasting." />
             <TipRow text="Legg til en prosjektbeskrivelse så KI-en fokuserer på de riktige områdene." />
             <TipRow text="Transkriber lydnotatene før du lager rapporten." />
