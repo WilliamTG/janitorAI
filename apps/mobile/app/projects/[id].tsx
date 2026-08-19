@@ -18,6 +18,7 @@ import { Image as ExpoImage } from 'expo-image';
 
 import { getCurrentGeo } from '@/src/lib/geo';
 import { newId } from '@/src/lib/ids';
+import { dataUrlToObjectUrlWeb, downscalePhotoWeb, measurePhotoBytesWeb } from '@/src/lib/photoDownscale';
 import { loadProfile } from '@/src/storage/profileStorage';
 import { formatMinutes, minutesToApproved } from '@/src/features/projects/metrics';
 import { tileForCoordinate } from '@/src/lib/kartverket';
@@ -951,6 +952,11 @@ export default function ProjectDetailScreen() {
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.6,
             exif: false,
+            // Pilotfunn (aug 2026): mange bilder må kunne velges i én
+            // operasjon — ett og ett tar for lang tid i felt.
+            allowsMultipleSelection: true,
+            selectionLimit: 0,
+            orderedSelection: true,
           })
         : await ImagePicker.launchCameraAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -960,43 +966,75 @@ export default function ProjectDetailScreen() {
 
       if (result.canceled || !result.assets || result.assets.length === 0) return;
 
-      const asset = result.assets[0];
+      // Kamera-appens originaler er ofte over 8 MB. Native re-enkoder velgeren
+      // via quality, men på web komprimeres ingenting — der skalerer vi ned
+      // selv i stedet for å avvise. Bare bilder som fortsatt er for store
+      // etter det hoppes over, med oppsummering til brukeren.
+      const acceptedUris: string[] = [];
+      let skippedOversized = 0;
+      for (const asset of result.assets) {
+        let assetUri = asset.uri;
+        const knownSize = asset.fileSize ?? (await measurePhotoBytesWeb(asset.uri));
+        if (knownSize && knownSize > MAX_PHOTO_BYTES) {
+          const downscaled = await downscalePhotoWeb(assetUri, MAX_PHOTO_BYTES);
+          if (!downscaled) {
+            skippedOversized += 1;
+            continue;
+          }
+          assetUri = downscaled;
+        }
+        if (Platform.OS === 'web' && assetUri.startsWith('data:')) {
+          const blobUrl = await dataUrlToObjectUrlWeb(assetUri);
+          if (blobUrl) assetUri = blobUrl;
+        }
+        acceptedUris.push(await persistMediaLocally(assetUri));
+      }
 
-      // Guard: reject oversized photos
-      if (asset.fileSize && asset.fileSize > MAX_PHOTO_BYTES) {
-        const sizeMb = (asset.fileSize / 1024 / 1024).toFixed(1).replace('.', ',');
-        toast.show({
-          message: `Bildet er ${sizeMb} MB. Velg et bilde under 8 MB.`,
-          variant: 'error',
-          durationMs: 4200,
-        });
+      if (acceptedUris.length === 0) {
+        if (skippedOversized > 0) {
+          toast.show({
+            message: `Bildet er over 8 MB og kunne ikke komprimeres. Velg et mindre bilde.`,
+            variant: 'error',
+            durationMs: 4200,
+          });
+        }
         return;
       }
 
-      const uri = await persistMediaLocally(asset.uri);
       const trimmed = noteText.trim();
       const textForNote = trimmed || 'Bildenotat (ingen tekst ennå)';
+      const capturedAt = new Date().toISOString();
 
       const geo = await geoPromise;
       const newNote: Note = {
         id: newId(),
         text: textForNote,
-        createdAt: new Date().toISOString(),
+        createdAt: capturedAt,
         ...(activeRoomId ? { roomId: activeRoomId } : {}),
-        photos: [{
+        photos: acceptedUris.map((uri) => ({
           id: newId(),
           uri,
           caption: '',
           aiGenerated: false,
-          capturedAt: new Date().toISOString(),
+          capturedAt,
           ...(geo ? { geo } : {}),
-        }],
+        })),
       };
 
       const newNotes = [newNote, ...(project.notes || [])];
       await updateProjectNotes(newNotes);
       setNoteText('');
-      toast.show({ message: nb.detail.photoAdded, variant: 'success' });
+      if (skippedOversized > 0) {
+        toast.show({
+          message: `${acceptedUris.length} bilder lagt til – ${skippedOversized} hoppet over (over 8 MB).`,
+          variant: 'info',
+          durationMs: 4200,
+        });
+      } else if (acceptedUris.length > 1) {
+        toast.show({ message: `${acceptedUris.length} bilder lagt til`, variant: 'success' });
+      } else {
+        toast.show({ message: nb.detail.photoAdded, variant: 'success' });
+      }
     };
 
     // Alert.alert is a no-op on web — go straight to the library picker
