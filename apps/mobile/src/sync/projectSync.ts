@@ -287,11 +287,16 @@ async function doUploadMedia(
       // reset) instead of returning a well-formed HTTP response — so the
       // FILE_TOO_LARGE code in the response body is never parsed. Checking the
       // blob size before we POST avoids the round-trip entirely.
-      const FILE_SIZE_LIMIT = 200 * 1024 * 1024; // must match multer cap in apps/api/src/routes/media.js
+      const FILE_SIZE_LIMIT =
+        kind === 'video' ? 500 * 1024 * 1024 : 50 * 1024 * 1024;
       if (blob.size > FILE_SIZE_LIMIT) {
         oversizedUris.add(uri);
         recordOversizedFile();
-        console.warn('[sync] Media upload aborted: blob exceeds 200 MB limit', blob.size, 'bytes');
+        console.warn(
+          `[sync] ${kind} upload aborted: blob exceeds ${FILE_SIZE_LIMIT / 1024 / 1024} MB limit`,
+          blob.size,
+          'bytes',
+        );
         return null;
       }
 

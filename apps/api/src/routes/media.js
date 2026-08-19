@@ -137,9 +137,11 @@ const storage = multer.diskStorage({
   },
 });
 
-// Én sannhet for opplastingstaket, så feilmelding og faktisk grense aldri
-// spriker (video kan være stor; 200 MB holder Render-RAM trygt).
-const MAX_UPLOAD_MB = 200;
+// Videoes can be large, while photos stay capped at 50 MB. The Multer cap is
+// the global ceiling; the per-kind check below enforces the photo limit too.
+const MAX_PHOTO_MB = 50;
+const MAX_VIDEO_MB = 500;
+const MAX_UPLOAD_MB = MAX_VIDEO_MB;
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
 const upload = multer({
@@ -167,7 +169,7 @@ async function rejectWhenDiskFull(req, res, next) {
 }
 
 // Stream-hash the uploaded file (B11: tamper-evident media). Never buffers the
-// whole file — videos can be 200 MB. Returns null instead of failing the
+// whole file — videos can be 500 MB. Returns null instead of failing the
 // upload if hashing goes wrong; the checksum is provenance, not a gate.
 function sha256OfFile(filePath) {
   return new Promise((resolve) => {
@@ -193,6 +195,21 @@ router.post("/", heavyLimiter, rejectWhenDiskFull, upload.single("file"), async 
     const id = path.basename(filePath, path.extname(filePath));
     const projectId = req.body && req.body.projectId ? String(req.body.projectId) : null;
     const kind = req.body && req.body.kind ? String(req.body.kind) : null;
+    // Derive the type from the whitelisted extension rather than trusting the
+    // client-provided kind, so an image cannot bypass its 50 MB cap.
+    const safeMime = safeMimeForExt(path.extname(filePath));
+
+    const maxMb = safeMime.startsWith("video/") ? MAX_VIDEO_MB : MAX_PHOTO_MB;
+    const maxBytes = maxMb * 1024 * 1024;
+    if (req.file.size > maxBytes) {
+      fs.unlink(filePath, () => {});
+      return res.status(413).json({
+        error: `File is too large. Photos and audio may be up to ${MAX_PHOTO_MB} MB; videos may be up to ${MAX_VIDEO_MB} MB.`,
+        code: "FILE_TOO_LARGE",
+        maxBytes,
+      });
+    }
+
     const sha256 = await sha256OfFile(filePath);
 
     // S3: hindre at tester B planter media under tester A sitt prosjekt. Vi
@@ -211,10 +228,6 @@ router.post("/", heavyLimiter, rejectWhenDiskFull, upload.single("file"), async 
         return res.status(403).json({ error: "Project belongs to another tester" });
       }
     }
-
-    // S7: lagre en MIME-type avledet fra den (whitelistede) filendelsen — aldri
-    // klientens Content-Type, som kunne vært text/html.
-    const safeMime = safeMimeForExt(path.extname(filePath));
 
     const pool = getPool();
     await pool.query(
@@ -249,7 +262,7 @@ router.post("/", heavyLimiter, rejectWhenDiskFull, upload.single("file"), async 
 router.use((err, req, res, next) => {
   if (err && err.code === "LIMIT_FILE_SIZE") {
     return res.status(413).json({
-      error: `File is too large. The maximum upload size is ${MAX_UPLOAD_MB} MB. Please trim your video or export at a lower resolution.`,
+      error: `File is too large. Photos and audio may be up to ${MAX_PHOTO_MB} MB; videos may be up to ${MAX_VIDEO_MB} MB. Please trim the video or export at a lower resolution.`,
       code: "FILE_TOO_LARGE",
       maxBytes: MAX_UPLOAD_BYTES,
     });
