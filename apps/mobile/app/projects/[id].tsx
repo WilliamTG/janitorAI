@@ -18,7 +18,7 @@ import { Image as ExpoImage } from 'expo-image';
 
 import { getCurrentGeo } from '@/src/lib/geo';
 import { newId } from '@/src/lib/ids';
-import { dataUrlToObjectUrlWeb, downscalePhotoWeb, measurePhotoBytesWeb } from '@/src/lib/photoDownscale';
+import { dataUrlToObjectUrlWeb, downscalePhotoWeb, measurePhotoBytesWeb, persistPhotoBytesWeb } from '@/src/lib/photoDownscale';
 import { loadProfile } from '@/src/storage/profileStorage';
 import { formatMinutes, minutesToApproved } from '@/src/features/projects/metrics';
 import { tileForCoordinate } from '@/src/lib/kartverket';
@@ -1018,7 +1018,7 @@ export default function ProjectDetailScreen() {
       // via quality, men på web komprimeres ingenting — der skalerer vi ned
       // selv i stedet for å avvise. Bare bilder som fortsatt er for store
       // etter det hoppes over, med oppsummering til brukeren.
-      const acceptedUris: string[] = [];
+      const acceptedPhotos: { id: string; uri: string }[] = [];
       let skippedOversized = 0;
       for (const asset of result.assets) {
         let assetUri = asset.uri;
@@ -1034,14 +1034,23 @@ export default function ProjectDetailScreen() {
             continue;
           }
         }
-        if (Platform.OS === 'web' && assetUri.startsWith('data:')) {
-          const blobUrl = await dataUrlToObjectUrlWeb(assetUri);
-          if (blobUrl) assetUri = blobUrl;
+        const photoId = newId();
+        if (Platform.OS === 'web') {
+          // Persister bytene i IndexedDB så bildet overlever at appen lukkes
+          // før opplastingen er ferdig (pilotfunn aug 2026). Fallback:
+          // objectURL — fungerer i økten, som før.
+          const idbUri = await persistPhotoBytesWeb(assetUri, photoId);
+          if (idbUri) {
+            assetUri = idbUri;
+          } else if (assetUri.startsWith('data:')) {
+            const blobUrl = await dataUrlToObjectUrlWeb(assetUri);
+            if (blobUrl) assetUri = blobUrl;
+          }
         }
-        acceptedUris.push(await persistMediaLocally(assetUri));
+        acceptedPhotos.push({ id: photoId, uri: await persistMediaLocally(assetUri) });
       }
 
-      if (acceptedUris.length === 0) {
+      if (acceptedPhotos.length === 0) {
         if (skippedOversized > 0) {
           toast.show({
             message: `Bildet er over 20 MB og kunne ikke komprimeres. Velg et mindre bilde.`,
@@ -1062,8 +1071,8 @@ export default function ProjectDetailScreen() {
         text: textForNote,
         createdAt: capturedAt,
         ...(activeRoomId ? { roomId: activeRoomId } : {}),
-        photos: acceptedUris.map((uri) => ({
-          id: newId(),
+        photos: acceptedPhotos.map(({ id, uri }) => ({
+          id,
           uri,
           caption: '',
           aiGenerated: false,
@@ -1077,12 +1086,12 @@ export default function ProjectDetailScreen() {
       setNoteText('');
       if (skippedOversized > 0) {
         toast.show({
-          message: `${acceptedUris.length} bilder lagt til – ${skippedOversized} hoppet over (over 20 MB).`,
+          message: `${acceptedPhotos.length} bilder lagt til – ${skippedOversized} hoppet over (over 20 MB).`,
           variant: 'info',
           durationMs: 4200,
         });
-      } else if (acceptedUris.length > 1) {
-        toast.show({ message: `${acceptedUris.length} bilder lagt til`, variant: 'success' });
+      } else if (acceptedPhotos.length > 1) {
+        toast.show({ message: `${acceptedPhotos.length} bilder lagt til`, variant: 'success' });
       } else {
         toast.show({ message: nb.detail.photoAdded, variant: 'success' });
       }

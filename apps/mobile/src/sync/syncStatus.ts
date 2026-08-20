@@ -181,3 +181,43 @@ export function useMediaBatchProgress(): MediaBatchProgress | null {
 
   return p;
 }
+
+// ---------- TAPTE MEDIER (varig utilgjengelige lokalt) ----------
+// Web: blob:/data:-referanser og IDB-innslag kan være borte etter at appen
+// ble lukket før opplastingen var ferdig. Synken merker slike bilder som
+// tapt (photo.lost) og melder her — én tydelig beskjed i stedet for evig
+// rød feilstatus. Akkumulerer innen samme prosjekt.
+
+export interface LostMediaInfo {
+  projectId: string;
+  count: number;
+}
+
+let lostMediaInfo: LostMediaInfo | null = null;
+const lostMediaListeners = new Set<(info: LostMediaInfo | null) => void>();
+
+export function recordLostMedia(projectId: string, count: number): void {
+  const prev = lostMediaInfo?.projectId === projectId ? lostMediaInfo.count : 0;
+  lostMediaInfo = { projectId, count: prev + count };
+  lostMediaListeners.forEach((l) => l(lostMediaInfo));
+}
+
+export function clearLostMedia(): void {
+  lostMediaInfo = null;
+  lostMediaListeners.forEach((l) => l(null));
+}
+
+export function useLostMediaNotice(): LostMediaInfo | null {
+  const [info, setInfo] = useState<LostMediaInfo | null>(lostMediaInfo);
+
+  useEffect(() => {
+    const listener = (next: LostMediaInfo | null) => setInfo(next);
+    lostMediaListeners.add(listener);
+    setInfo(lostMediaInfo);
+    return () => {
+      lostMediaListeners.delete(listener);
+    };
+  }, []);
+
+  return info;
+}
