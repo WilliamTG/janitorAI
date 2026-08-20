@@ -12,6 +12,7 @@ import {
   recordOversizedFile,
   setVideoUploadProgress,
   clearVideoUploadProgress,
+  setMediaBatchProgress,
 } from './syncStatus';
 import { logError, logAction } from '@/src/lib/logger';
 import { isIdbUri, noteIdFromIdbUri, loadVideoFromIdb, deleteVideoFromIdb } from './videoIdb';
@@ -287,11 +288,16 @@ async function doUploadMedia(
       // reset) instead of returning a well-formed HTTP response — so the
       // FILE_TOO_LARGE code in the response body is never parsed. Checking the
       // blob size before we POST avoids the round-trip entirely.
-      const FILE_SIZE_LIMIT = 200 * 1024 * 1024; // must match multer cap in apps/api/src/routes/media.js
+      const FILE_SIZE_LIMIT =
+        kind === 'video' ? 500 * 1024 * 1024 : 50 * 1024 * 1024;
       if (blob.size > FILE_SIZE_LIMIT) {
         oversizedUris.add(uri);
         recordOversizedFile();
-        console.warn('[sync] Media upload aborted: blob exceeds 200 MB limit', blob.size, 'bytes');
+        console.warn(
+          `[sync] ${kind} upload aborted: blob exceeds ${FILE_SIZE_LIMIT / 1024 / 1024} MB limit`,
+          blob.size,
+          'bytes',
+        );
         return null;
       }
 
@@ -381,6 +387,18 @@ async function doUploadMedia(
  * caller has committed the new videoRemoteId to local storage (to avoid a
  * window where the note references an already-deleted IDB entry).
  */
+// Teller medier uten varig serverkopi — grunnlaget for «Laster opp X av Y».
+function countPendingMedia(project: Project): number {
+  let count = 0;
+  for (const note of project.notes || []) {
+    if (note.audioUri && !note.audioRemoteId) count += 1;
+    if (note.photos) count += note.photos.filter((p) => p.uri && !p.remoteId).length;
+    if (note.videoUri && !note.videoRemoteId) count += 1;
+  }
+  if (project.projectDescriptionAudioUri && !project.projectDescriptionAudioRemoteId) count += 1;
+  return count;
+}
+
 async function uploadPendingMedia(
   project: Project,
 ): Promise<{ project: Project; changed: boolean; failedCount: number; idbUrisToCleanup: string[] }> {
@@ -388,6 +406,15 @@ async function uploadPendingMedia(
   let failedCount = 0;
   const idbUrisToCleanup: string[] = [];
 
+  const totalPending = countPendingMedia(project);
+  let doneCount = 0;
+  const bumpProgress = () => {
+    doneCount += 1;
+    setMediaBatchProgress({ done: doneCount, total: totalPending });
+  };
+  if (totalPending > 0) setMediaBatchProgress({ done: 0, total: totalPending });
+
+  try {
   const notes: Note[] = await Promise.all(
     (project.notes || []).map(async (note) => {
       let nextNote = note;
@@ -397,6 +424,7 @@ async function uploadPendingMedia(
         if (uploaded) {
           nextNote = { ...nextNote, audioRemoteId: uploaded.id, audioSha256: uploaded.sha256 };
           changed = true;
+          bumpProgress();
         } else {
           failedCount += 1;
         }
@@ -409,6 +437,7 @@ async function uploadPendingMedia(
             const uploaded = await uploadMedia(photo.uri, 'photo', project.id);
             if (uploaded) {
               changed = true;
+              bumpProgress();
               return { ...photo, remoteId: uploaded.id, sha256: uploaded.sha256 };
             }
             failedCount += 1;
@@ -423,6 +452,7 @@ async function uploadPendingMedia(
         if (uploaded) {
           nextNote = { ...nextNote, videoRemoteId: uploaded.id, videoSha256: uploaded.sha256 };
           changed = true;
+          bumpProgress();
           // Schedule IDB cleanup for this note's video — deferred so the
           // caller can commit the remoteId to local storage first.
           if (Platform.OS === 'web' && isIdbUri(note.videoUri)) {
@@ -444,12 +474,16 @@ async function uploadPendingMedia(
     if (uploaded) {
       next = { ...next, projectDescriptionAudioRemoteId: uploaded.id };
       changed = true;
+      bumpProgress();
     } else {
       failedCount += 1;
     }
   }
 
   return { project: next, changed, failedCount, idbUrisToCleanup };
+  } finally {
+    setMediaBatchProgress(null);
+  }
 }
 
 // ---------- PUSH ----------

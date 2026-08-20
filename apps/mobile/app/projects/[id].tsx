@@ -221,8 +221,11 @@ export default function ProjectDetailScreen() {
 
   const [reportMetaDraft, setReportMetaDraft] = useState<ReportMeta>({ contributors: [{}], buildings: [{}] });
   const [reportMetaOpen, setReportMetaOpen] = useState(false);
-  const [isSavingMeta, setIsSavingMeta] = useState(false);
+  const [metaSaveStatus, setMetaSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [saveMetaError, setSaveMetaError] = useState<string | null>(null);
+  const metaSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reportMetaDraftRef = useRef<ReportMeta>({ contributors: [{}], buildings: [{}] });
+  const projectRef = useRef<Project | null>(null);
 
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
@@ -378,6 +381,13 @@ export default function ProjectDetailScreen() {
   // user immediately knows they need to fill them in.
   useEffect(() => {
     if (project) {
+      // Nullstill ventende autolagring fra et ev. forrige prosjekt før
+      // utkastet byttes — ellers kunne gamle felter lagres på nytt prosjekt.
+      if (metaSaveTimerRef.current) {
+        clearTimeout(metaSaveTimerRef.current);
+        metaSaveTimerRef.current = null;
+      }
+      setMetaSaveStatus('idle');
       const meta = project.reportMeta;
       setReportMetaDraft({
         contributors: [{}],
@@ -419,20 +429,51 @@ export default function ProjectDetailScreen() {
     await updateProjectLocally(updatedProject);
   };
 
-  const saveReportMeta = async () => {
-    if (!project) return;
-    setIsSavingMeta(true);
-    setSaveMetaError(null);
+  // Pilotfunn (aug 2026): «Lagre»-knappen ble glemt og utfylte felt gikk tapt
+  // ved navigering. Feltene autolagres nå med debounce; ved lukking av
+  // skjermen flushes en ventende lagring umiddelbart.
+  const persistReportMeta = async (meta: ReportMeta) => {
+    const current = projectRef.current;
+    if (!current) return;
     try {
-      const updatedProject: Project = { ...project, reportMeta: reportMetaDraft };
-      await updateProjectLocally(updatedProject);
-      setReportMetaOpen(false); // collapse panel so the user sees it was saved
+      setSaveMetaError(null);
+      await updateProjectLocally({ ...current, reportMeta: meta });
+      setMetaSaveStatus('saved');
     } catch (e: any) {
-      setSaveMetaError(e?.message ?? 'Kunne ikke lagre. Prøv igjen.');
-    } finally {
-      setIsSavingMeta(false);
+      setMetaSaveStatus('idle');
+      setSaveMetaError(e?.message ?? 'Kunne ikke lagre — endringene står fortsatt i skjemaet.');
     }
   };
+
+  const handleReportMetaChange = (meta: ReportMeta) => {
+    setReportMetaDraft(meta);
+    setMetaSaveStatus('saving');
+    if (metaSaveTimerRef.current) clearTimeout(metaSaveTimerRef.current);
+    metaSaveTimerRef.current = setTimeout(() => {
+      metaSaveTimerRef.current = null;
+      void persistReportMeta(reportMetaDraftRef.current);
+    }, 800);
+  };
+
+  useEffect(() => {
+    reportMetaDraftRef.current = reportMetaDraft;
+  }, [reportMetaDraft]);
+
+  useEffect(() => {
+    projectRef.current = project ?? null;
+  }, [project]);
+
+  useEffect(() => {
+    return () => {
+      // Flush en ventende autolagring når skjermen forlates.
+      if (metaSaveTimerRef.current) {
+        clearTimeout(metaSaveTimerRef.current);
+        metaSaveTimerRef.current = null;
+        void persistReportMeta(reportMetaDraftRef.current);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const saveProjectDescriptionText = async () => {
     if (!project) return;
@@ -923,6 +964,10 @@ export default function ProjectDetailScreen() {
   // serverens multer-tak for /describe-image (AI-bildebeskrivelse) — media-
   // opplastingen tåler 200 MB. Bilder over taket nedskaleres, ikke avvises.
   const MAX_PHOTO_BYTES = 20 * 1024 * 1024; // 20 MB
+  // Pilotfunn: 12 kamerabilder tok 3,5+ min å laste opp. Bilder over denne
+  // terskelen nedskaleres (web) til 2048px JPEG — rikelig for rapport og AI,
+  // og originalen ligger uansett igjen på kamerarullen.
+  const DOWNSCALE_TRIGGER_BYTES = 4 * 1024 * 1024; // 4 MB
   const MAX_VIDEO_DURATION_SECONDS = 120;   // 2 minutes
 
   const addPhotoNote = async () => {
@@ -978,13 +1023,16 @@ export default function ProjectDetailScreen() {
       for (const asset of result.assets) {
         let assetUri = asset.uri;
         const knownSize = asset.fileSize ?? (await measurePhotoBytesWeb(asset.uri));
-        if (knownSize && knownSize > MAX_PHOTO_BYTES) {
+        if (knownSize && knownSize > DOWNSCALE_TRIGGER_BYTES) {
           const downscaled = await downscalePhotoWeb(assetUri, MAX_PHOTO_BYTES);
-          if (!downscaled) {
+          if (downscaled) {
+            assetUri = downscaled;
+          } else if (knownSize > MAX_PHOTO_BYTES) {
+            // Nedskalering utilgjengelig (native) eller feilet: slipp gjennom
+            // opp til taket, hopp bare over det som er over 20 MB.
             skippedOversized += 1;
             continue;
           }
-          assetUri = downscaled;
         }
         if (Platform.OS === 'web' && assetUri.startsWith('data:')) {
           const blobUrl = await dataUrlToObjectUrlWeb(assetUri);
@@ -1117,12 +1165,12 @@ export default function ProjectDetailScreen() {
           return;
         }
 
-        // Guard: check file size (must fit within server's 200 MB cap)
-        const MAX_VIDEO_BYTES = 200 * 1024 * 1024; // 200 MB
+        // Guard: check file size (must fit within server's 500 MB video cap)
+        const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // 500 MB
         if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
           const sizeMb = (asset.fileSize / 1024 / 1024).toFixed(0);
           toast.show({
-            message: `Videoen er ${sizeMb} MB. Velg et klipp under 200 MB.`,
+            message: `Videoen er ${sizeMb} MB. Velg et klipp under 500 MB.`,
             variant: 'error',
             durationMs: 4200,
           });
@@ -1207,11 +1255,11 @@ export default function ProjectDetailScreen() {
           return;
         }
 
-        const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
+        const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
         if (asset.fileSize && asset.fileSize > MAX_VIDEO_BYTES) {
           Alert.alert(
             'Video too large',
-            `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 200 MB.`,
+            `This clip is ${(asset.fileSize / 1024 / 1024).toFixed(0)} MB. Please choose a clip under 500 MB.`,
           );
           return;
         }
@@ -2750,11 +2798,10 @@ export default function ProjectDetailScreen() {
         {renderInfoCard()}
         <ReportDetailsSection
           meta={reportMetaDraft}
-          onChange={setReportMetaDraft}
-          onSave={saveReportMeta}
+          onChange={handleReportMetaChange}
           isOpen={reportMetaOpen}
           onToggle={() => setReportMetaOpen((o) => !o)}
-          saving={isSavingMeta}
+          saveStatus={metaSaveStatus}
           saveError={saveMetaError}
         />
         {renderReport()}
