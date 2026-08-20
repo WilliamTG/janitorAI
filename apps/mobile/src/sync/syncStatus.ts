@@ -148,3 +148,76 @@ export function useVideoUploadProgress(uri: string | undefined): number | null {
 
   return pct;
 }
+
+// ---------- MEDIA UPLOAD BATCH PROGRESS ----------
+// «Laster opp 3 av 12» i synk-pillen (pilotfunn aug 2026: uten teller vet ikke
+// takstpersonen om opplastingen jobber eller henger). Settes av
+// uploadPendingMedia rundt hver kjøring og nullstilles når batchen er ferdig.
+
+export interface MediaBatchProgress {
+  done: number;
+  total: number;
+}
+
+let mediaBatchProgress: MediaBatchProgress | null = null;
+const mediaBatchListeners = new Set<(p: MediaBatchProgress | null) => void>();
+
+export function setMediaBatchProgress(p: MediaBatchProgress | null): void {
+  mediaBatchProgress = p;
+  mediaBatchListeners.forEach((l) => l(p));
+}
+
+export function useMediaBatchProgress(): MediaBatchProgress | null {
+  const [p, setP] = useState<MediaBatchProgress | null>(mediaBatchProgress);
+
+  useEffect(() => {
+    const listener = (next: MediaBatchProgress | null) => setP(next);
+    mediaBatchListeners.add(listener);
+    setP(mediaBatchProgress);
+    return () => {
+      mediaBatchListeners.delete(listener);
+    };
+  }, []);
+
+  return p;
+}
+
+// ---------- TAPTE MEDIER (varig utilgjengelige lokalt) ----------
+// Web: blob:/data:-referanser og IDB-innslag kan være borte etter at appen
+// ble lukket før opplastingen var ferdig. Synken merker slike bilder som
+// tapt (photo.lost) og melder her — én tydelig beskjed i stedet for evig
+// rød feilstatus. Akkumulerer innen samme prosjekt.
+
+export interface LostMediaInfo {
+  projectId: string;
+  count: number;
+}
+
+let lostMediaInfo: LostMediaInfo | null = null;
+const lostMediaListeners = new Set<(info: LostMediaInfo | null) => void>();
+
+export function recordLostMedia(projectId: string, count: number): void {
+  const prev = lostMediaInfo?.projectId === projectId ? lostMediaInfo.count : 0;
+  lostMediaInfo = { projectId, count: prev + count };
+  lostMediaListeners.forEach((l) => l(lostMediaInfo));
+}
+
+export function clearLostMedia(): void {
+  lostMediaInfo = null;
+  lostMediaListeners.forEach((l) => l(null));
+}
+
+export function useLostMediaNotice(): LostMediaInfo | null {
+  const [info, setInfo] = useState<LostMediaInfo | null>(lostMediaInfo);
+
+  useEffect(() => {
+    const listener = (next: LostMediaInfo | null) => setInfo(next);
+    lostMediaListeners.add(listener);
+    setInfo(lostMediaInfo);
+    return () => {
+      lostMediaListeners.delete(listener);
+    };
+  }, []);
+
+  return info;
+}

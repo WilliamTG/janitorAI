@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { useMediaUploadError, useOversizedFileError } from '@/src/sync/syncStatus';
+import { clearLostMedia, useLostMediaNotice, useMediaUploadError, useOversizedFileError } from '@/src/sync/syncStatus';
 import { Caption, useAppTheme } from '@/src/ui';
 
 // Amber palette for the "file too large" banner — distinct from the red danger
@@ -41,13 +41,46 @@ export default function MediaUploadErrorBanner() {
     if (!oversizedError) setOversizedDismissed(false);
   }, [oversizedError]);
 
+  const lostMedia = useLostMediaNotice();
+
   const showOversized = oversizedError && !oversizedDismissed;
   const showGeneric = mediaError && !genericDismissed;
+  const showLost = lostMedia !== null;
 
-  if (!showOversized && !showGeneric) return null;
+  if (!showOversized && !showGeneric && !showLost) return null;
 
   return (
     <>
+      {showLost && lostMedia && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.spacing.sm,
+            paddingHorizontal: theme.spacing.md,
+            paddingVertical: theme.spacing.sm,
+            backgroundColor: AMBER_BG,
+            borderRadius: theme.radii.md,
+            borderWidth: 1,
+            borderColor: AMBER_BORDER,
+            marginBottom: theme.spacing.sm,
+          }}
+        >
+          <Ionicons name="image-outline" size={18} color={AMBER_TEXT} />
+          <Caption style={{ flex: 1, color: AMBER_TEXT }}>
+            {lostMedia.count === 1
+              ? 'Ett bilde gikk tapt fordi appen ble lukket før opplastingen var ferdig. Legg det til på nytt fra kamerarullen.'
+              : `${lostMedia.count} bilder gikk tapt fordi appen ble lukket før opplastingen var ferdig. Legg dem til på nytt fra kamerarullen.`}
+          </Caption>
+          <Pressable
+            onPress={() => clearLostMedia()}
+            accessibilityLabel="Lukk varsel om tapte bilder"
+            hitSlop={8}
+          >
+            <Ionicons name="close-outline" size={18} color={AMBER_TEXT} />
+          </Pressable>
+        </View>
+      )}
       {showOversized && (
         <View
           style={{

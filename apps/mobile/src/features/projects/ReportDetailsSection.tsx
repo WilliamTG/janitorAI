@@ -7,7 +7,6 @@ import {
   Body,
   Caption,
   GlassCard,
-  PrimaryButton,
   SecondaryButton,
   TextField,
   useAppTheme,
@@ -18,14 +17,13 @@ import { ReportBuilding, ReportContributor, ReportMeta } from './types';
 type Props = {
   meta: ReportMeta;
   onChange: (meta: ReportMeta) => void;
-  onSave: () => void;
   isOpen: boolean;
   onToggle: () => void;
-  saving?: boolean;
+  saveStatus?: 'idle' | 'saving' | 'saved';
   saveError?: string | null;
 };
 
-export function ReportDetailsSection({ meta, onChange, onSave, isOpen, onToggle, saving, saveError }: Props) {
+export function ReportDetailsSection({ meta, onChange, isOpen, onToggle, saveStatus, saveError }: Props) {
   const theme = useAppTheme();
 
   // ----- helpers -----
@@ -208,13 +206,18 @@ export function ReportDetailsSection({ meta, onChange, onSave, isOpen, onToggle,
           {inputField('Beboelighet – annen info', meta.habitableOtherInfo, v => setField('habitableOtherInfo', v), true)}
           {inputField('Sammendrag', meta.summaryText, v => setField('summaryText', v), true)}
 
-          {/* Save button */}
+          {/* Pilotfunn (aug 2026): lagre-knappen ble glemt — feltene autolagres. */}
           {saveError ? (
             <Caption style={{ color: theme.colors.danger, textAlign: 'center' }}>{saveError}</Caption>
-          ) : null}
-          <PrimaryButton onPress={onSave} loading={saving} disabled={saving}>
-            Lagre rapportdetaljer
-          </PrimaryButton>
+          ) : (
+            <Caption muted style={{ textAlign: 'center' }}>
+              {saveStatus === 'saving'
+                ? 'Lagrer …'
+                : saveStatus === 'saved'
+                  ? 'Lagret ✓ — feltene lagres automatisk mens du skriver'
+                  : 'Feltene lagres automatisk mens du skriver'}
+            </Caption>
+          )}
         </View>
       )}
     </GlassCard>

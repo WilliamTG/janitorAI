@@ -12,6 +12,8 @@ import {
   recordOversizedFile,
   setVideoUploadProgress,
   clearVideoUploadProgress,
+  setMediaBatchProgress,
+  recordLostMedia,
 } from './syncStatus';
 import { logError, logAction } from '@/src/lib/logger';
 import { isIdbUri, noteIdFromIdbUri, loadVideoFromIdb, deleteVideoFromIdb } from './videoIdb';
@@ -148,7 +150,11 @@ type UploadResult = { id: string; sha256?: string };
 // Guard against duplicate uploads when a stale in-memory project (without
 // the remoteId that was already persisted) is pushed again.
 const uploadedByUri = new Map<string, UploadResult>();
-const uploadsInFlight = new Map<string, Promise<UploadResult | null>>();
+// 'lost' = kilden er varig utilgjengelig lokalt (død blob:/data:-referanse
+// eller manglende IndexedDB-innslag etter omstart på web) — aldri prøv igjen,
+// og marker mediet som tapt i stedet for å telle evig feil.
+type UploadOutcome = UploadResult | null | 'lost';
+const uploadsInFlight = new Map<string, Promise<UploadOutcome>>();
 // URIs permanently rejected by the server (FILE_TOO_LARGE). Never retried.
 const oversizedUris = new Set<string>();
 
@@ -171,7 +177,7 @@ async function uploadMedia(
   uri: string,
   kind: 'photo' | 'audio' | 'video',
   projectId: string,
-): Promise<UploadResult | null> {
+): Promise<UploadOutcome> {
   // Permanently quarantined — server already rejected this file as too large.
   if (oversizedUris.has(uri)) return null;
 
@@ -183,7 +189,7 @@ async function uploadMedia(
 
   const promise = doUploadMedia(uri, kind, projectId)
     .then((result) => {
-      if (result) uploadedByUri.set(uri, result);
+      if (result && result !== 'lost') uploadedByUri.set(uri, result);
       return result;
     })
     .finally(() => {
@@ -237,7 +243,7 @@ async function doUploadMedia(
   uri: string,
   kind: 'photo' | 'audio' | 'video',
   projectId: string,
-): Promise<UploadResult | null> {
+): Promise<UploadOutcome> {
   const startMs = Date.now();
   try {
     const formData = new FormData();
@@ -258,9 +264,9 @@ async function doUploadMedia(
         const noteId = noteIdFromIdbUri(uri);
         const stored = await loadVideoFromIdb(noteId);
         if (!stored) {
-          const err = new Error(`IndexedDB entry missing for note ${noteId} — video cannot be recovered`);
+          const err = new Error(`IndexedDB entry missing for key ${noteId} — ${kind} cannot be recovered`);
           logError(err, `upload-${kind}`);
-          return null;
+          return 'lost';
         }
         blob = stored;
       } else {
@@ -271,6 +277,11 @@ async function doUploadMedia(
           const isTimeout = fetchErr?.name === 'TimeoutError' || fetchErr?.name === 'AbortError';
           const err = new Error(isTimeout ? 'Blob fetch timed out' : `Blob fetch failed: ${fetchErr?.message}`);
           logError(err, `upload-${kind}`);
+          // En blob:/data:-referanse som feiler uten timeout er død for godt
+          // (typisk: appen ble lukket og økten forsvant) — retry er meningsløst.
+          if (!isTimeout && (uri.startsWith('blob:') || uri.startsWith('data:'))) {
+            return 'lost';
+          }
           return null;
         }
         if (!response.ok) {
@@ -386,22 +397,45 @@ async function doUploadMedia(
  * caller has committed the new videoRemoteId to local storage (to avoid a
  * window where the note references an already-deleted IDB entry).
  */
+// Teller medier uten varig serverkopi — grunnlaget for «Laster opp X av Y».
+function countPendingMedia(project: Project): number {
+  let count = 0;
+  for (const note of project.notes || []) {
+    if (note.audioUri && !note.audioRemoteId) count += 1;
+    if (note.photos) count += note.photos.filter((p) => p.uri && !p.remoteId && !p.lost).length;
+    if (note.videoUri && !note.videoRemoteId) count += 1;
+  }
+  if (project.projectDescriptionAudioUri && !project.projectDescriptionAudioRemoteId) count += 1;
+  return count;
+}
+
 async function uploadPendingMedia(
   project: Project,
-): Promise<{ project: Project; changed: boolean; failedCount: number; idbUrisToCleanup: string[] }> {
+): Promise<{ project: Project; changed: boolean; failedCount: number; lostCount: number; idbUrisToCleanup: string[] }> {
   let changed = false;
   let failedCount = 0;
+  let lostCount = 0;
   const idbUrisToCleanup: string[] = [];
 
+  const totalPending = countPendingMedia(project);
+  let doneCount = 0;
+  const bumpProgress = () => {
+    doneCount += 1;
+    setMediaBatchProgress({ done: doneCount, total: totalPending });
+  };
+  if (totalPending > 0) setMediaBatchProgress({ done: 0, total: totalPending });
+
+  try {
   const notes: Note[] = await Promise.all(
     (project.notes || []).map(async (note) => {
       let nextNote = note;
 
       if (note.audioUri && !note.audioRemoteId) {
         const uploaded = await uploadMedia(note.audioUri, 'audio', project.id);
-        if (uploaded) {
+        if (uploaded && uploaded !== 'lost') {
           nextNote = { ...nextNote, audioRemoteId: uploaded.id, audioSha256: uploaded.sha256 };
           changed = true;
+          bumpProgress();
         } else {
           failedCount += 1;
         }
@@ -410,10 +444,21 @@ async function uploadPendingMedia(
       if (note.photos && note.photos.length > 0) {
         const photos: Photo[] = await Promise.all(
           note.photos.map(async (photo) => {
-            if (!photo.uri || photo.remoteId) return photo;
+            if (!photo.uri || photo.remoteId || photo.lost) return photo;
             const uploaded = await uploadMedia(photo.uri, 'photo', project.id);
+            if (uploaded === 'lost') {
+              // Kilden er død lokalt (app lukket før synk) — marker som tapt
+              // så synken slutter å feile, og brukeren får beskjed én gang.
+              changed = true;
+              lostCount += 1;
+              return { ...photo, lost: true };
+            }
             if (uploaded) {
               changed = true;
+              bumpProgress();
+              if (Platform.OS === 'web' && isIdbUri(photo.uri)) {
+                idbUrisToCleanup.push(photo.uri);
+              }
               return { ...photo, remoteId: uploaded.id, sha256: uploaded.sha256 };
             }
             failedCount += 1;
@@ -425,9 +470,10 @@ async function uploadPendingMedia(
 
       if (note.videoUri && !note.videoRemoteId) {
         const uploaded = await uploadMedia(note.videoUri, 'video', project.id);
-        if (uploaded) {
+        if (uploaded && uploaded !== 'lost') {
           nextNote = { ...nextNote, videoRemoteId: uploaded.id, videoSha256: uploaded.sha256 };
           changed = true;
+          bumpProgress();
           // Schedule IDB cleanup for this note's video — deferred so the
           // caller can commit the remoteId to local storage first.
           if (Platform.OS === 'web' && isIdbUri(note.videoUri)) {
@@ -446,15 +492,19 @@ async function uploadPendingMedia(
 
   if (project.projectDescriptionAudioUri && !project.projectDescriptionAudioRemoteId) {
     const uploaded = await uploadMedia(project.projectDescriptionAudioUri, 'audio', project.id);
-    if (uploaded) {
+    if (uploaded && uploaded !== 'lost') {
       next = { ...next, projectDescriptionAudioRemoteId: uploaded.id };
       changed = true;
+      bumpProgress();
     } else {
       failedCount += 1;
     }
   }
 
-  return { project: next, changed, failedCount, idbUrisToCleanup };
+  return { project: next, changed, failedCount, lostCount, idbUrisToCleanup };
+  } finally {
+    setMediaBatchProgress(null);
+  }
 }
 
 // ---------- PUSH ----------
@@ -538,6 +588,11 @@ function applyRemoteIds(stored: Project, uploaded: Project): Project {
         if (upPhoto?.remoteId && p.uri === upPhoto.uri) {
           return { ...p, remoteId: upPhoto.remoteId };
         }
+        // Tapt-merking må også overleve commiten — ellers prøver neste
+        // synkrunde det døde bildet på nytt og varselet gjentas evig.
+        if (upPhoto?.lost && p.uri === upPhoto.uri && !p.remoteId) {
+          return { ...p, lost: true };
+        }
         return p;
       });
       next = { ...next, photos };
@@ -574,8 +629,14 @@ export async function pushProject(project: Project): Promise<Project> {
     setSyncState('syncing');
 
     try {
-      const { project: withMedia, changed, failedCount, idbUrisToCleanup } = await uploadPendingMedia(project);
+      const { project: withMedia, changed, failedCount, lostCount, idbUrisToCleanup } = await uploadPendingMedia(project);
       let toPush = withMedia;
+
+      // Varsle om medier som er varig tapt lokalt (app lukket før synk) —
+      // én tydelig beskjed i stedet for evig rød feilstatus.
+      if (lostCount > 0) {
+        recordLostMedia(project.id, lostCount);
+      }
 
       // Track consecutive push cycles that had media upload failures so we can
       // surface a non-blocking warning to the inspector after the threshold.

@@ -132,6 +132,12 @@ export type Photo = {
   geo?: GeoPoint;
   /** ISO-tidspunkt for fangst i felt. */
   capturedAt?: string;
+  /**
+   * Bildedataene er varig tapt lokalt (web: død blob-/IDB-referanse etter at
+   * appen ble lukket før opplasting). Synken hopper over bildet i stedet for
+   * å feile evig; brukeren varsles og kan legge bildet til på nytt.
+   */
+  lost?: boolean;
 };
 
 export type Note = {
