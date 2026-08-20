@@ -148,3 +148,36 @@ export function useVideoUploadProgress(uri: string | undefined): number | null {
 
   return pct;
 }
+
+// ---------- MEDIA UPLOAD BATCH PROGRESS ----------
+// «Laster opp 3 av 12» i synk-pillen (pilotfunn aug 2026: uten teller vet ikke
+// takstpersonen om opplastingen jobber eller henger). Settes av
+// uploadPendingMedia rundt hver kjøring og nullstilles når batchen er ferdig.
+
+export interface MediaBatchProgress {
+  done: number;
+  total: number;
+}
+
+let mediaBatchProgress: MediaBatchProgress | null = null;
+const mediaBatchListeners = new Set<(p: MediaBatchProgress | null) => void>();
+
+export function setMediaBatchProgress(p: MediaBatchProgress | null): void {
+  mediaBatchProgress = p;
+  mediaBatchListeners.forEach((l) => l(p));
+}
+
+export function useMediaBatchProgress(): MediaBatchProgress | null {
+  const [p, setP] = useState<MediaBatchProgress | null>(mediaBatchProgress);
+
+  useEffect(() => {
+    const listener = (next: MediaBatchProgress | null) => setP(next);
+    mediaBatchListeners.add(listener);
+    setP(mediaBatchProgress);
+    return () => {
+      mediaBatchListeners.delete(listener);
+    };
+  }, []);
+
+  return p;
+}

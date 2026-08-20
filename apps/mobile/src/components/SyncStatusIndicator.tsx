@@ -3,7 +3,7 @@ import React from 'react';
 import { Pressable, View } from 'react-native';
 
 import { nb } from '@/src/i18n/nb';
-import { useSyncStatus, useMediaUploadError, SyncState } from '@/src/sync/syncStatus';
+import { useSyncStatus, useMediaUploadError, useMediaBatchProgress, SyncState } from '@/src/sync/syncStatus';
 import { Caption, useAppTheme } from '@/src/ui';
 
 const LABELS: Record<SyncState, string> = {
@@ -32,6 +32,7 @@ export default function SyncStatusIndicator({ onSyncNow }: Props) {
   const theme = useAppTheme();
   const status = useSyncStatus();
   const mediaError = useMediaUploadError();
+  const batchProgress = useMediaBatchProgress();
 
   // When media uploads are failing, override the color and icon even if the
   // project push itself succeeded — the inspector's files aren't fully safe.
@@ -47,8 +48,11 @@ export default function SyncStatusIndicator({ onSyncNow }: Props) {
   const icon: keyof typeof Ionicons.glyphMap =
     hasMediaError && status !== 'error' ? 'alert-circle-outline' : ICONS[status];
 
-  const label =
-    hasMediaError && status === 'synced'
+  // Pilotfunn (aug 2026): uten teller vet ikke takstpersonen om opplastingen
+  // jobber eller henger — vis «Laster opp X av Y» mens batchen pågår.
+  const label = batchProgress
+    ? `Laster opp ${batchProgress.done} av ${batchProgress.total} …`
+    : hasMediaError && status === 'synced'
       ? nb.sync.mediaNotSynced
       : LABELS[status];
 
