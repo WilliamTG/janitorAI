@@ -86,8 +86,9 @@ avsluttes med «Fullfør befaring». Kompletthet er en førsteklasses handling.
   dokumentasjonen som legges frem.
 - Grensen TG1/TG2 er nyansert; bærekraftsvurderinger er tatt inn i
   TG-kriteriene.
-- **Overgang:** frem til 1. juli 2026 kan 2018- eller 2025-utgaven brukes;
-  deretter kun NS 3600:2025 (forskrift til avhendingslova ligger bak).
+- **Overgang (passert):** siden 1. juli 2026 er kun NS 3600:2025 tillatt;
+  overgangsperioden fra 17. des 2025 er over (kilde: DiBK; forskrift til
+  avhendingslova ligger bak).
 
 ## 3. Konsekvenser for DocrAI
 
@@ -118,7 +119,10 @@ Full gjennomgang av wennproperty.no. Wenn er befaringsappen for
 mengdedata, AI-assistent som gjør talenotater til strukturert
 arbeidsbeskrivelse **per rom og fag** (matrise: rader = rom, kolonner = fag),
 deling via sikker lenke med PIN, PDF/IFC-eksport. Løfte: «spar 30 %+ av
-prosjekttiden». 50+ kundelogoer, distribusjonsavtale med MesterAlliansen.
+prosjekttiden». 50+ kundelogoer. (Per 14. aug 2026: 60+ logoer; den tidligere
+omtalte MesterAlliansen-avtalen er ikke lenger synlig hos noen av partene —
+profilerte partnere nå er Bygghåndverk Norge, NKF, Byggmann og VestlandsHus.
+Se statusoppdateringen i `erfaringer-konkurrenter.md`.)
 
 **Prising (transparent på siden, ingen binding):** Basis 350 kr/mnd ·
 Max 999 kr/mnd (LiDAR + mengdeberegning) · Enterprise i dialog.
@@ -139,8 +143,9 @@ Max 999 kr/mnd (LiDAR + mengdeberegning) · Enterprise i dialog.
    — strukturen AI-utkastet organiseres etter (styrker A1/A5).
 3. **Kvantifisert løfte på forsiden:** «2 timer rapportskriving → 15
    minutter godkjenning» (og tidsmetrikken vår beviser det per sak).
-4. **Alliansedistribusjon:** MesterAlliansen-avtalen deres er malen for vårt
-   Norsk takst-spor — én avtale gir mange medlemmer.
+4. **Alliansedistribusjon:** kjede-/forbundsavtalene deres (Bygghåndverk
+   Norge, NKF m.fl.) er malen for vårt Norsk takst-spor — én avtale gir
+   mange medlemmer.
 5. **Kjøp-ikke-bygg bekreftet:** LiDAR/mengder er Wenns kjerne, ikke vår —
    ved behov lisensieres det (nei-lista står).
 

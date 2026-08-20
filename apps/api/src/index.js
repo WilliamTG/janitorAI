@@ -190,6 +190,31 @@ app.get("/demo", (req, res) => sendPublicPage(req, res, "demo-page.html", "/demo
 // Landingsside med verdiløfte, prisnivåer og prøv-selv-inngang til /demo.
 app.get("/om", (req, res) => sendPublicPage(req, res, "om-page.html", "/om"));
 
+// ---------- KONTAKT (public — L2X-mønsteret: book møte eller e-post) --------
+// To tydelige veier inn: 15-min introduksjonsmøte og e-post. Booking-lenken
+// settes med BOOKING_URL (f.eks. Microsoft Bookings/Calendly); uten den faller
+// knappen ærlig tilbake til e-post der vi foreslår tidspunkt.
+app.get("/kontakt", (req, res) => {
+  fs.readFile(path.join(__dirname, "kontakt-page.html"), "utf8", (err, html) => {
+    if (err) return sendNotFound(req, res);
+    const booking = (process.env.BOOKING_URL || "").trim().replace(/"/g, "%22");
+    const mailto =
+      "mailto:fdalen.97@gmail.com?subject=" +
+      encodeURIComponent("Introduksjonsmøte om DocrAI (15 min)") +
+      "&body=" +
+      encodeURIComponent("Hei!\n\nJeg vil gjerne ta et kort introduksjonsmøte om DocrAI. Tidspunkter som passer for meg:\n\n1.\n2.\n");
+    html = html
+      .replace("__BOOKING_HREF__", () => (booking || mailto))
+      .replace("__BOOKING_TARGET__", () => (booking ? ' target="_blank" rel="noopener"' : ""))
+      .replace("__BOOKING_NOTE__", () =>
+        booking
+          ? "Åpner bookingkalenderen i en ny fane."
+          : "Knappen starter en e-post – foreslå tidspunkter, så bekrefter vi innen én virkedag."
+      );
+    res.type("html").send(absolutizeSeo(html, publicBase(req), "/kontakt"));
+  });
+});
+
 // ---------- LANSERINGSSIDER (public — FAQ, personvern, takk, robots, og) ----
 app.get("/faq", (req, res) => sendPublicPage(req, res, "faq-page.html", "/faq"));
 app.get("/personvern", (req, res) => sendPublicPage(req, res, "personvern-page.html", "/personvern"));
@@ -202,7 +227,7 @@ app.get("/robots.txt", require("./routes/publikum").robotsHandler);
 app.get("/sitemap.xml", (req, res) => {
   const base =
     process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
-  const paths = ["/om", "/demo", "/faq", "/personvern", "/vilkar", "/kundereisen"];
+  const paths = ["/om", "/demo", "/faq", "/personvern", "/vilkar", "/kontakt", "/kundereisen"];
   const urls = paths
     .map((p) => `  <url><loc>${base}${p}</loc></url>`)
     .join("\n");
