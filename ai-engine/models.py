@@ -2,7 +2,10 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 class Evidence(BaseModel):
-    timestamp_ms: int
+    timestamp_ms: Optional[int] = Field(
+        default=None,
+        description="Videotidspunkt i millisekunder når beviset kommer fra video; null når beviset kommer fra notat eller foto."
+    )
     caption: str = Field(description="Kort tittel på bildet (f.eks. 'Nærbilde av rørkobling')")
     visual_confirmation: str = Field(description="Beskriv nøyaktig hva i bildet som beviser dette (f.eks. 'mørk fuktflekk i hjørnet' eller 'synlig vanndråpe')")
     technical_reference: Optional[str] = Field(description="Referanse til Byggforsk (f.eks. '700.115 pkt 4.2'), la stå tom hvis ikke relevant")
