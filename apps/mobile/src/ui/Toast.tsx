@@ -38,14 +38,14 @@ const ICONS: Record<ToastVariant, keyof typeof Ionicons.glyphMap> = {
 // Fargepar med minst 4,5:1-kontrast i begge temaer (B20-kravet gjelder også toasts).
 const COLORS: Record<'light' | 'dark', Record<ToastVariant, { bg: string; fg: string; border: string }>> = {
   light: {
-    success: { bg: '#DCFCE7', fg: '#14532D', border: '#86EFAC' },
-    error: { bg: '#FEE2E2', fg: '#7F1D1D', border: '#FCA5A5' },
-    info: { bg: '#E4EDF5', fg: '#2E4763', border: '#A8BFD4' },
+    success: { bg: '#DCEFE3', fg: '#14532D', border: '#8FC9A0' },
+    error: { bg: '#FCE5E1', fg: '#7F1D1D', border: '#EFAF9F' },
+    info: { bg: '#E0ECEE', fg: '#1A4148', border: '#9FC4CA' },
   },
   dark: {
-    success: { bg: '#0F2E1D', fg: '#86EFAC', border: '#166534' },
-    error: { bg: '#3B1513', fg: '#FCA5A5', border: '#7F1D1D' },
-    info: { bg: '#1B2A3A', fg: '#A9C9EF', border: '#3D5A80' },
+    success: { bg: '#0F2E1D', fg: '#8FC9A0', border: '#166534' },
+    error: { bg: '#3B1513', fg: '#EFAF9F', border: '#7F1D1D' },
+    info: { bg: '#16262B', fg: '#A5CBD3', border: '#23545C' },
   },
 };
 

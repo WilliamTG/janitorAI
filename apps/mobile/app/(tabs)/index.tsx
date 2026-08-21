@@ -90,7 +90,7 @@ function getProjectStatus(project: Project): ProjectStatus {
 // bruker StatusChip med WCAG AA-fargepar (B20).
 const STATUS_COLOR: Record<ProjectStatus, string> = {
   draft: '#7C8A96',
-  processing: '#3D5A80',
+  processing: '#23545C',
   ready: '#2E7D4F',
   failed: '#A6453A',
 };
@@ -895,11 +895,13 @@ export default function Index() {
               </Caption>
             </View>
 
-            {/* Tid til godkjent rapport — pilotmetrikken (A3) */}
+            {/* Tid til godkjent rapport — pilotmetrikken (A3). Kobber = nøkkeltall. */}
             {approvedMinutes !== null && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Ionicons name="timer-outline" size={13} color={theme.colors.muted} />
-                <Caption muted>{nb.projects.timeToApproved(formatMinutes(approvedMinutes))}</Caption>
+                <Ionicons name="timer-outline" size={13} color={theme.colors.copper} />
+                <Caption style={{ color: theme.colors.copper, fontWeight: '600' }}>
+                  {nb.projects.timeToApproved(formatMinutes(approvedMinutes))}
+                </Caption>
               </View>
             )}
           </GlassCard>

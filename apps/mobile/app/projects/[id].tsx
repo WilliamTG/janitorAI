@@ -2127,7 +2127,8 @@ export default function ProjectDetailScreen() {
             {project?.reportApproval ? (
               <>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
-                  <Ionicons name="shield-checkmark" size={18} color={theme.colors.accent} />
+                  {/* Kobber: identitetens signaturdetalj — kun stempel og nøkkeltall. */}
+                  <Ionicons name="shield-checkmark" size={18} color={theme.colors.copper} />
                   <Body style={{ fontWeight: '600', flex: 1 }}>
                     {nb.report.approvedStamp(
                       project.reportApproval.approvedBy,
@@ -2139,8 +2140,10 @@ export default function ProjectDetailScreen() {
                   const minutes = minutesToApproved(project);
                   return minutes !== null ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Ionicons name="timer-outline" size={13} color={theme.colors.muted} />
-                      <Caption muted>{nb.projects.timeToApproved(formatMinutes(minutes))}</Caption>
+                      <Ionicons name="timer-outline" size={13} color={theme.colors.copper} />
+                      <Caption style={{ color: theme.colors.copper, fontWeight: '600' }}>
+                        {nb.projects.timeToApproved(formatMinutes(minutes))}
+                      </Caption>
                     </View>
                   ) : null;
                 })()}
