@@ -220,7 +220,8 @@ forsikringsklar rapport. Men presset kommer nå fra tre kanter samtidig: Wenn
 (FoU mot skadevurdering), Pretakst (samme mekanikk i nabosegmentet) og
 skinnene (automatisering tett rundt rapporten). Farten vår er forsvaret.
 
-Selskapsverifisering av alle aktørene (org.nr, eiere, regnskap, trusselnivå —
+Hoveddokumentet med markedskart, trusselvurderinger og tilpasningsstrategi er
+`konkurrentanalyse.md`. Selskapsverifiseringen (org.nr, eiere, regnskap —
 dobbeltverifisert mot Brønnøysund/Regnskapsregisteret for IN-søknaden) ligger i
 `konkurrent-selskapsanalyse.md`. Nytt der (aug 2026): Vendu AS er konkurs, og
 iVerdi er del av Spir Group (samme konsern som Ambita og Boligmappa).
