@@ -220,6 +220,13 @@ export const nb = {
     wetChecklistTitle: 'Huskeliste — våtrom',
     wetChecklistHint:
       'Rommet er et våtrom. Dokumentér punktene under — de styrer også hvilke Byggforsk-anvisninger rapporten forankres i.',
+    checklistHint:
+      'Dokumentér punktene under mens du er i rommet — huskelisten er en påminnelse, vurderingen er din.',
+    completeRoom: 'Fullfør rom',
+    reopenRoom: 'Gjenåpne rom',
+    completedToast: (name: string) => `«${name}» markert ferdig befart`,
+    reopenedToast: (name: string) => `«${name}» gjenåpnet`,
+    completedProgress: (done: number, total: number) => `${done} av ${total} rom ferdig befart`,
   },
 
   share: {
