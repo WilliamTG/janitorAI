@@ -494,17 +494,9 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     // Reading the raw header again would miss Authorization: Bearer tokens.
     const token = req.testerToken;
 
-    // Require a real media ID — no demo fallback
-    if (!video_filename || video_filename === "demo") {
-      return res.status(400).json({
-        status: "error",
-        message: "No video found. Please add a video note to this project before generating a report.",
-      });
-    }
-
-    // S4/S3: verifiser at videoen tilhører denne testeren. (Media-GET er også
-    // skopet på token, så dette feiler dessuten tidlig med en tydelig melding.)
-    if (isDbEnabled()) {
+    // Video is optional. When supplied, verify that it belongs to this tester
+    // before allowing the AI engine to fetch it.
+    if (video_filename && video_filename !== "demo" && isDbEnabled()) {
       const pool = getPool();
       const ownsVideo = await pool.query(
         "SELECT 1 FROM media WHERE id = $1 AND tester_token = $2",
@@ -515,13 +507,16 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
       }
     }
 
-    // Build a URL the AI engine can use to download the video directly from
-    // this API server's media storage. S10: vi signerer en kortlevd URL i stedet
-    // for å legge tester-tokenet i ?token= — tokenet forlater aldri serveren.
+    // When supplied, build a short-lived URL the AI engine can use to download
+    // the video directly from this API server's media storage. A report may
+    // instead be generated from notes, transcriptions, photos, and metadata.
     const apiBaseUrl =
       process.env.API_BASE_URL ||
       `${req.protocol}://${req.get("host")}`;
-    const videoUrl = signedMediaUrl(apiBaseUrl, video_filename);
+    const videoUrl =
+      video_filename && video_filename !== "demo"
+        ? signedMediaUrl(apiBaseUrl, video_filename)
+        : null;
 
     // Resolve photo URIs to absolute URLs and strip empty fields so the AI
     // engine receives a clean, self-contained context object.
@@ -610,7 +605,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
           "x-tester-token": aiToken,
         },
         body: JSON.stringify({
-          video_url: videoUrl,
+          ...(videoUrl ? { video_url: videoUrl } : {}),
           report_meta: report_meta || {},
           project: projectContext,
           tester_email: req.testerEmail || "",

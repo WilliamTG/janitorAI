@@ -5,13 +5,14 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
+from typing import Optional
 from main import create_report
 from google_api import connect_to_google_api_personal, download_knowledge_from_drive, export_doc_as_pdf, export_doc_as_docx
 
 app = FastAPI()
 
 class ReportRequest(BaseModel):
-    video_url: str            # Full URL to the inspector's uploaded video (includes auth token)
+    video_url: Optional[str] = None  # Optional uploaded inspection video
     report_meta: dict = {}    # Per-project metadata for template replacements
     project: dict = {}        # Full project context: description, notes (text/transcription/photos)
     tester_email: str = ""    # Email address to share the finished doc with (optional)
@@ -166,9 +167,6 @@ async def run_analysis(fastapi_req: Request, request: ReportRequest):
         print(f"🚫 Rejected request: wrong token")
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    if not request.video_url:
-        raise HTTPException(status_code=400, detail="video_url is required")
-
     try:
         docs_service, drive_service = connect_to_google_api_personal()
     except EnvironmentError as e:
@@ -181,13 +179,16 @@ async def run_analysis(fastapi_req: Request, request: ReportRequest):
     if knowledge_id:
         download_knowledge_from_drive(drive_service, knowledge_id, TEMP_KNOWLEDGE_DIR)
 
-    # 2. Download the inspector's actual uploaded video from the app's media storage
-    try:
-        video_path = download_video_from_url(request.video_url, TEMP_VIDEO_DIR)
-    except (ValueError, FileNotFoundError, PermissionError) as e:
-        return {"status": "error", "message": str(e)}
-    except Exception as e:
-        return {"status": "error", "message": f"Failed to download video: {str(e)}"}
+    # 2. Download the inspection video only when one is available. Notes,
+    # transcriptions, photos, and report metadata are valid report evidence too.
+    video_path = None
+    if request.video_url:
+        try:
+            video_path = download_video_from_url(request.video_url, TEMP_VIDEO_DIR)
+        except (ValueError, FileNotFoundError, PermissionError) as e:
+            return {"status": "error", "message": str(e)}
+        except Exception as e:
+            return {"status": "error", "message": f"Failed to download video: {str(e)}"}
 
     # 3. Run the analysis pipeline
     try:

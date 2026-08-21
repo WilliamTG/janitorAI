@@ -1363,16 +1363,10 @@ export default function ProjectDetailScreen() {
         reportApproval: undefined,
       });
 
-      // Require an uploaded video — no demo fallback
+      // A report can be based on any available inspection evidence. Include a
+      // video when one has finished uploading, but never require one.
       const videoNote = (snap.notes || []).find(n => n.videoRemoteId);
-      if (!videoNote) {
-        const errMsg = nb.report.requiresVideo;
-        toast.show({ message: nb.report.requiresVideo, variant: 'error', durationMs: 4200 });
-        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
-        setIsGeneratingGoogleDoc(false);
-        return;
-      }
-      const videoFilename = videoNote.videoRemoteId;
+      const videoFilename = videoNote?.videoRemoteId;
 
       // Build enriched project context
       const enrichedNotes = (snap.notes || [])
@@ -1405,7 +1399,7 @@ export default function ProjectDetailScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           report_meta: reportMetaDraft,
-          video_filename: videoFilename,
+          ...(videoFilename ? { video_filename: videoFilename } : {}),
           project: projectContext,
         }),
       });

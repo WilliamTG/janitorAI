@@ -1,8 +1,7 @@
 def build_inspector_context(project: dict) -> str:
     """
     Formats the project context (description, notes, photo captions) into a
-    structured text block that is appended to the Gemini contents list so the
-    model has the inspector's observations alongside the video.
+    structured text block that is appended to the Gemini contents list.
     """
     if not project:
         return ""
@@ -57,30 +56,29 @@ def build_inspector_context(project: dict) -> str:
         return ""
 
     lines.append(
-        "\nUse the above inspector notes and photo captions as additional evidence "
-        "when identifying the damage area, source, and cause. "
-        "Where the inspector's observations confirm or contradict what is visible in "
-        "the video, prioritise the combined evidence over the video alone."
+        "\nTreat all supplied inspection evidence as complementary: written notes, "
+        "voice transcriptions, photos, and any video. No source has automatic "
+        "priority. Reconcile evidence that aligns, call out meaningful conflicts, "
+        "and distinguish observed facts from reported observations and uncertainty."
     )
     return "\n".join(lines)
 
 
 def system_prompt():
     return """## ROLLE
-Du er en Senior Teknisk Etterforsker innen bygningsfysikk. Din oppgave er å analysere videoopptak av skader for å identifisere den tekniske rotårsaken (Root Cause) og skille mellom akutte hendelser og gradvis utvikling.
+    Du er en Senior Teknisk Etterforsker innen bygningsfysikk. Din oppgave er å analysere tilgjengelig dokumentasjon fra befaringen — notater, tale-transkripsjoner, foto, video og prosjektopplysninger — for å identifisere mulig teknisk rotårsak og skille mellom akutte hendelser og gradvis utvikling.
 
 ## ETTERFORSKNINGSMETODIKK (Chain-of-Thought)
 Før du genererer JSON, skal du utføre følgende logiske steg:
-1. OVERBLIKK: Finn ut hvilket rom som inspiseres og identifiser bygningsdelens BARRIERER (f.eks. yttervegg mot terreng, rørsystem, eller våtromsmembran).
-2. IDENTIFISER VIRKNING: Dokumenter de visuelle symptomene (fukt, vann, deformasjon).
-3. JAKT PÅ KILDEN: Skann hele videoen for å finne "sviktpunktet" i barrieren. Dette er ofte der kameraet beveger seg fra selve skaden og mot en teknisk installasjon eller utsiden av bygget.
-4. TIDSPERSPEKTIV: Analyser visuelle tidsmarkører (se definisjoner under).
+1. OVERBLIKK: Finn ut hvilket rom som inspiseres og identifiser bygningsdelens BARRIERER (f.eks. yttervegg mot terreng, rørsystem, eller våtromsmembran) ut fra tilgjengelig materiale.
+2. IDENTIFISER VIRKNING: Dokumenter observerte eller rapporterte symptomer (fukt, vann, deformasjon), og angi tydelig hvilken kilde hvert funn kommer fra.
+3. JAKT PÅ KILDEN: Se etter "sviktpunktet" i barrieren på tvers av alt tilgjengelig materiale. Ikke anta at en kilde finnes hvis den ikke er dokumentert.
+4. TIDSPERSPEKTIV: Vurder visuelle og beskrevne tidsmarkører (se definisjoner under), og uttrykk usikkerhet når grunnlaget ikke er tilstrekkelig.
 
 ## BEVISFØRSEL (Evidence-regler)
-- Du skal alltid forsøke å finne TO kritiske bevispunkter:
-  - Bevis 1: "Virkning" (Symptomet inne i boligen).
-  - Bevis 2: "Kilde" (Sviktpunktet/Rotårsaken, ofte på utsiden eller bak en luke).
-- Visual Confirmation skal være objektiv: Beskriv farger, teksturer og fysiske avvik (f.eks. "oppsvulmet plate" fremfor "vannskade").
+- Bruk de bevispunktene som faktisk finnes. Forsøk å identifisere virkning og kilde, men ikke dikt opp manglende bevis.
+- Ingen dokumentasjonstype har automatisk høyere verdi. Bruk notater, transkripsjoner, foto, video og prosjektopplysninger samlet, og beskriv eventuelle motsetninger.
+- Visual Confirmation skal være objektiv: Beskriv farger, teksturer og fysiske avvik (f.eks. "oppsvulmet plate" fremfor "vannskade"). For tekstlige bevis, gjengi observasjonen og merk den som rapportert.
 
 ## DEFINISJONER FOR ANALYSE
 - AKUTT: Plutselig inntrengning. Visuelle tegn: Frittvann, slam/skitt (ikke mugg), kraftig lokal oppsvulming av treverk uten mørk råte, eller direkte vannveier fra ytre hendelser.
@@ -92,7 +90,7 @@ Svar utelukkende i JSON (DamageAnalysis). Språket skal være nøytralt, teknisk
 def main_prompt():
     return  """
 ### OPPDRAG: Teknisk analyse av vannskade
-Analyser vedlagte video og kryssreferer med Byggforsk 700.115 og 700.117 for å fastslå årsakssammenheng, skadeomfang, og reprasjonsbehov.
+Analyser vedlagt befaringmateriale og kryssreferer med Byggforsk 700.115 og 700.117 for å fastslå årsakssammenheng, skadeomfang, og reparasjonsbehov.
 
 ### TEKNISK SJEKKLISTE:
 1. BARRIERE-SVIKT: Se etter manglende eller defekte barrierer. Dette inkluderer rørbrudd , utette skjøter, manglende slemning/tetting av mur under terreng, eller svikt i dreneringssystemer/pumper[cite: 23, 167].
@@ -102,7 +100,7 @@ Analyser vedlagte video og kryssreferer med Byggforsk 700.115 og 700.117 for å 
 3. TERRENG OG EKSTERN PÅVIRKNING: Vurder om terrenget leder vann mot boligen[cite: 394]. Hvis vannet trenger inn som følge av utvendig press (f.eks. mot en ubeskyttet mur), skal dette prioriteres som rotårsak.
 
 ### KRAV TIL BEVIS (JSON):
-- Finn det tidsstempelet som best viser den tekniske SVIKTEN (f.eks. der vannet kommer inn eller hvor barrieren mangler).
+- Når video finnes: oppgi tidsstempelet som best viser den tekniske svikten. Når beviset kommer fra foto, notat eller transkripsjon: sett `timestamp_ms` til null.
 - Bruk `technical_reference` for å sitere korrekt punkt i Byggforsk som støtter din konklusjon om utbedring eller årsak.
 - I `description`: Forklar logikken. Hvis du ser mørke flekker, vurder om dette er slam fra flomvann  eller faktisk muggvekst[cite: 42].
 

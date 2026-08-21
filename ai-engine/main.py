@@ -107,26 +107,30 @@ def _upload_inspector_photos(genai_client, project: dict) -> list:
     return uploaded
 
 
-def create_report(video_path, master_id, output_folder, gemini_key, report_meta: dict | None = None, project: dict | None = None, tester_email: str | None = None):
+def create_report(video_path: str | None, master_id, output_folder, gemini_key, report_meta: dict | None = None, project: dict | None = None, tester_email: str | None = None):
     # 1. Init Connections
     docs, drive = connect_to_google_api_personal()
     genai_client = genai.Client(api_key=gemini_key)
 
-    # 2. Gemini Analysis (Multimodal)
-    print("🤖 Gemini is analyzing video...")
-    video_file = genai_client.files.upload(file=video_path)
-    # Denial-of-Wallet-vern: bind ventingen på videoprosessering (ellers kan en
-    # fil som henger i PROCESSING holde en fakturerbar jobb åpen i det uendelige).
-    video_deadline = time.monotonic() + 300  # maks 5 min
-    while video_file.state.name == "PROCESSING":
-        if time.monotonic() > video_deadline:
-            raise TimeoutError("Gemini video-prosessering tok for lang tid (>5 min)")
-        time.sleep(2)
-        video_file = genai_client.files.get(name=video_file.name)
-    if video_file.state.name == "FAILED":
-        raise RuntimeError("Gemini klarte ikke å prosessere videoen")
+    # 2. Gemini Analysis (multimodal). Video is useful evidence when present,
+    # but reports must also work from notes, transcriptions, photos, and metadata.
+    video_file = None
+    if video_path:
+        print("🤖 Gemini is analyzing available video evidence...")
+        video_file = genai_client.files.upload(file=video_path)
+        # Denial-of-Wallet-vern: bind ventingen på videoprosessering (ellers kan en
+        # fil som henger i PROCESSING holde en fakturerbar jobb åpen i det uendelige).
+        video_deadline = time.monotonic() + 300  # maks 5 min
+        while video_file.state.name == "PROCESSING":
+            if time.monotonic() > video_deadline:
+                raise TimeoutError("Gemini video-prosessering tok for lang tid (>5 min)")
+            time.sleep(2)
+            video_file = genai_client.files.get(name=video_file.name)
+        if video_file.state.name == "FAILED":
+            raise RuntimeError("Gemini klarte ikke å prosessere videoen")
 
-    # Upload inspector photos (if any) so Gemini can analyse them alongside the video
+    # Upload inspector photos (if any) so Gemini can analyse them with every
+    # other available inspection source.
     photo_files = []
     if project:
         photo_files = _upload_inspector_photos(genai_client, project)
@@ -142,11 +146,18 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
     print(f"📚 Opplasting av kunnskapsbase fra: {knowledge_path}")
     knowledge_files = upload_knowledge_base(genai_client, knowledge_path)
 
-    # Build contents: video → inspector photos → knowledge base → context prompt → analysis prompt
+    # Build contents from every available source. No evidence type has an
+    # automatic priority; Gemini reconciles the supplied material.
     context_text = build_inspector_context(project or {})
     context_parts = [context_text] if context_text else []
 
-    contents = [video_file] + photo_files + knowledge_files + context_parts + [main_prompt()]
+    contents = (
+        ([video_file] if video_file else [])
+        + photo_files
+        + knowledge_files
+        + context_parts
+        + [main_prompt()]
+    )
 
     print("🧠 Sending content to Gemini for analysis...")
     gemini_response = genai_client.models.generate_content(
@@ -190,7 +201,7 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
     doc_id = new_doc['id']
 
     # 4. Process Evidence Image (memory-optimized with aggressive cleanup)
-    if analysis.evidence_points and len(analysis.evidence_points) > 0:
+    if video_path and analysis.evidence_points and len(analysis.evidence_points) > 0:
         # Pick the timestamp Gemini identified as the best evidence
         best_point = analysis.evidence_points[0]
         print(f"📸 Extracting frame at {best_point.timestamp_ms}ms: {best_point.caption}")
@@ -227,7 +238,7 @@ def create_report(video_path, master_id, output_folder, gemini_key, report_meta:
             gc.collect()
             print("🧹 Released video capture and frame buffers")
     else:
-        print("⚠️ Ingen bevis-tidspunkter funnet av Gemini. Hopper over bildeekstraksjon.")
+        print("ℹ️ Ingen videobevis å hente ut bilde fra. Hopper over bildeekstraksjon.")
 
     # 5. Final Text Replacement (Gemini + project metadata)
     replacements = build_replacements(report_meta or {})
