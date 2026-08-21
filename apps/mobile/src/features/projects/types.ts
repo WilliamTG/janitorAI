@@ -118,6 +118,12 @@ export type CaseFile = {
 export type Room = {
   id: string;
   name: string;
+  /**
+   * ISO-tidspunkt for når takstpersonen markerte rommet som ferdig befart
+   * (Befar-mønsteret: kompletthet er en førsteklasses handling). Kan angres —
+   * dette er fagpersonens egen markering, ingen automatisk vurdering.
+   */
+  completedAt?: string;
 };
 
 export type Photo = {

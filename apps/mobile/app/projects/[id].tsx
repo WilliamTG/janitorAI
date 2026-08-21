@@ -37,8 +37,7 @@ import {
 import { contentFromAnalysis } from '@/src/features/projects/reportVersions';
 import {
   ROOM_SUGGESTIONS,
-  WET_ROOM_CHECKLIST,
-  isWetRoom,
+  checklistForRoom,
   roomNameById,
 } from '@/src/features/projects/rooms';
 import { ReportDetailsSection } from '@/src/features/projects/ReportDetailsSection';
@@ -519,6 +518,27 @@ export default function ProjectDetailScreen() {
     setAddingRoom(false);
     setNewRoomName('');
     toast.show({ message: nb.rooms.added(trimmed), variant: 'success' });
+  };
+
+  // Befar-mønsteret «Fullfør punkt»: kompletthet er en førsteklasses handling.
+  // Fagpersonens egen markering — kan angres, appen vurderer ingenting selv.
+  const toggleRoomCompleted = async (roomId: string) => {
+    if (!project) return;
+    const room = (project.rooms || []).find((r) => r.id === roomId);
+    if (!room) return;
+    const completing = !room.completedAt;
+    const rooms = (project.rooms || []).map((r) =>
+      r.id === roomId
+        ? completing
+          ? { ...r, completedAt: new Date().toISOString() }
+          : { ...r, completedAt: undefined }
+        : r,
+    );
+    await updateProjectLocally({ ...project, rooms });
+    toast.show({
+      message: completing ? nb.rooms.completedToast(room.name) : nb.rooms.reopenedToast(room.name),
+      variant: completing ? 'success' : 'info',
+    });
   };
 
   const addTextNote = async () => {
@@ -2107,7 +2127,8 @@ export default function ProjectDetailScreen() {
             {project?.reportApproval ? (
               <>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
-                  <Ionicons name="shield-checkmark" size={18} color={theme.colors.accent} />
+                  {/* Kobber: identitetens signaturdetalj — kun stempel og nøkkeltall. */}
+                  <Ionicons name="shield-checkmark" size={18} color={theme.colors.copper} />
                   <Body style={{ fontWeight: '600', flex: 1 }}>
                     {nb.report.approvedStamp(
                       project.reportApproval.approvedBy,
@@ -2119,8 +2140,10 @@ export default function ProjectDetailScreen() {
                   const minutes = minutesToApproved(project);
                   return minutes !== null ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Ionicons name="timer-outline" size={13} color={theme.colors.muted} />
-                      <Caption muted>{nb.projects.timeToApproved(formatMinutes(minutes))}</Caption>
+                      <Ionicons name="timer-outline" size={13} color={theme.colors.copper} />
+                      <Caption style={{ color: theme.colors.copper, fontWeight: '600' }}>
+                        {nb.projects.timeToApproved(formatMinutes(minutes))}
+                      </Caption>
                     </View>
                   ) : null;
                 })()}
@@ -2654,7 +2677,6 @@ export default function ProjectDetailScreen() {
   // taksonomien. Aktivt rom er fangstkontekst og filter samtidig.
   const renderRoomStrip = () => {
     const rooms = project?.rooms || [];
-    const activeName = roomNameById(project, activeRoomId ?? undefined);
     const chip = (label: string, selected: boolean, onPress: () => void, key: string) => (
       <TouchableOpacity
         key={key}
@@ -2676,16 +2698,34 @@ export default function ProjectDetailScreen() {
       </TouchableOpacity>
     );
 
+    const completedCount = rooms.filter((r) => r.completedAt).length;
+    const activeRoom = activeRoomId ? rooms.find((r) => r.id === activeRoomId) : null;
+
     return (
       <View style={{ gap: theme.spacing.xs }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {chip(nb.rooms.all, activeRoomId === null, () => setActiveRoomId(null), 'all')}
           {rooms.map((room) =>
-            chip(room.name, activeRoomId === room.id, () => setActiveRoomId(room.id), room.id)
+            chip(
+              room.completedAt ? `✓ ${room.name}` : room.name,
+              activeRoomId === room.id,
+              () => setActiveRoomId(room.id),
+              room.id,
+            )
           )}
           {chip(nb.rooms.add, false, () => setAddingRoom((v) => !v), 'add')}
         </ScrollView>
-        {activeName ? <Caption muted>{nb.rooms.capturingIn(activeName)}</Caption> : null}
+        {rooms.length > 0 && (
+          <Caption muted>{nb.rooms.completedProgress(completedCount, rooms.length)}</Caption>
+        )}
+        {activeRoom && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+            <Caption muted style={{ flex: 1 }}>{nb.rooms.capturingIn(activeRoom.name)}</Caption>
+            <SecondaryButton onPress={() => void toggleRoomCompleted(activeRoom.id)}>
+              {activeRoom.completedAt ? nb.rooms.reopenRoom : nb.rooms.completeRoom}
+            </SecondaryButton>
+          </View>
+        )}
         {addingRoom && (
           <GlassCard style={{ gap: theme.spacing.sm }}>
             <Caption muted>{nb.rooms.addTitle}</Caption>
@@ -2729,19 +2769,26 @@ export default function ProjectDetailScreen() {
     );
   };
 
-  // A1: adaptiv huskeliste (Befar-mønsteret) — vises kun når det aktive
-  // rommet er et våtrom. Statisk påminnelse, ingen falske «✓».
-  const renderWetRoomChecklist = () => {
+  // A1: adaptiv huskeliste (Befar-mønsteret generalisert) — vises for alle
+  // romkategorier med egen liste. Statisk påminnelse, ingen falske «✓».
+  const renderRoomChecklist = () => {
     const activeName = roomNameById(project, activeRoomId ?? undefined);
-    if (!activeName || !isWetRoom(activeName)) return null;
+    if (!activeName) return null;
+    const checklist = checklistForRoom(activeName);
+    if (!checklist) return null;
+    const isWet = checklist.title === nb.rooms.wetChecklistTitle;
     return (
       <GlassCard style={{ gap: theme.spacing.xs }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
-          <Ionicons name="water-outline" size={16} color={theme.colors.accent} />
-          <Title style={{ fontSize: 15 }}>{nb.rooms.wetChecklistTitle}</Title>
+          <Ionicons
+            name={isWet ? 'water-outline' : 'checkmark-done-outline'}
+            size={16}
+            color={theme.colors.accent}
+          />
+          <Title style={{ fontSize: 15 }}>{checklist.title}</Title>
         </View>
-        <Caption muted>{nb.rooms.wetChecklistHint}</Caption>
-        {WET_ROOM_CHECKLIST.map((item) => (
+        <Caption muted>{isWet ? nb.rooms.wetChecklistHint : nb.rooms.checklistHint}</Caption>
+        {checklist.items.map((item) => (
           <View key={item} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
             <Caption style={{ color: theme.colors.accent }}>—</Caption>
             <Caption muted style={{ flex: 1 }}>{item}</Caption>
@@ -2772,7 +2819,7 @@ export default function ProjectDetailScreen() {
             renderItem={renderNoteItem}
             ListHeaderComponent={
               <View style={{ gap: theme.spacing.md, marginBottom: theme.spacing.md }}>
-                {renderWetRoomChecklist()}
+                {renderRoomChecklist()}
                 {renderUnderlagCard()}
                 {renderInfoCard()}
                 {renderProjectDescription()}
