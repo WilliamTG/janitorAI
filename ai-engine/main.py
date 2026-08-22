@@ -176,6 +176,18 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
     )
     analysis = gemini_response.parsed
 
+    # Sitatport: «Byggforsk-henvisninger vises kun med verifisert punktnummer».
+    # Alt modellen siterer valideres mot metadata-indeksen; uverifiserte
+    # referanser forkastes fremfor å nå rapporten (anti-hallusinering).
+    from byggforsk_index import valider_referanse
+    if analysis and analysis.evidence_points:
+        for punkt in analysis.evidence_points:
+            original = punkt.technical_reference
+            verifisert = valider_referanse(original)
+            if original and not verifisert:
+                print(f"⚠️  Forkastet uverifisert Byggforsk-referanse: {original!r}")
+            punkt.technical_reference = verifisert
+
     # COGS: fang tokenforbruk fra rå-responsen før den forkastes, så backend kan
     # måle faktisk kostnad per rapport (docs/prising-bruksbasert.md).
     token_usage = None

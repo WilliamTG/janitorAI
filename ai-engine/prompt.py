@@ -88,21 +88,31 @@ Før du genererer JSON, skal du utføre følgende logiske steg:
 Svar utelukkende i JSON (DamageAnalysis). Språket skal være nøytralt, teknisk norsk."""
 
 def main_prompt():
-    return  """
+    # NS 3424-konform struktur (årsak → konsekvens → tiltak) og håndhevet
+    # sitatdisiplin: modellen får kun den verifiserte referanselisten å sitere
+    # fra, og valider_referanse() i main.py forkaster alt utenfor den.
+    from byggforsk_index import format_index_for_prompt
+
+    return f"""
 ### OPPDRAG: Teknisk analyse av vannskade
-Analyser vedlagt befaringmateriale og kryssreferer med Byggforsk 700.115 og 700.117 for å fastslå årsakssammenheng, skadeomfang, og reparasjonsbehov.
+Analyser vedlagt befaringsmateriale for å fastslå årsakssammenheng, skadeomfang
+og reparasjonsbehov. Følg strukturen årsak → konsekvens → tiltak (jf. NS 3424:
+tilstand vurderes som avvik fra referansenivå, med konsekvens og anbefalt
+tiltak).
 
 ### TEKNISK SJEKKLISTE:
-1. BARRIERE-SVIKT: Se etter manglende eller defekte barrierer. Dette inkluderer rørbrudd , utette skjøter, manglende slemning/tetting av mur under terreng, eller svikt i dreneringssystemer/pumper[cite: 23, 167].
+1. BARRIERE-SVIKT: Se etter manglende eller defekte barrierer. Dette inkluderer rørbrudd, utette skjøter, manglende slemming/tetting av mur under terreng, eller svikt i dreneringssystemer/pumper.
 2. AKUTT VS. GRADVIS (Kritisk vurdering):
-   - Er det tegn på "plutselig og uforutsett utstrømning" (Akutt)?[cite: 51]. Se etter frittvann [cite: 101] eller inntrengning fra store nedbørsmengder/smeltevann[cite: 23].
-   - Er det tegn på "langvarig prosess" (Gradvis)? Se etter mugg [cite: 42, 524] eller råte som krever langvarig høy fuktighet (>80-100% RF) for å etableres[cite: 525, 531].
-3. TERRENG OG EKSTERN PÅVIRKNING: Vurder om terrenget leder vann mot boligen[cite: 394]. Hvis vannet trenger inn som følge av utvendig press (f.eks. mot en ubeskyttet mur), skal dette prioriteres som rotårsak.
+   - Er det tegn på "plutselig og uforutsett utstrømning" (Akutt)? Se etter frittvann eller inntrengning fra store nedbørsmengder/smeltevann.
+   - Er det tegn på "langvarig prosess" (Gradvis)? Se etter mugg eller råte som krever langvarig høy fuktighet (>80-100 % RF) for å etableres.
+3. TERRENG OG EKSTERN PÅVIRKNING: Vurder om terrenget leder vann mot boligen. Hvis vannet trenger inn som følge av utvendig press (f.eks. mot en ubeskyttet mur), skal dette prioriteres som rotårsak.
+
+{format_index_for_prompt()}
 
 ### KRAV TIL BEVIS (JSON):
 - Når video finnes: oppgi tidsstempelet som best viser den tekniske svikten. Når beviset kommer fra foto, notat eller transkripsjon: sett `timestamp_ms` til null.
-- Bruk `technical_reference` for å sitere korrekt punkt i Byggforsk som støtter din konklusjon om utbedring eller årsak.
-- I `description`: Forklar logikken. Hvis du ser mørke flekker, vurder om dette er slam fra flomvann  eller faktisk muggvekst[cite: 42].
+- Bruk `technical_reference` KUN med referanser fra listen over, på formen 'Byggforsk NNN.NNN'. Er ingen relevant: la feltet stå tomt. Ikke oppgi punkt-/avsnittsnummer.
+- I `description`: Forklar logikken. Hvis du ser mørke flekker, vurder om dette er slam fra flomvann eller faktisk muggvekst.
 
 Svar i JSON-format.
     """

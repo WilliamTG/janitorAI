@@ -8,7 +8,7 @@ class Evidence(BaseModel):
     )
     caption: str = Field(description="Kort tittel på bildet (f.eks. 'Nærbilde av rørkobling')")
     visual_confirmation: str = Field(description="Beskriv nøyaktig hva i bildet som beviser dette (f.eks. 'mørk fuktflekk i hjørnet' eller 'synlig vanndråpe')")
-    technical_reference: Optional[str] = Field(description="Referanse til Byggforsk (f.eks. '700.115 pkt 4.2'), la stå tom hvis ikke relevant")
+    technical_reference: Optional[str] = Field(description="Byggforsk-referanse på formen 'Byggforsk NNN.NNN' — KUN numre fra den godkjente referanselisten i oppdraget. La stå tom hvis ingen passer. Aldri punkt-/avsnittsnummer, aldri numre utenfor listen.")
 
 class DamageAnalysis(BaseModel):
     area: str = Field(description="Rommet som inspiseres")
