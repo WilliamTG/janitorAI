@@ -60,9 +60,16 @@ for _ in $(seq 1 40); do curl -sf "$BASE/health" >/dev/null 2>&1 && break; sleep
 curl -sf "$BASE/health" >/dev/null || { echo "API never became healthy"; cat "$WORK/api.log"; exit 1; }
 
 # TOKEN_A seedes automatisk (TESTER_TOKEN). Provisjonér TOKEN_B via admin.
-STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/admin/tokens" \
-  -H "x-admin-secret: $ADMIN" -H 'Content-Type: application/json' \
-  -d "{\"token\":\"$TOKEN_B\",\"tester_name\":\"Tenant B\"}")
+# CI-flake-vern: /health svarer før de idempotente CREATE TABLE-ene er ferdige,
+# så det første DB-avhengige kallet kan treffe en halvferdig base. Retry (~5 s).
+STATUS=""
+for _ in $(seq 1 10); do
+  STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/admin/tokens" \
+    -H "x-admin-secret: $ADMIN" -H 'Content-Type: application/json' \
+    -d "{\"token\":\"$TOKEN_B\",\"tester_name\":\"Tenant B\"}")
+  [ "$STATUS" = "201" ] && break
+  sleep 0.5
+done
 check "provision token B (admin)" "201" "$STATUS"
 
 # ── A eier: prosjekt + media + godkjent rapport + deling ─────────────────────
