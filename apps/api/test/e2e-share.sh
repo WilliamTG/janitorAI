@@ -66,7 +66,15 @@ curl -sf "$BASE/health" >/dev/null || { echo "API never became healthy"; cat "$W
 PROJECT='{"project":{"id":"p1","name":"Solbergveien 14, Rykkinn","inspectionDate":"2026-08-04","inspector":"Kari Nordmann","updatedAt":"2026-08-04T10:00:00Z","notes":[{"id":"n1","text":"Fuktskjolder ved sluk","createdAt":"2026-08-04T08:12:00Z","photos":[{"id":"ph1","uri":"local","caption":"Sluk i kjeller","remoteId":"__MEDIA__","geo":{"lat":59.94,"lng":10.52},"capturedAt":"2026-08-04T08:12:44Z"}]}],"reportMeta":{"addressStreet":"Solbergveien 14","addressPostcodeCity":"1349 Rykkinn","summaryText":"Gradvis fuktinntrengning ved sluk."}}}'
 
 echo "test-image-bytes-$(date +%s)" > "$WORK/evidence.jpg"
-MEDIA_JSON=$(curl -s -X POST "$BASE/api/media" -H "x-tester-token: $TOKEN" -F "file=@$WORK/evidence.jpg;type=image/jpeg" -F "projectId=p1" -F "kind=photo")
+# CI-flake-vern: /health svarer før de idempotente CREATE TABLE-ene er ferdige,
+# så det aller første DB-avhengige kallet kan treffe en halvferdig base. Retry
+# til opplastingen faktisk gir en id (maks ~5 s) i stedet for å feile på racen.
+MEDIA_JSON=""
+for _ in $(seq 1 10); do
+  MEDIA_JSON=$(curl -s -X POST "$BASE/api/media" -H "x-tester-token: $TOKEN" -F "file=@$WORK/evidence.jpg;type=image/jpeg" -F "projectId=p1" -F "kind=photo")
+  [ "$(echo "$MEDIA_JSON" | jq -r '.id // empty')" != "" ] && break
+  sleep 0.5
+done
 MEDIA_ID=$(echo "$MEDIA_JSON" | jq -r '.id')
 check "media upload returns id" "true" "$([ -n "$MEDIA_ID" ] && [ "$MEDIA_ID" != "null" ] && echo true)"
 MEDIA_SHA=$(echo "$MEDIA_JSON" | jq -r '.sha256 // empty')

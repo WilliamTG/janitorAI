@@ -108,6 +108,11 @@
   .pilot-form textarea { resize: vertical; min-height: 64px; }
   .pilot-form button { font: inherit; font-weight: 700; font-size: 15px; background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 13px 22px; min-height: 48px; cursor: pointer; align-self: flex-start; }
   .pilot-form .svartid { font-size: 12.5px; color: var(--muted); }
+  .tidslinje { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 10px; counter-reset: steg; }
+  .tidslinje li { display: flex; gap: 12px; align-items: flex-start; counter-increment: steg; }
+  .tidslinje li::before { content: counter(steg); flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .tidslinje b { display: block; font-size: 14.5px; }
+  .tidslinje span { font-size: 13.5px; color: var(--muted); }
   .hp { position: absolute; left: -9999px; top: -9999px; height: 0; overflow: hidden; }
 
   .sticky-cta { display: none; }
@@ -123,7 +128,7 @@
     .sticky-cta .g { border: 1.5px solid var(--border); color: var(--ink); }
   }
   @media (prefers-color-scheme: dark) {
-    .btn.primary, .pilot-form button, .sticky-cta .p { color: #11181B; }
+    .btn.primary, .pilot-form button, .sticky-cta .p, .tidslinje li::before { color: #11181B; }
   }
 
   /* Tilgjengelighet (WCAG 2.4.7): tydelig fokusmarkering for tastaturbrukere. */
@@ -193,6 +198,13 @@
 
   <section>
     <h2>Pris – enkel og uten binding</h2>
+    <!-- Ærlig prisankring (kontrasteffekten): referansepunktet er kostnaden
+         ved dagens manuelle rapportskriving — ikke et kunstig «før-pris»-tall. -->
+    <div class="stat-row" style="margin-bottom:14px">
+      <div class="stat"><b>2–3 timer</b><span>tar en manuell skaderapport å skrive i dag</span></div>
+      <div class="stat"><b>2 400–4 500 kr</b><span>koster det i timeverk per rapport (typisk timepris 1 200–1 500 kr)</span></div>
+      <div class="stat"><b>990 kr/mnd</b><span>DocrAI — mindre enn én manuell rapport, ubegrensede saker</span></div>
+    </div>
     <div class="tiers">
       <div class="tier">
         <h3>Pilot</h3>
@@ -236,6 +248,13 @@
 
   <section id="pilot">
     <h2>Bli pilotdeltaker</h2>
+    <!-- Trygghetsnett-mønsteret: vis hvordan det gratis løpet faktisk fungerer,
+         og svar på innvendingen («blir jeg fakturert?») FØR den stilles. -->
+    <ol class="tidslinje">
+      <li><div><b>I dag</b><span>Meld interesse under. Vi svarer innen én virkedag og setter opp et 15-minutters oppstartsmøte.</span></div></li>
+      <li><div><b>Underveis</b><span>3 måneder gratis med alt inkludert. Motytelsen er ukentlig tilbakemelding – dere er med og former produktet.</span></div></li>
+      <li><div><b>Før pilotslutt</b><span>Vi tar kontakt i god tid før perioden ender. Ingenting starter å løpe automatisk – dere velger selv om dere fortsetter, med 50&nbsp;% rabatt første år.</span></div></li>
+    </ol>
     <form class="pilot-form" method="post" action="/api/pilot-interesse">
       <label>Navn
         <input name="navn" required autocomplete="name" maxlength="200" />
@@ -250,7 +269,7 @@
         <label>Firma<input name="firmafelt" tabindex="-1" autocomplete="off" /></label>
       </div>
       <button type="submit">Meld interesse for piloten</button>
-      <span class="svartid"><b>Vi svarer innen én virkedag.</b> Navn og e-post brukes kun til å kontakte deg om piloten – se <a href="/personvern">personvern</a>.</span>
+      <span class="svartid"><b>Uforpliktende – du takker ja eller nei etter oppstartsmøtet.</b> Vi svarer innen én virkedag. Navn og e-post brukes kun til å kontakte deg om piloten – se <a href="/personvern">personvern</a>.</span>
     </form>
   </section>
 
