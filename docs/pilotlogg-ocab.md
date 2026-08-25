@@ -1,6 +1,31 @@
 # Pilotlogg — Ocab (Sigurd)
 
 Løpende logg over pilotfunn, rotårsaker og hva de førte til. Nyeste øverst.
+
+## 25. august 2026 (kveld) — transkripsjon nede: Gemini-nøkkel/kvote
+
+Skjermbilder fra kveldstest viste «Transkripsjonen feilet», «Medier ikke
+synkronisert» og én «Ugyldig tilgangskode». Diagnose mot produksjon:
+
+- **Transkripsjon OG bildebeskrivelse feiler for alle** — begge svarer
+  «Gemini error». Medieopplasting og prosjektsynk virker (verifisert
+  direkte). Rotårsaken er altså Gemini-API-nøkkelen på serveren: mest
+  sannsynlig **brukt opp dagskvote** (fri-nivå; passer med feil på kvelden
+  etter en testdag), ellers utløpt/rotert nøkkel eller fakturering.
+  Sjekk: Render → janitorai-backend → Logs → «Gemini /transcribe error»
+  viser nå status og svarutdrag (429 = kvote, 400/403 = nøkkel). Tiltak:
+  sjekk nøkkelen i Google AI Studio; vent på kvotenullstilling, aktiver
+  fakturering, eller bytt GEMINI_API_KEY i Render (også ai-engine-tjenesten
+  hvis den har egen nøkkel).
+- **«Medier ikke synkronisert»** var en rest fra vinduet uten gyldig kode —
+  opplasting verifisert OK i produksjon; chippen nullstilles ved neste synk.
+- **«Ugyldig tilgangskode» (21:43)**: koden validerer fint i produksjon nå,
+  og serveren svarer 503 (ikke 401) ved DB-feil — så dette var etter alt å
+  dømme feiltastet/ufullstendig innliming eller en gammel kode på enheten.
+  Riktig oppførsel; følg med på gjentakelse.
+- Kodeendring: /transcribe og /describe-image logger nå Gemini-status +
+  svarutdrag og sender statusen videre (502 med geminiStatus) — neste
+  diagnose tar sekunder, ikke en kveldstest.
 Disiplin: hvert funn får (1) rotårsak i kode/produkt, (2) fiks eller bevisst
 utsettelse, (3) evt. roadmap-signal etter nei-lista-regelen (bygges først når
 ekte brukere sier de ikke får verdi uten).

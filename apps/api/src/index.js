@@ -388,8 +388,15 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
 
     const raw = await response.text();
     if (!response.ok) {
-      console.error("Gemini /transcribe error:", { status: response.status, length: raw ? raw.length : 0 });
-      return res.status(500).json({ error: "Gemini error" });
+      // Diagnose (pilotfunn 25.08): statuskoden avgjør tiltaket — 429 = kvote
+      // brukt opp, 400/403 = nøkkelproblem. Logg et utdrag av Gemini-svaret
+      // (aldri nøkkelen) og send status videre så appen/testeren kan skille
+      // «prøv igjen senere» fra «kontakt admin».
+      console.error("Gemini /transcribe error:", {
+        status: response.status,
+        body: raw ? raw.slice(0, 300) : "",
+      });
+      return res.status(502).json({ error: "Gemini error", geminiStatus: response.status });
     }
 
     const data = JSON.parse(raw);
@@ -453,8 +460,13 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
 
     const raw = await response.text();
     if (!response.ok) {
-      console.error("Gemini /describe-image error:", { status: response.status });
-      return res.status(500).json({ error: "Gemini error" });
+      // Samme diagnose-mønster som /transcribe: status + utdrag i loggen,
+      // status videre i svaret.
+      console.error("Gemini /describe-image error:", {
+        status: response.status,
+        body: raw ? raw.slice(0, 300) : "",
+      });
+      return res.status(502).json({ error: "Gemini error", geminiStatus: response.status });
     }
 
     const data = JSON.parse(raw);
