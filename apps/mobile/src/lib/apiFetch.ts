@@ -55,8 +55,16 @@ export interface ApiFetchInit extends RequestInit {
   skipAuthHandling?: boolean;
 }
 
-export async function validateTesterToken(token: string): Promise<boolean> {
-  if (!token) return false;
+/**
+ * Tre-tilstands validering: 'invalid' betyr at serveren faktisk avviste koden
+ * (401/403). Alt annet som feiler (503 fra kaldstart, nettverksfeil) er
+ * 'unreachable' — da vet vi ingenting om koden og skal ALDRI slette den fra
+ * enheten. (Pilotfunn: gyldig kode ble slettet fordi Render sov ved app-åpning.)
+ */
+export type TokenValidation = 'valid' | 'invalid' | 'unreachable';
+
+export async function validateTesterToken(token: string): Promise<TokenValidation> {
+  if (!token) return 'invalid';
 
   try {
     const response = await apiFetch(`${getApiBaseUrl()}/whoami`, {
@@ -69,13 +77,17 @@ export async function validateTesterToken(token: string): Promise<boolean> {
 
     if (response.ok) {
       cachedToken = token;
-      return true;
+      return 'valid';
     }
 
-    return false;
+    if (response.status === 401 || response.status === 403) {
+      return 'invalid';
+    }
+
+    return 'unreachable';
   } catch (err) {
     console.warn('Token validation failed', err);
-    return false;
+    return 'unreachable';
   }
 }
 

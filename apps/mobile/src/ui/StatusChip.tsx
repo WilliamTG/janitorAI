@@ -12,16 +12,16 @@ export type ProjectStatus = 'draft' | 'processing' | 'ready' | 'failed';
 // i begge temaer — B20. Ikke gjenbruk theme.colors her; de er for flater, ikke tekst.
 const COLORS: Record<'light' | 'dark', Record<ProjectStatus, { bg: string; fg: string; border: string }>> = {
   light: {
-    draft: { bg: '#E4E9F1', fg: '#3D4C63', border: '#C3CDDC' },
-    processing: { bg: '#E4EDF5', fg: '#2E4763', border: '#A8BFD4' },
-    ready: { bg: '#DCFCE7', fg: '#14532D', border: '#86EFAC' },
-    failed: { bg: '#FEE2E2', fg: '#7F1D1D', border: '#FCA5A5' },
+    draft: { bg: '#E5EAEC', fg: '#42525A', border: '#C4CFD3' },
+    processing: { bg: '#E0ECEE', fg: '#1A4148', border: '#9FC4CA' },
+    ready: { bg: '#DCEFE3', fg: '#14532D', border: '#8FC9A0' },
+    failed: { bg: '#FCE5E1', fg: '#7F1D1D', border: '#EFAF9F' },
   },
   dark: {
-    draft: { bg: '#263143', fg: '#C7D2E2', border: '#3A4A63' },
-    processing: { bg: '#1B2A3A', fg: '#A9C9EF', border: '#3D5A80' },
-    ready: { bg: '#103524', fg: '#86EFAC', border: '#166534' },
-    failed: { bg: '#3B1513', fg: '#FCA5A5', border: '#7F1D1D' },
+    draft: { bg: '#232E33', fg: '#C6D2D7', border: '#3A4A52' },
+    processing: { bg: '#16262B', fg: '#A5CBD3', border: '#23545C' },
+    ready: { bg: '#103524', fg: '#8FC9A0', border: '#166534' },
+    failed: { bg: '#3B1513', fg: '#EFAF9F', border: '#7F1D1D' },
   },
 };
 

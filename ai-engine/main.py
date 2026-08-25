@@ -8,7 +8,7 @@ from urllib.parse import urlparse as _urlparse
 from google import genai
 from models import DamageAnalysis
 from google_api import connect_to_google_api_personal, upload_knowledge_base, share_doc_with_email
-from doc_engine import replace_text_in_doc, upload_and_insert_image
+from doc_engine import replace_text_in_doc, upload_and_insert_image, insert_photo_gallery
 from prompt import system_prompt, main_prompt, build_inspector_context
 from template_replacement import build_replacements
 
@@ -54,11 +54,16 @@ def _upload_inspector_photos(genai_client, project: dict) -> list:
 
     Skips individual photos that fail validation or download with a logged
     warning; other photos in the same request are still attempted.
-    Returns a list of successfully uploaded Gemini file objects.
+
+    Returns a list of records {'file': gemini_file, 'path': local_tmp_path,
+    'room': str, 'caption': str} in capture order. The local copies are KEPT
+    (needed later for the report's evidence image and photo gallery) — the
+    caller is responsible for calling _cleanup_photo_files() when done.
     """
-    uploaded = []
+    records = []
     notes = project.get("notes") or []
     for note in notes:
+        room = (note.get("room") or "").strip()
         for photo in (note.get("photos") or []):
             url = (photo.get("uri") or "").strip()
             if not url:
@@ -71,6 +76,7 @@ def _upload_inspector_photos(genai_client, project: dict) -> list:
                 print(f"⛔ Rejected inspector photo URL (SSRF guard): {ve}")
                 continue  # skip this photo; do not fetch
 
+            tmp_path = None
             try:
                 print(f"📸 Downloading inspector photo: {url.split('?')[0]} ...")
                 resp = _requests.get(url, timeout=30)
@@ -81,30 +87,62 @@ def _upload_inspector_photos(genai_client, project: dict) -> list:
 
                 os.makedirs(TEMP_PHOTO_DIR, exist_ok=True)
                 fd, tmp_path = tempfile.mkstemp(dir=TEMP_PHOTO_DIR, suffix=suffix)
-                try:
-                    with os.fdopen(fd, "wb") as f:
-                        f.write(resp.content)
-                    photo_file = genai_client.files.upload(file=tmp_path)
-                    # Denial-of-Wallet-vern: bind ventingen (som videostien),
-                    # ellers kan et foto som henger i PROCESSING låse jobben.
-                    photo_deadline = time.monotonic() + 120  # maks 2 min
-                    while photo_file.state.name == "PROCESSING":
-                        if time.monotonic() > photo_deadline:
-                            raise TimeoutError("Gemini foto-prosessering tok for lang tid (>2 min)")
-                        time.sleep(1)
-                        photo_file = genai_client.files.get(name=photo_file.name)
-                    if photo_file.state.name == "FAILED":
-                        raise RuntimeError("Gemini klarte ikke å prosessere inspektørfotoet")
-                    uploaded.append(photo_file)
-                    print(f"✅ Inspector photo uploaded to Gemini: {photo_file.name}")
-                finally:
+                with os.fdopen(fd, "wb") as f:
+                    f.write(resp.content)
+                photo_file = genai_client.files.upload(file=tmp_path)
+                # Denial-of-Wallet-vern: bind ventingen (som videostien),
+                # ellers kan et foto som henger i PROCESSING låse jobben.
+                photo_deadline = time.monotonic() + 120  # maks 2 min
+                while photo_file.state.name == "PROCESSING":
+                    if time.monotonic() > photo_deadline:
+                        raise TimeoutError("Gemini foto-prosessering tok for lang tid (>2 min)")
+                    time.sleep(1)
+                    photo_file = genai_client.files.get(name=photo_file.name)
+                if photo_file.state.name == "FAILED":
+                    raise RuntimeError("Gemini klarte ikke å prosessere inspektørfotoet")
+                records.append({
+                    "file": photo_file,
+                    "path": tmp_path,
+                    "room": room,
+                    "caption": (photo.get("caption") or "").strip(),
+                })
+                print(f"✅ Inspector photo uploaded to Gemini: {photo_file.name}")
+            except Exception as exc:
+                print(f"⚠️  Skipping inspector photo (fetch/upload failed): {exc}")
+                if tmp_path:
                     try:
                         os.unlink(tmp_path)
                     except OSError:
                         pass
-            except Exception as exc:
-                print(f"⚠️  Skipping inspector photo (fetch/upload failed): {exc}")
-    return uploaded
+    return records
+
+
+def _cleanup_photo_files(photo_records: list) -> None:
+    """Deletes the local temp copies kept by _upload_inspector_photos."""
+    for rec in photo_records:
+        try:
+            os.unlink(rec["path"])
+        except OSError:
+            pass
+
+
+def _photo_manifest(photo_records: list) -> str:
+    """
+    Numbered photo list for the prompt. The numbering (1-based, upload order)
+    is the ONLY numbering source_photo_index may reference — kildekobling:
+    hvert bevispunkt skal peke på fotoet som faktisk viser det.
+    """
+    if not photo_records:
+        return ""
+    lines = ["### VEDLAGTE FOTO (nummerert — bruk disse numrene i source_photo_index)"]
+    for i, rec in enumerate(photo_records, 1):
+        parts = [f"Foto {i}"]
+        if rec["room"]:
+            parts.append(f"(rom: {rec['room']})")
+        if rec["caption"]:
+            parts.append(f"— {rec['caption']}")
+        lines.append(" ".join(parts))
+    return "\n".join(lines)
 
 
 def create_report(video_path: str | None, master_id, output_folder, gemini_key, report_meta: dict | None = None, project: dict | None = None, tester_email: str | None = None):
@@ -130,12 +168,14 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
             raise RuntimeError("Gemini klarte ikke å prosessere videoen")
 
     # Upload inspector photos (if any) so Gemini can analyse them with every
-    # other available inspection source.
-    photo_files = []
+    # other available inspection source. Local copies are kept for the report's
+    # evidence image + photo gallery and cleaned up at the end.
+    photo_records = []
     if project:
-        photo_files = _upload_inspector_photos(genai_client, project)
-        if photo_files:
-            print(f"📸 {len(photo_files)} inspector photo(s) ready for Gemini")
+        photo_records = _upload_inspector_photos(genai_client, project)
+        if photo_records:
+            print(f"📸 {len(photo_records)} inspector photo(s) ready for Gemini")
+    photo_files = [rec["file"] for rec in photo_records]
     
     current_dir = os.path.dirname(os.path.abspath(__file__))
     knowledge_path = os.path.join(current_dir, "temp_knowledge")
@@ -150,6 +190,9 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
     # automatic priority; Gemini reconciles the supplied material.
     context_text = build_inspector_context(project or {})
     context_parts = [context_text] if context_text else []
+    manifest = _photo_manifest(photo_records)
+    if manifest:
+        context_parts.append(manifest)
 
     contents = (
         ([video_file] if video_file else [])
@@ -176,6 +219,18 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
     )
     analysis = gemini_response.parsed
 
+    # Sitatport: «Byggforsk-henvisninger vises kun med verifisert punktnummer».
+    # Alt modellen siterer valideres mot metadata-indeksen; uverifiserte
+    # referanser forkastes fremfor å nå rapporten (anti-hallusinering).
+    from byggforsk_index import valider_referanse
+    if analysis and analysis.evidence_points:
+        for punkt in analysis.evidence_points:
+            original = punkt.technical_reference
+            verifisert = valider_referanse(original)
+            if original and not verifisert:
+                print(f"⚠️  Forkastet uverifisert Byggforsk-referanse: {original!r}")
+            punkt.technical_reference = verifisert
+
     # COGS: fang tokenforbruk fra rå-responsen før den forkastes, så backend kan
     # måle faktisk kostnad per rapport (docs/prising-bruksbasert.md).
     token_usage = None
@@ -188,7 +243,8 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
             "total_tokens": getattr(usage, "total_token_count", None),
         }
 
-    # Free memory after analysis - contents list can be large
+    # Free memory after analysis - contents list can be large.
+    # photo_records beholdes: de lokale kopiene brukes til bevisbilde/galleri.
     del contents, knowledge_files, video_file, photo_files
     gc.collect()
     print("🧹 Cleared analysis objects from memory")
@@ -201,7 +257,8 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
     doc_id = new_doc['id']
 
     # 4. Process Evidence Image (memory-optimized with aggressive cleanup)
-    if video_path and analysis.evidence_points and len(analysis.evidence_points) > 0:
+    evidence_points = (analysis.evidence_points if analysis and analysis.evidence_points else [])
+    if video_path and len(evidence_points) > 0:
         # Pick the timestamp Gemini identified as the best evidence
         best_point = analysis.evidence_points[0]
         print(f"📸 Extracting frame at {best_point.timestamp_ms}ms: {best_point.caption}")
@@ -237,11 +294,32 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
             # Force garbage collection to free OpenCV buffers
             gc.collect()
             print("🧹 Released video capture and frame buffers")
+    elif photo_records and len(evidence_points) > 0:
+        # Pilotfunn: uten video sto {{damage.cause.picture}} igjen som rå
+        # plassholder i rapporten. Bruk fotoet modellen selv pekte ut som
+        # beste bevis (source_photo_index fra manifestet); fall tilbake til
+        # første foto når indeksen mangler eller er ugyldig.
+        chosen = photo_records[0]
+        idx = getattr(evidence_points[0], "source_photo_index", None)
+        if isinstance(idx, int) and 1 <= idx <= len(photo_records):
+            chosen = photo_records[idx - 1]
+        print(f"📸 Ingen video — bruker inspektørfoto som bevisbilde: {chosen['path']}")
+        try:
+            upload_and_insert_image(drive, docs, doc_id, chosen["path"], "{{damage.cause.picture}}", output_folder)
+        except Exception as exc:
+            print(f"⚠️  Kunne ikke sette inn bevisbilde fra foto: {exc}")
     else:
-        print("ℹ️ Ingen videobevis å hente ut bilde fra. Hopper over bildeekstraksjon.")
+        print("ℹ️ Ingen video- eller fotobevis å bruke som bevisbilde.")
 
     # 5. Final Text Replacement (Gemini + project metadata)
     replacements = build_replacements(report_meta or {})
+
+    # Sikkerhetsnett: hvis bildeinnsettingen over lyktes, er plassholderen
+    # allerede borte og denne erstatningen er en no-op. Hvis den feilet eller
+    # ingen bevis fantes, skal LESEREN aldri se en rå mal-plassholder.
+    replacements["{{damage.cause.picture}}"] = (
+        "Se «Bilder av stedet»." if photo_records else "—"
+    )
     
     replacements.update({
         "{{damage.cause.area}}": analysis.area,
@@ -254,6 +332,26 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
         "{{damage.repairs_needed.description}}": analysis.repairs_description
     })
     replace_text_in_doc(docs, doc_id, replacements)
+
+    # 5b. Bildegalleri: ALLE inspektørfoto inn under «Bilder av stedet», i
+    # opptaksrekkefølge med rom/bildetekst. Pilotfunn: seksjonen sto tom og
+    # testeren kunne ikke se hvilke bilder som faktisk var med i grunnlaget.
+    if photo_records:
+        gallery = []
+        for i, rec in enumerate(photo_records, 1):
+            label_parts = [f"Foto {i}"]
+            if rec["room"]:
+                label_parts.append(f"— {rec['room']}")
+            if rec["caption"]:
+                label_parts.append(f": {rec['caption']}")
+            gallery.append({"path": rec["path"], "label": " ".join(label_parts)})
+        try:
+            insert_photo_gallery(drive, docs, doc_id, gallery, "Bilder av stedet", output_folder)
+            print(f"🖼️  Satte inn {len(gallery)} foto under «Bilder av stedet»")
+        except Exception as exc:
+            print(f"⚠️  Kunne ikke sette inn bildegalleri: {exc}")
+
+    _cleanup_photo_files(photo_records)
 
     # 6. Share the document with the tester's email (if provided)
     if tester_email and tester_email.strip():
