@@ -690,11 +690,17 @@ export async function pushProject(project: Project): Promise<Project> {
         skipAuthHandling: true,
       });
 
-      // 503 = backend has the code but no DATABASE_URL; 404 = backend not yet
-      // redeployed with the sync routes. Either way, cloud sync is unavailable.
-      if (response.status === 503 || response.status === 404) {
+      // 404 = backend not yet redeployed with the sync routes — permanent for
+      // this session. 503 er derimot forbigående (Render-kaldstart / DB-oppstart)
+      // og må IKKE låse synken av; pilotfunn: låsingen ga tom prosjektliste og
+      // «Lagret på enheten» helt til testeren trykket manuell synk.
+      if (response.status === 404) {
         syncDisabled = true;
         setSyncState('disabled');
+        return latestForPut;
+      }
+      if (response.status === 503) {
+        setSyncState('offline');
         return latestForPut;
       }
 
@@ -768,9 +774,14 @@ export async function deleteProjectRemote(id: string): Promise<void> {
       method: 'DELETE',
       skipAuthHandling: true,
     });
-    if (response.status === 503 || response.status === 404) {
+    if (response.status === 404) {
       syncDisabled = true;
       setSyncState('disabled');
+      return;
+    }
+    if (response.status === 503) {
+      // Forbigående (kaldstart) — sletting ligger i pendingDeletes og replayes.
+      setSyncState('offline');
       return;
     }
     if (response.ok) {
@@ -812,14 +823,15 @@ export async function pullAndMerge(localProjects: Project[]): Promise<Project[] 
       skipAuthHandling: true,
     });
 
-    if (response.status === 503 || response.status === 404) {
+    if (response.status === 404) {
       syncDisabled = true;
       setSyncState('disabled');
       return null;
     }
 
     if (!response.ok) {
-      // 401 = no token configured — show soft "saved on device", not a red error.
+      // 401 = no token configured — show soft "saved on device", not a red
+      // error. 503 (kaldstart/DB-oppstart) og andre feil er forbigående.
       setSyncState(response.status === 401 ? 'disabled' : 'offline');
       return null;
     }

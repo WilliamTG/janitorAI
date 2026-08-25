@@ -161,14 +161,17 @@ export default function Index() {
         setTokenStatus('invalid');
         return;
       }
-      const isValid = await validateTesterToken(storedToken);
-      if (isValid) {
-        setTokenInput(storedToken);
-        setTokenStatus('valid');
-        setTokenError(null);
-      } else {
+      const validation = await validateTesterToken(storedToken);
+      if (validation === 'invalid') {
+        // Serveren avviste koden aktivt — først da logges testeren ut.
         await handleUnauthorized(false);
+        return;
       }
+      // 'valid' — eller 'unreachable' (kaldstart/nettbrudd): behold koden og
+      // fortsett med lokale data; synken tar igjen serveren når den svarer.
+      setTokenInput(storedToken);
+      setTokenStatus('valid');
+      setTokenError(null);
     })();
   }, []);
 
@@ -180,12 +183,21 @@ export default function Index() {
       return;
     }
     setIsValidatingToken(true);
-    const isValid = await validateTesterToken(trimmedToken);
+    const validation = await validateTesterToken(trimmedToken);
     setIsValidatingToken(false);
-    if (isValid) {
+    if (validation === 'valid') {
       await setTesterToken(trimmedToken);
       setTokenStatus('valid');
       setShowTokenModal(false);
+      // Pilotfunn: uten dette sto lista tom etter innlogging på ny enhet til
+      // testeren tilfeldigvis trykket på synk-chippen. Hent skyprosjektene nå.
+      await handleSyncNow();
+      return;
+    }
+    if (validation === 'unreachable') {
+      // Serveren svarte ikke (kaldstart/nettbrudd) — det sier ingenting om
+      // koden. Ikke kall den ugyldig; be testeren prøve igjen.
+      setTokenError(nb.auth.serverUnreachable);
       return;
     }
     await handleUnauthorized();
