@@ -251,6 +251,8 @@ export const nb = {
     accessPlaceholder: 'Tilgangskode',
     accessSave: 'Lagre kode',
     accessMissing: 'Du må oppgi en tilgangskode for å synkronisere.',
+    serverUnreachable:
+      'Fikk ikke kontakt med serveren. Koden kan være riktig — vent litt og prøv igjen.',
   },
 
   guide: {

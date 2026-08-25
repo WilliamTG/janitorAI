@@ -8,6 +8,10 @@ class Evidence(BaseModel):
     )
     caption: str = Field(description="Kort tittel på bildet (f.eks. 'Nærbilde av rørkobling')")
     visual_confirmation: str = Field(description="Beskriv nøyaktig hva i bildet som beviser dette (f.eks. 'mørk fuktflekk i hjørnet' eller 'synlig vanndråpe')")
+    source_photo_index: Optional[int] = Field(
+        default=None,
+        description="Når beviset kommer fra et vedlagt foto: fotoets nummer (1-basert, i den rekkefølgen fotoene er vedlagt). Null når beviset kommer fra video eller notat."
+    )
     technical_reference: Optional[str] = Field(description="Byggforsk-referanse på formen 'Byggforsk NNN.NNN' — KUN numre fra den godkjente referanselisten i oppdraget. La stå tom hvis ingen passer. Aldri punkt-/avsnittsnummer, aldri numre utenfor listen.")
 
 class DamageAnalysis(BaseModel):

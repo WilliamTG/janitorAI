@@ -254,15 +254,16 @@ export default function ProjectDetailScreen() {
         return;
       }
 
-      const isValid = await validateTesterToken(storedToken);
-      if (isValid) {
-        setTokenInput(storedToken);
-        setTokenStatus('valid');
-        setTokenError(null);
-      } else {
-        // Stored token no longer valid — clear quietly; modal only on next AI action.
+      const validation = await validateTesterToken(storedToken);
+      if (validation === 'invalid') {
+        // Stored token actively rejected — clear quietly; modal only on next AI action.
         await handleUnauthorized(false);
+        return;
       }
+      // 'valid' — eller 'unreachable' (kaldstart/nettbrudd): behold koden.
+      setTokenInput(storedToken);
+      setTokenStatus('valid');
+      setTokenError(null);
     })();
   }, [handleUnauthorized]);
 
@@ -276,13 +277,18 @@ export default function ProjectDetailScreen() {
     }
 
     setIsValidatingToken(true);
-    const isValid = await validateTesterToken(trimmedToken);
+    const validation = await validateTesterToken(trimmedToken);
     setIsValidatingToken(false);
 
-    if (isValid) {
+    if (validation === 'valid') {
       await setTesterToken(trimmedToken);
       setTokenStatus('valid');
       setShowTokenModal(false);
+      return;
+    }
+
+    if (validation === 'unreachable') {
+      setTokenError(nb.auth.serverUnreachable);
       return;
     }
 
