@@ -98,7 +98,7 @@ export default function DebugScreen() {
           
           {healthStatus === 'loading' && (
             <View style={styles.statusContainer}>
-              <ActivityIndicator size="large" color="#007AFF" />
+              <ActivityIndicator size="large" color="#23545C" />
               <Text style={styles.statusText}>Checking health...</Text>
             </View>
           )}
@@ -141,7 +141,7 @@ export default function DebugScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F1F3F3',
   },
   scrollView: {
     flex: 1,
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 10,
-    color: '#007AFF',
+    color: '#23545C',
   },
   infoRow: {
     flexDirection: 'row',
@@ -198,18 +198,18 @@ const styles = StyleSheet.create({
   },
   statusSuccess: {
     fontSize: 16,
-    color: '#28a745',
+    color: '#2E7D4F',
     fontWeight: '600',
     marginBottom: 10,
   },
   statusError: {
     fontSize: 16,
-    color: '#dc3545',
+    color: '#A6453A',
     fontWeight: '600',
     marginBottom: 10,
   },
   codeBlock: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F1F3F3',
     borderRadius: 5,
     padding: 10,
     marginTop: 10,
@@ -223,10 +223,10 @@ const styles = StyleSheet.create({
   errorDetailText: {
     fontFamily: 'monospace',
     fontSize: 12,
-    color: '#dc3545',
+    color: '#A6453A',
   },
   button: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#23545C',
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   backButton: {
-    backgroundColor: '#6c757d',
+    backgroundColor: '#566670',
   },
   buttonText: {
     color: '#fff',
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 18,
-    color: '#dc3545',
+    color: '#A6453A',
     textAlign: 'center',
     marginBottom: 20,
   },
