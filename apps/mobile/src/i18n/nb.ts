@@ -51,6 +51,15 @@ export const nb = {
     failed: 'Feilet',
   },
 
+  // Saksfremdrift (goal gradient i sober form): fire steg mot godkjent rapport.
+  caseProgress: {
+    sak: 'Sak',
+    befaring: 'Befaring',
+    rapport: 'Rapport',
+    godkjent: 'Godkjent',
+    a11y: (done: number, total: number) => `Saksfremdrift: ${done} av ${total} steg fullført`,
+  },
+
   projects: {
     title: 'Prosjekter',
     subtitle: 'Befaringer og skadesaker',

@@ -382,10 +382,15 @@ export default function ProjectDetailScreen() {
   }, [isEditingDescription, state.project]);
 
   // Initialise reportMeta draft whenever a (different) project loads.
-  // Auto-expand the section when the key inspection fields are all empty so the
-  // user immediately knows they need to fill them in.
+  // Smarte standardvalg: felter vi allerede kjenner svaret på (adresse fra
+  // saksunderlaget, befaringsdato, takstperson fra profilen) forhåndsutfylles —
+  // aldri over noe brukeren selv har skrevet. Jobben endres fra «fyll ut» til
+  // «se over og juster». Auto-utvid seksjonen når de manuelle nøkkelfeltene
+  // (saksnummer, kunde) fortsatt står tomme.
   useEffect(() => {
-    if (project) {
+    if (!project) return;
+    let cancelled = false;
+    (async () => {
       // Nullstill ventende autolagring fra et ev. forrige prosjekt før
       // utkastet byttes — ellers kunne gamle felter lagres på nytt prosjekt.
       if (metaSaveTimerRef.current) {
@@ -393,19 +398,51 @@ export default function ProjectDetailScreen() {
         metaSaveTimerRef.current = null;
       }
       setMetaSaveStatus('idle');
-      const meta = project.reportMeta;
-      setReportMetaDraft({
+      const meta: ReportMeta = {
         contributors: [{}],
         buildings: [{}],
-        ...meta,
-      });
-      const isEmpty =
-        !meta?.caseNumber &&
-        !meta?.inspectionDoneByName &&
-        !meta?.customerName &&
-        !meta?.addressStreet;
-      if (isEmpty) setReportMetaOpen(true);
-    }
+        ...project.reportMeta,
+      };
+
+      const profile = await loadProfile();
+      if (cancelled) return;
+      const cf = project.caseFile;
+      let filled = false;
+      const fillIfEmpty = (key: keyof ReportMeta, value: string | undefined) => {
+        const trimmed = (value ?? '').trim();
+        if (trimmed && !(meta[key] as string | undefined)?.trim?.()) {
+          (meta as any)[key] = trimmed;
+          filled = true;
+        }
+      };
+      fillIfEmpty('addressStreet', cf?.addressText);
+      fillIfEmpty(
+        'addressPostcodeCity',
+        [cf?.postCode, cf?.postPlace].filter(Boolean).join(' '),
+      );
+      if (project.inspectionDate && project.inspectionDate !== NO_DATE_SET) {
+        fillIfEmpty('inspectionDate', project.inspectionDate);
+      }
+      fillIfEmpty(
+        'inspectionDoneByName',
+        profile.name ||
+          (project.inspector !== UNKNOWN_INSPECTOR ? project.inspector : ''),
+      );
+      fillIfEmpty('inspectionDoneByPhone', profile.phone);
+      fillIfEmpty('inspectionDoneByCompany', profile.company);
+
+      setReportMetaDraft(meta);
+      if (filled) {
+        // Persistér standardvalgene med én gang så de også når rapporten om
+        // seksjonen aldri åpnes — og synkes til andre enheter.
+        await updateProjectLocally({ ...project, reportMeta: meta });
+      }
+      const needsManualKeys = !meta.caseNumber && !meta.customerName;
+      if (needsManualKeys) setReportMetaOpen(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id]);
 
@@ -1568,6 +1605,17 @@ export default function ProjectDetailScreen() {
             kulturminne: Boolean(data.bygning.kulturminne),
             bygningsnummer: data.bygning.bygningsnummer ? String(data.bygning.bygningsnummer) : null,
           });
+          // Smart standardvalg: matrikkelens bygningstype inn i rapportfeltet
+          // når det står tomt — aldri over noe takstpersonen selv har skrevet.
+          const bygningstype = String(data.bygning.type || '').trim();
+          const draft = reportMetaDraftRef.current;
+          const building = draft.buildings?.[0] ?? {};
+          if (bygningstype && !(building.type ?? '').trim()) {
+            handleReportMetaChange({
+              ...draft,
+              buildings: [{ ...building, type: bygningstype }, ...(draft.buildings ?? [{}]).slice(1)],
+            });
+          }
         }
       } catch {
         // åpen-matrikkel-oppslaget er en berikelse — stille feil
@@ -1576,6 +1624,9 @@ export default function ProjectDetailScreen() {
     return () => {
       cancelled = true;
     };
+  // handleReportMetaChange er stabil nok her; effekten skal kun kjøre på nytt
+  // ved adresse-/tokenendring (samme mønster som de andre underlag-effektene).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.caseFile, isTokenValid]);
 
   // A5 — versjonslagring: reportDraft (AI-utkastet, uforanderlig) og
@@ -2599,6 +2650,72 @@ export default function ProjectDetailScreen() {
     );
   };
 
+  // Saksfremdrift i sober form (goal gradient): fire faste steg mot godkjent
+  // rapport. «Sak» teller fra opprettelsen — brukeren starter aldri på null.
+  // Ingen prosenter, ingen spill: en statuslinje for en fagperson.
+  const renderCaseProgress = () => {
+    if (!project) return null;
+    const hasEvidence =
+      (project.notes ?? []).some(
+        (n) =>
+          (n.text ?? '').trim() ||
+          (n.transcription ?? '').trim() ||
+          (n.photos ?? []).length > 0 ||
+          n.videoUri ||
+          n.videoRemoteId ||
+          n.audioUri ||
+          n.audioRemoteId,
+      ) || (project.rooms ?? []).some((r) => r.completedAt);
+    const steps: { label: string; done: boolean }[] = [
+      { label: nb.caseProgress.sak, done: true },
+      { label: nb.caseProgress.befaring, done: hasEvidence },
+      {
+        label: nb.caseProgress.rapport,
+        done: Boolean(project.reportUrl) || project.reportStatus === 'ready',
+      },
+      { label: nb.caseProgress.godkjent, done: Boolean(project.reportApproval) },
+    ];
+    const doneCount = steps.filter((s) => s.done).length;
+    return (
+      <View
+        accessibilityLabel={nb.caseProgress.a11y(doneCount, steps.length)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+      >
+        {steps.map((step, i) => (
+          <View key={step.label} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                paddingVertical: 4,
+                borderBottomWidth: 2,
+                borderBottomColor: step.done ? theme.colors.accent : theme.colors.border,
+              }}
+            >
+              <Ionicons
+                name={step.done ? 'checkmark-circle' : 'ellipse-outline'}
+                size={12}
+                color={step.done ? theme.colors.accent : theme.colors.muted}
+              />
+              <Caption
+                muted={!step.done}
+                style={step.done ? { color: theme.colors.accent, fontWeight: '600' } : undefined}
+              >
+                {step.label}
+              </Caption>
+            </View>
+            {i < steps.length - 1 && (
+              <Ionicons name="chevron-forward" size={10} color={theme.colors.muted} />
+            )}
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   const renderTopBar = () => (
     <View style={{ gap: theme.spacing.sm }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: theme.spacing.sm }}>
@@ -2608,6 +2725,7 @@ export default function ProjectDetailScreen() {
         </IconButton>
       </View>
       {renderUnderlagStrip()}
+      {renderCaseProgress()}
 
       <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
         <SecondaryButton

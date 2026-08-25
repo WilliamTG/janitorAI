@@ -15,7 +15,9 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const stackBackground = colorScheme === 'dark' ? '#0b1020' : '#e8eef8';
+  // Palett C «Skifer og kobber»: samme flatefarger som theme.tsx (surface),
+  // så navigasjonsoverganger aldri blotter en fremmed farge bak skjermene.
+  const stackBackground = colorScheme === 'dark' ? '#11181B' : '#F1F3F3';
 
   useEffect(() => {
     console.log('[Navigation] Root layout mounted with stack background', stackBackground);
