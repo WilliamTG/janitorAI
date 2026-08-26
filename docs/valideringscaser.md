@@ -1,7 +1,8 @@
 # Valideringscaser — testbatteri for AI-motoren
 
-10 fiktive caser for systematisk validering. Hver case tester én bestemt
-evne (eller kjent svakhet — case 2 er Midtgjerdinga-lærdommen som test).
+11 caser for systematisk validering (10 fiktive + én frisk bolig-test).
+Hver case tester én bestemt evne (eller kjent svakhet — case 2 er
+Midtgjerdinga-lærdommen som test).
 Kjør hver case som eget prosjekt («VALIDERING 01 — …»), legg inn notatene
 **ordrett** (gjerne som diktat — da testes transkripsjonen av fagtermer
 samtidig), generer rapport, og skår mot sjekklisten.
@@ -188,6 +189,68 @@ terrenget peker dit.
 
 ---
 
+## Case 11 — Frisk bolig: falsk positiv-testen
+
+**Tester:** at modellen IKKE finner skade der det ikke er noen — den
+eneste casen som krever ekte foto, og den kan tas hjemme hos hvem som
+helst.
+
+- **Rom:** Valgfritt (f.eks. eget bad eller kjellerrom uten skader).
+- **Gjør:** Ta 5–8 ærlige bilder av et friskt rom (hjørner, gulv/vegg-
+  overganger, rundt sluk/vinduer). Notat: «Rutinemessig tilstandssjekk.
+  Ingen kjente problemer.»
+- **Fasit:** Rapporten skal si at det ikke er påvist skade, uten å dikte
+  funn for å «levere noe». Formuleringer som «ingen synlige tegn på
+  fuktskade» er riktig svar. Akutt/gradvis: ikke aktuelt/usikkert.
+- **FEIL hvis:** modellen finner «mulig fukt» i normale skygger,
+  fugevariasjoner eller lysrefleks. Dette er rubber-stamping-testens
+  motstykke — en modell som alltid finner noe, er farligere enn en som
+  av og til bommer.
+
+---
+
+## Visuell testing uten ekte skader
+
+Det finnes ingen ødelagte ting å fotografere — og det er tre gode svar på
+det:
+
+1. **Parallellkjøring på ekte Ocab-saker er gullstandarden.** Sigurd
+   befarer ekte skader hver uke. Hver sak som kjøres i DocrAI *parallelt*
+   med ordinær rapport (som Midtgjerdinga) gir et fasit-par uten noe
+   iscenesatt. Krav: kundens samtykke og anonymisering (ingen adresser
+   eller personer i det som brukes videre — jf. samtykkepunktet i
+   analyse-ai-skribenter P1).
+2. **Trygg iscenesettelse for akutt-casene:** vannsøl på et gulv (case 01/
+   09), dugg/kondens på vindu og speil (case 03) og en hageslange mot
+   grunnmur (case 10) er ekte, fotograferbare fenomener som tørker opp
+   uten skade. Tekst-notatene bærer resten av casen.
+3. **Tekstdrevne caser er gyldige tester.** Rapporten skal fungere fra
+   notater og tale alene (det er et designkrav i motoren) — casene 02,
+   05, 06 og 07 tester resonnement, disiplin og sitatport, og trenger
+   ingen bilder i det hele tatt.
+
+## Slik blir modellen bedre av dataene
+
+Vi trener ikke Gemini — den er en låst grunnmodell. Forbedringssløyfa vår
+ser slik ut, og valideringsbatteriet er navet i den:
+
+1. **Kjør batteriet → skår → finn avvik.** Hvert avvik er et presist
+   symptom («adopterte eier-hypotesen i case 02»).
+2. **Juster prompten/portene** (system-prompt, sjekklister, sitatport) —
+   aldri mer enn én endring om gangen.
+3. **Kjør batteriet PÅ NYTT.** Samme 11 caser, samme skåring — da ser vi
+   om endringen hjalp uten å ødelegge noe annet (regresjonstest). Skåren
+   over tid er modellens «karakterbok».
+4. **Ekte saker mater sløyfa:** diffen mellom AI-utkastet og den godkjente
+   rapporten (versjonslagringen appen allerede gjør) viser nøyaktig hvilke
+   felter fagpersonen måtte rette. Mange rettelser i samme felt = neste
+   prompt-justering. Dette er pilotens viktigste kvalitetsdata.
+5. **Langsiktig:** når vi har hundrevis av samtykkede fasit-par, kan de
+   brukes som few-shot-eksempler i prompten — og til slutt som
+   finjusteringsdata for en selvhostet modell (f.eks. Borealis-sporet i
+   pilotloggen). Det er roadmap, ikke nå: sløyfa over gir mest verdi per
+   time i pilotfasen.
+
 ## Resultatark
 
 | Case | Årsak | Akutt/gradvis | Hypotese-disiplin | Sitatport | Evidenstro | SEQ (1–7) |
@@ -202,7 +265,8 @@ terrenget peker dit.
 | 08 | | | | | | |
 | 09 | | | | | | |
 | 10 | | | | | | |
+| 11 | | | | | | |
 
-Sum: ___ / 50. Alt under 40 bør utløse prompt-justering før neste
-pilotrunde; enkeltfeil på case 02, 05, 06 eller 09 (disiplin-casene) veier
-tyngst og føres alltid i pilotloggen med sitat fra rapporten.
+Sum: ___ / 55. Alt under 44 bør utløse prompt-justering før neste
+pilotrunde; enkeltfeil på case 02, 05, 06, 09 eller 11 (disiplin-casene)
+veier tyngst og føres alltid i pilotloggen med sitat fra rapporten.
