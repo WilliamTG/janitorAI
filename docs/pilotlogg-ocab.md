@@ -108,6 +108,14 @@ som kandidat for nativ-app-sporet; bygges ikke nå (nei-lista: dette er ett
 brukersignal, og distribusjonskanalen mangler). Merk: dette er datafangst
 til planskisse, ikke et eget tegneverktøy.
 
+**Oppfølging 26.08:** Sigurd foreslo (i samtale med William Tobias
+Grenersen) å utvide dette til å skanne bygget og bekrefte/avkrefte
+fremdrift mot en BIM-modell — en betydelig større utvidelse enn
+planskisse. Se `docs/signal-kontraktskontroll-offentlig.md` for full
+vurdering; kort versjon: samme nativ-app-begrensning som over, pluss
+geometrisk registrering mot BIM og en BIM-kilde i utgangspunktet. Ikke
+bygget, notert som forlengelse av samme roadmap-post.
+
 ## Tidligere funn (14.–24. august, oppsummert)
 
 - Kamera-app-foto avvist (8 MB-grense uten web-komprimering) → 20 MB +
