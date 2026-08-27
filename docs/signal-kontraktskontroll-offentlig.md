@@ -13,6 +13,13 @@ Fortsatt ikke en pilotforespørsel, men fra ett sekundærutsagn til en aktiv,
 navngitt diskusjon blant folk nær prosjektet. Verdt å holde varmt og
 dokumentere presist.
 
+**27. august 2026:** full arkitektur- og markedskartlegging av dette (og
+de beslektede KS-/HMS-avvik-domenene) er gjort i
+`docs/kartlegging-overlevering-ks-hms.md`, basert på tre uavhengige
+researchpass mot Lovdata/Arbeidstilsynet/Standard Norge/DiBK. Dette
+dokumentet er historikken for hvordan signalet oppstod; kartleggingen har
+den tekniske og markedsmessige substansen.
+
 ## Hva slags behov er dette?
 
 Ikke skadeårsak. Behovet er **verifisering ved overlevering/milepæler i
