@@ -1,3 +1,11 @@
+# Proveniens: hvilken promptgenerasjon som produserte et utkast. Lagres med
+# reportDraft i appen og returneres av /api/report, slik at valideringsbatteriet
+# (docs/valideringscaser.md) kan skåre per versjon og draft-vs-godkjent-diffen
+# kan knyttes til riktig promptgenerasjon. Bump ved enhver substansendring i
+# system-/hovedprompt, sjekklistene eller bevisreglene.
+PROMPT_VERSION = "2026-08-27.1"
+
+
 def build_inspector_context(project: dict) -> str:
     """
     Formats the project context (description, notes, photo captions) into a

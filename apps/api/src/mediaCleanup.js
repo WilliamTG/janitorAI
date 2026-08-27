@@ -51,6 +51,10 @@ function extractMediaIds(projectData, into = new Set()) {
   for (const note of notes) {
     if (!note || typeof note !== "object") continue;
     if (note.audioRemoteId) into.add(String(note.audioRemoteId));
+    // Video var utelatt her: hver synkede befaringsvideo ble permanent merket
+    // ureferert og overlevde kun det defensive LIKE-sikkerhetsnettet ved
+    // sletting. Kjernebevis skal telles som referert på lik linje med foto.
+    if (note.videoRemoteId) into.add(String(note.videoRemoteId));
     const photos = Array.isArray(note.photos) ? note.photos : [];
     for (const photo of photos) {
       if (photo && photo.remoteId) into.add(String(photo.remoteId));
@@ -79,6 +83,14 @@ async function sweepOrphanedMedia({
   deleteGraceMs = DELETE_GRACE_MS,
   uploadGraceMs = UPLOAD_GRACE_MS,
 } = {}) {
+  // Kill-switch for gjenoppretting: etter en DB-restore kan basen bære
+  // foreldede unreferenced_at-merker fra før backup-tidspunktet, og første
+  // boot-sweep ville slette filer som faktisk er i bruk. Runbook: restore med
+  // MEDIA_SWEEP_DISABLED=true, slå på igjen når klientene har synket.
+  if (process.env.MEDIA_SWEEP_DISABLED === "true") {
+    return null;
+  }
+
   const pool = getPool();
   if (!pool) return null;
 
@@ -119,18 +131,96 @@ async function sweepOrphanedMedia({
     fs.unlink(row.file_path, () => {});
   }
 
+  // Katalogskann: filer i MEDIA_DIR uten media-rad. Oppstår ved krasj mellom
+  // filskriving og INSERT, eller når rad-sletting lyktes men unlink krasjet —
+  // rader uten fil er ufarlige, filer uten rad ryddes her. 24 t frist så en
+  // fil aldri fjernes mens dens INSERT fortsatt kan være underveis.
+  let orphanFiles = 0;
+  try {
+    orphanFiles = await sweepOrphanFiles(pool);
+  } catch (err) {
+    console.error("Media orphan-file sweep error:", sanitizeError(err));
+  }
+
   const counts = {
     referenced: referenced.length,
     unmarked: unmarked.rowCount,
     marked: marked.rowCount,
     deleted: expired.rows.length,
+    orphanFiles,
   };
-  if (counts.marked || counts.deleted || counts.unmarked) {
+  if (counts.marked || counts.deleted || counts.unmarked || counts.orphanFiles) {
     console.log(
-      `Media sweep: ${counts.deleted} deleted, ${counts.marked} newly unreferenced, ${counts.unmarked} re-referenced (${counts.referenced} referenced in total)`
+      `Media sweep: ${counts.deleted} deleted, ${counts.marked} newly unreferenced, ${counts.unmarked} re-referenced, ${counts.orphanFiles} orphan files removed (${counts.referenced} referenced in total)`
     );
   }
   return counts;
+}
+
+const ORPHAN_FILE_GRACE_MS = 24 * 60 * 60 * 1000;
+
+/** Slett filer i MEDIA_DIR (eldre enn fristen) som ingen media-rad peker på. */
+async function sweepOrphanFiles(pool) {
+  let entries;
+  try {
+    entries = await fs.promises.readdir(MEDIA_DIR);
+  } catch {
+    return 0; // katalogen finnes ikke ennå — ingenting å rydde
+  }
+
+  const candidates = [];
+  const now = Date.now();
+  for (const name of entries) {
+    const fullPath = path.join(MEDIA_DIR, name);
+    let stat;
+    try {
+      stat = await fs.promises.stat(fullPath);
+    } catch {
+      continue;
+    }
+    if (!stat.isFile()) continue;
+    if (now - stat.mtimeMs < ORPHAN_FILE_GRACE_MS) continue;
+    // Filnavnet er `${id}${ext}` fra opplastingen — id-en er basename uten ext.
+    candidates.push({ id: path.basename(name, path.extname(name)), fullPath });
+  }
+  if (candidates.length === 0) return 0;
+
+  // Fornuftsgulv: svarer basen «tom» eller «kjenner nesten ingenting» mens
+  // katalogen er full, er det mest sannsynlig basen som er gal (feil
+  // DATABASE_URL, fersk restore) — da skal skannet stå over og rope, ikke
+  // slette hele mediekatalogen.
+  const totalRows = await pool.query("SELECT count(*)::int AS n FROM media");
+  const totalMediaRows = totalRows.rows[0].n;
+  if (totalMediaRows === 0) {
+    console.error(
+      `Media orphan-file sweep SKIPPED: media table is empty while ${candidates.length} candidate file(s) exist in MEDIA_DIR — refusing to delete (wrong DB / fresh restore?)`
+    );
+    return 0;
+  }
+
+  const known = await pool.query("SELECT id FROM media WHERE id = ANY($1)", [
+    candidates.map((c) => c.id),
+  ]);
+  const knownIds = new Set(known.rows.map((r) => String(r.id)));
+  const unmatched = candidates.filter((c) => !knownIds.has(c.id));
+
+  if (unmatched.length >= 10 && unmatched.length > candidates.length / 2) {
+    console.error(
+      `Media orphan-file sweep SKIPPED: ${unmatched.length}/${candidates.length} files unmatched by media table — refusing bulk delete (wrong DB / fresh restore?)`
+    );
+    return 0;
+  }
+
+  let deleted = 0;
+  for (const c of unmatched) {
+    try {
+      await fs.promises.unlink(c.fullPath);
+      deleted++;
+    } catch {
+      // best effort — neste sweep prøver igjen
+    }
+  }
+  return deleted;
 }
 
 /**

@@ -24,8 +24,13 @@ export async function loadProjects(): Promise<Project[]> {
  */
 export async function saveProjects(projects: Project[]): Promise<void> {
   try {
-    // Normalize IDs before saving
-    const normalized = projects.map((p) => ({ ...p, id: String(p.id) }));
+    // Normalize IDs before saving. schemaVersion stemples her («mangler = 1»)
+    // så fremtidige formendringer kan gjøres som migrering-ved-lesing.
+    const normalized = projects.map((p) => ({
+      ...p,
+      id: String(p.id),
+      schemaVersion: p.schemaVersion ?? 1,
+    }));
     await AsyncStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(normalized));
   } catch (error) {
     console.warn('[projectsStorage] Failed to save projects', error);

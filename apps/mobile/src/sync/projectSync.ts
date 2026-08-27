@@ -4,12 +4,18 @@ import { Platform } from 'react-native';
 import { getApiBaseUrl } from '@/src/config/api';
 import apiFetch, { UnauthorizedError, getCachedTesterToken } from '@/src/lib/apiFetch';
 import { Note, Photo, Project } from '@/src/features/projects/types';
-import { updateProject as updateProjectInStorage, getProject } from '@/src/storage/projectsStorage';
+import {
+  updateProject as updateProjectInStorage,
+  getProject,
+  loadProjects,
+} from '@/src/storage/projectsStorage';
 import {
   setSyncState,
   setMediaUploadFailures,
   clearMediaUploadFailures,
   recordOversizedFile,
+  recordProjectTooLarge,
+  clearProjectTooLarge,
   setVideoUploadProgress,
   clearVideoUploadProgress,
   setMediaBatchProgress,
@@ -710,9 +716,61 @@ export async function pushProject(project: Project): Promise<Project> {
         return latestForPut;
       }
 
+      if (response.status === 413) {
+        // PERMANENT: prosjektet er større enn serverens body-tak. Generisk
+        // rød status så ut som en forbigående serverfeil — men hver fremtidige
+        // push feiler likt, så dette må forklares, ikke bare blinke rødt.
+        recordProjectTooLarge(project.id);
+        logError(
+          new Error(`Project ${project.id} exceeds server payload limit (413)`),
+          'push-too-large',
+        );
+        setSyncState('error');
+        return latestForPut;
+      }
+
       if (!response.ok) {
         setSyncState('error');
         return latestForPut;
+      }
+
+      // Vellykket push av samme prosjekt rydder et ev. «for stort»-varsel —
+      // testeren kan ha slettet innhold så prosjektet kom under taket igjen.
+      clearProjectTooLarge(project.id);
+
+      // Serveren svarer 200 med {stale, project} når vår versjon tapte
+      // LWW-kampen (f.eks. en enhet med tregere klokke): den rekker sin
+      // nyere kopi tilbake nettopp for at vi skal flette — å ignorere den og
+      // vise «synket» lot endringene bli liggende kun lokalt til neste pull.
+      let body: any = null;
+      try {
+        body = await response.json();
+      } catch {
+        // tomt/ugyldig svar tolereres — da gjelder vanlig synket-status
+      }
+
+      if (body && body.deleted) {
+        // Tombstone på serveren er nyere enn vår kopi: prosjektet er slettet
+        // på en annen enhet. Neste pullAndMerge fjerner det lokalt via
+        // deleted-listen; her skal det bare ikke rapporteres som synket.
+        setSyncState('synced');
+        return latestForPut;
+      }
+
+      if (body && body.stale && body.project) {
+        const serverCopy: Project = { ...body.project, id: String(body.project.id) };
+        // Tapt-oppdatering-vern: flett mot lagringens FERSKE innhold, ikke mot
+        // øyeblikksbildet fra før PUT-en — et notat skrevet mens PUT-en var
+        // underveis finnes ellers i ingen av flette-inputene og går tapt.
+        const fresh = (await getProject(project.id)) ?? latestForPut;
+        const { project: mergedProject } = mergeProjects(fresh, serverCopy);
+        await updateProjectInStorage(mergedProject);
+        notifyProjectUpdate(mergedProject);
+        // Flettingen satte updatedAt = max(lokal, server), så re-pushen
+        // passerer serverens LWW-vakt og konvergerer — ingen løkke.
+        schedulePush(mergedProject);
+        setSyncState('synced');
+        return mergedProject;
       }
 
       setSyncState('synced');
@@ -843,6 +901,17 @@ export async function pullAndMerge(localProjects: Project[]): Promise<Project[] 
     return null;
   }
 
+  // Tapt-oppdatering-vern: flett mot lagringens FERSKE innhold, ikke mot
+  // øyeblikksbildet kalleren tok før nettverkskallet. Med Render-kaldstart kan
+  // pull-vinduet vare titalls sekunder — et notat skrevet i mellomtiden ble
+  // ellers overskrevet når kalleren lagret det flettede resultatet.
+  let freshLocal = localProjects;
+  try {
+    freshLocal = await loadProjects();
+  } catch {
+    // faller tilbake til kallerens liste — dårligere, men aldri verre enn før
+  }
+
   const serverById = new Map<string, Project>();
   for (const p of data.projects || []) {
     const id = String(p.id);
@@ -859,7 +928,7 @@ export async function pullAndMerge(localProjects: Project[]): Promise<Project[] 
   const toPush: Project[] = [];
   const seen = new Set<string>();
 
-  for (const local of localProjects) {
+  for (const local of freshLocal) {
     const id = String(local.id);
     seen.add(id);
 
@@ -1022,7 +1091,26 @@ export function mergeProjects(
       base.projectDescriptionAudioUri ||
       local.projectDescriptionAudioUri ||
       server.projectDescriptionAudioUri,
+    // Monotone felter overlever hel-dokument-LWW med finnes-vinner: reportDraft
+    // er definert som uforanderlig arkiv, reportUrl/caseFile settes én gang og
+    // redigeres ikke — en eldre kopi uten dem skal ikke slette dem. Bevisst
+    // IKKE reportApproval/reportFinal: ny generering skal nullstille stempelet,
+    // og finnes-vinner ville gjenopplivet en tilbaketrukket godkjenning.
+    reportDraft: base.reportDraft || local.reportDraft || server.reportDraft,
+    reportUrl: base.reportUrl || local.reportUrl || server.reportUrl,
+    caseFile: base.caseFile || local.caseFile || server.caseFile,
   };
+
+  // Gjenopprettet et fallback-felt noe serverkopien manglet, må resultatet
+  // pushes tilbake — ellers reddes feltet bare lokalt og går tapt på serveren.
+  // Referanselikhet er riktig her: fallback-kjeden bevarer objektreferanser.
+  if (
+    project.reportDraft !== server.reportDraft ||
+    project.reportUrl !== server.reportUrl ||
+    project.caseFile !== server.caseFile
+  ) {
+    changed = true;
+  }
 
   return { project, changed };
 }
