@@ -155,6 +155,72 @@ Alle tre er reelt nytt produktarbeid — ikke konfigurasjon av
 skaderapport-motoren — men de kan dele samme underliggende
 «Funn»-livssyklusarkitektur hvis mer enn ett bygges.
 
+## Sammenligning med tilstøtende praksis: internt Power Apps-verktøy («ark 49»)
+
+Fredrik delte et internt dokument («ark 49» i et «tjenester-powerapps»-sett
+for en eiendomsforvaltningsorganisasjon) som uavhengig løser en beslektet,
+men ikke identisk, problemstilling: vernerunder, brannvernrunder og
+overtakelses-/garantibefaringer for **intern** bruk (vaktmestere/
+driftsledere), bygget på Power Apps + SharePoint Lists + Power Automate —
+ikke som et eksternt produkt. Verdt å sammenligne fordi to helt uavhengige
+tilnærminger lander på flere av de samme konklusjonene.
+
+**Uavhengig bekreftede innsikter (samme konklusjon fra to retninger):**
+- Samme kjernediagnose: «problemet er at resultatet ikke blir data» —
+  matcher KS-forskningens funn om at avvik sjelden skrives ned.
+- Samme «bilde koblet til punkt er selve gevinsten» — matcher
+  `source_photo_index`-mønsteret DocrAI allerede har.
+- Samme «én datamodell, flere maler» — matcher den anbefalte parallelle
+  «Funn»-modellen per domene over.
+- Samme prioritering: overtakelse er den strategisk viktigste
+  underkategorien.
+- Samme uløste spørsmål (ekstern parts tilgang): ark 49 løser det
+  midlertidig med PDF-eksport til entreprenøren; DocrAIs eksisterende
+  PIN-delingslenke er trolig en bedre løsning på nøyaktig samme problem.
+
+**Der de peker i ulik retning:**
+1. **Byggfilosofi.** Ark 49 er en manuell avkrysning-i-Power-Apps-løsning
+   — samme kategori som SmartDok/Ditio/PlanRadar fra konkurranselandskapet
+   over, ikke tale-/video-AI. Bekrefter at «bygg det selv i Power
+   Platform» er et reelt tredje konkurransealternativ ved siden av kjøpte
+   verktøy.
+2. **Kostnadsbarriere.** SharePoint Lists er E3-dekket — marginalkost
+   ~0 kr utover 15–40 timeverk. Dette er terskelen et betalt DocrAI-
+   produkt må slå for den delen av markedet som allerede har M365 og bare
+   trenger periodiske interne rutinesjekker — tøffere enn navngitte
+   SaaS-konkurrenter fordi den ikke koster noe i lisens.
+3. **Rundetype-skille.** Vernerunde/brannvernrunde er periodiske,
+   kalenderstyrte rutinesjekker (egen «neste runde»-påminnelse) — en
+   annen produktform enn DocrAIs ad hoc-hendelsesfangst under aktivt
+   feltarbeid. Overtakelse er derimot hendelsesstyrt og passer DocrAIs
+   arbeidsflyt direkte.
+4. **Skarpere scope-grense (mangler i kartleggingen over — lagt til her):**
+   ark 49 trekker en eksplisitt grense mot vedlikeholdssystemet (IFS):
+   funn om planlagt vedlikehold hører der, ikke i befaringsverktøyet. Et
+   fremtidig DocrAI-spor for overtakelse/KS/HMS er tilsvarende **ikke**
+   en erstatning for et forvaltnings-/vedlikeholdssystem (IFS, Plania,
+   Public 360 e.l.) — det dekker befaring/dokumentasjon, ikke
+   driftsplanlegging.
+5. **Rulleprosess-modenhet.** Ark 49s 5-stegs, tidsbudsjetterte,
+   eier-navngitte plan (manuell pilot først; app bygges kun hvis
+   Lists-skjemaet viser seg utilstrekkelig i felt) er en skarpere
+   operasjonalisering av nei-lista-disiplinen enn «bygging venter på
+   pilotforespørsel». Formen (navngitt eier, timeestimat, eksplisitt
+   bygg-kun-hvis-gate) bør gjenbrukes den dagen DocrAI beveger seg mot
+   denne vertikalen.
+
+**Der DocrAI allerede har et forsprang:** offline-fangst er ark 49s
+eksplisitt uløste risiko («må testes tidlig … faller kravet tungt, aksepter
+'noter nå, registrer ved dekning'»). DocrAI har allerede løst nøyaktig
+dette — offline-first synk og IndexedDB-persistens, pilotert og herdet
+gjennom Sigurds test i august 2026.
+
+**Konklusjon:** ikke motstridende dokumenter — komplementære. Ark 49 er
+tungt på rulleprosess/organisasjon og lett på juridisk/standardgrunnlag;
+denne kartleggingen er omvendt. Konklusjonen står uendret: fortsatt
+kartlegg, ikke bygg — men rulleprosess-mønsteret gjenbrukes, og
+IFS-grensen er nå eksplisitt en del av scope-avklaringen.
+
 ## Referanser
 
 Alle fakta i denne kartleggingen er verifisert via live søk 27.08.2026 mot
