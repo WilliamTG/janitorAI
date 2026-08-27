@@ -108,6 +108,49 @@ export function useOversizedFileError(): boolean {
   return detected;
 }
 
+// ---------- PROJECT TOO LARGE (413) TRACKING ----------
+// Et prosjekt som passerer serverens body-tak er en PERMANENT synkfeil: hver
+// fremtidige push feiler likt. Uten eget spor så det ut som en forbigående
+// serverfeil, og testerens nye notater sluttet stille å bli varige på serveren.
+
+let projectTooLargeId: string | null = null;
+const projectTooLargeListeners = new Set<(projectId: string | null) => void>();
+
+/** Kalles når en prosjekt-PUT avvises med 413. Idempotent per prosjekt. */
+export function recordProjectTooLarge(projectId: string): void {
+  if (projectTooLargeId !== projectId) {
+    projectTooLargeId = projectId;
+    projectTooLargeListeners.forEach((l) => l(projectTooLargeId));
+  }
+}
+
+/**
+ * Rydder flagget. Med projectId ryddes det bare når det er DET prosjektet som
+ * nå synker vellykket igjen (f.eks. etter at innhold ble slettet så det kom
+ * under taket) — et annet prosjekts vellykkede push skal ikke skjule varselet.
+ */
+export function clearProjectTooLarge(projectId?: string): void {
+  if (projectTooLargeId === null) return;
+  if (projectId !== undefined && projectTooLargeId !== projectId) return;
+  projectTooLargeId = null;
+  projectTooLargeListeners.forEach((l) => l(null));
+}
+
+export function useProjectTooLarge(): string | null {
+  const [projectId, setProjectId] = useState(projectTooLargeId);
+
+  useEffect(() => {
+    const listener = (next: string | null) => setProjectId(next);
+    projectTooLargeListeners.add(listener);
+    setProjectId(projectTooLargeId);
+    return () => {
+      projectTooLargeListeners.delete(listener);
+    };
+  }, []);
+
+  return projectId;
+}
+
 // ---------- VIDEO UPLOAD PROGRESS ----------
 // Per-URI upload progress (0–100). Stored in a plain Map; React components
 // subscribe via useVideoUploadProgress() and re-render on each progress tick.

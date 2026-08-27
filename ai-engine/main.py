@@ -15,6 +15,20 @@ from template_replacement import build_replacements
 TEMP_PHOTO_DIR = "./temp_photos"
 
 
+class ReportPipelineError(Exception):
+    """
+    Feil ETTER Gemini-analysen (fletting/galleri/deling): analysen er allerede
+    fakturert, så unntaket bærer token_usage videre til API-et (COGS for
+    feilede kjøringer), og doc_id for en halvferdig dokumentkopi som ikke lot
+    seg rydde bort — den skal aldri bli liggende sporløst i Drive.
+    """
+
+    def __init__(self, message, token_usage=None, doc_id=None):
+        super().__init__(message)
+        self.token_usage = token_usage
+        self.doc_id = doc_id
+
+
 def _validate_media_url(url: str) -> None:
     """
     Validates that a URL is a safe, expected media endpoint before fetching.
@@ -176,60 +190,67 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
         if photo_records:
             print(f"📸 {len(photo_records)} inspector photo(s) ready for Gemini")
     photo_files = [rec["file"] for rec in photo_records]
-    
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    knowledge_path = os.path.join(current_dir, "temp_knowledge")
-    
-    if not os.path.exists(knowledge_path):
-        knowledge_path = os.path.join(current_dir, "knowlegde")
 
-    print(f"📚 Opplasting av kunnskapsbase fra: {knowledge_path}")
-    knowledge_files = upload_knowledge_base(genai_client, knowledge_path)
+    # Feiler noe i analysefasen (kunnskapsopplasting, Gemini-kallet,
+    # valideringen), skal de lokale fotokopiene ikke bli liggende igjen i
+    # temp-katalogen — unntaket propagerer ellers uendret som før.
+    try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        knowledge_path = os.path.join(current_dir, "temp_knowledge")
 
-    # Build contents from every available source. No evidence type has an
-    # automatic priority; Gemini reconciles the supplied material.
-    context_text = build_inspector_context(project or {})
-    context_parts = [context_text] if context_text else []
-    manifest = _photo_manifest(photo_records)
-    if manifest:
-        context_parts.append(manifest)
+        if not os.path.exists(knowledge_path):
+            knowledge_path = os.path.join(current_dir, "knowlegde")
 
-    contents = (
-        ([video_file] if video_file else [])
-        + photo_files
-        + knowledge_files
-        + context_parts
-        + [main_prompt()]
-    )
+        print(f"📚 Opplasting av kunnskapsbase fra: {knowledge_path}")
+        knowledge_files = upload_knowledge_base(genai_client, knowledge_path)
 
-    print("🧠 Sending content to Gemini for analysis...")
-    gemini_response = genai_client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=contents,
-        config={"response_mime_type": "application/json",
-                "response_schema": DamageAnalysis,
-                "system_instruction": system_prompt(),
-                "temperature": 0.0,    # Setter kreativiteten til null
-                "top_p": 0.1,         # Velger kun de mest sannsynlige ordene
-                "top_k": 1,           # Velger kun det aller beste ordet for hvert steg
-                "seed": 42,
-                # Denial-of-Wallet-vern: hard timeout (ms) på selve analysekallet —
-                # den største og tidligere ubundne kostnadsdriveren.
-                "http_options": {"timeout": 120000}}
-    )
-    analysis = gemini_response.parsed
+        # Build contents from every available source. No evidence type has an
+        # automatic priority; Gemini reconciles the supplied material.
+        context_text = build_inspector_context(project or {})
+        context_parts = [context_text] if context_text else []
+        manifest = _photo_manifest(photo_records)
+        if manifest:
+            context_parts.append(manifest)
 
-    # Sitatport: «Byggforsk-henvisninger vises kun med verifisert punktnummer».
-    # Alt modellen siterer valideres mot metadata-indeksen; uverifiserte
-    # referanser forkastes fremfor å nå rapporten (anti-hallusinering).
-    from byggforsk_index import valider_referanse
-    if analysis and analysis.evidence_points:
-        for punkt in analysis.evidence_points:
-            original = punkt.technical_reference
-            verifisert = valider_referanse(original)
-            if original and not verifisert:
-                print(f"⚠️  Forkastet uverifisert Byggforsk-referanse: {original!r}")
-            punkt.technical_reference = verifisert
+        contents = (
+            ([video_file] if video_file else [])
+            + photo_files
+            + knowledge_files
+            + context_parts
+            + [main_prompt()]
+        )
+
+        print("🧠 Sending content to Gemini for analysis...")
+        gemini_response = genai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=contents,
+            config={"response_mime_type": "application/json",
+                    "response_schema": DamageAnalysis,
+                    "system_instruction": system_prompt(),
+                    "temperature": 0.0,    # Setter kreativiteten til null
+                    "top_p": 0.1,         # Velger kun de mest sannsynlige ordene
+                    "top_k": 1,           # Velger kun det aller beste ordet for hvert steg
+                    "seed": 42,
+                    # Denial-of-Wallet-vern: hard timeout (ms) på selve analysekallet —
+                    # den største og tidligere ubundne kostnadsdriveren.
+                    "http_options": {"timeout": 120000}}
+        )
+        analysis = gemini_response.parsed
+
+        # Sitatport: «Byggforsk-henvisninger vises kun med verifisert punktnummer».
+        # Alt modellen siterer valideres mot metadata-indeksen; uverifiserte
+        # referanser forkastes fremfor å nå rapporten (anti-hallusinering).
+        from byggforsk_index import valider_referanse
+        if analysis and analysis.evidence_points:
+            for punkt in analysis.evidence_points:
+                original = punkt.technical_reference
+                verifisert = valider_referanse(original)
+                if original and not verifisert:
+                    print(f"⚠️  Forkastet uverifisert Byggforsk-referanse: {original!r}")
+                punkt.technical_reference = verifisert
+    except Exception:
+        _cleanup_photo_files(photo_records)
+        raise
 
     # COGS: fang tokenforbruk fra rå-responsen før den forkastes, så backend kan
     # måle faktisk kostnad per rapport (docs/prising-bruksbasert.md).
@@ -249,117 +270,150 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
     gc.collect()
     print("🧹 Cleared analysis objects from memory")
 
-    # 3. Create Doc Copy
-    copy_name = f"Rapport_Skade_{int(time.time())}"
-    new_doc = drive.files().copy(fileId=master_id, 
-                                 supportsAllDrives=True,
-                                 body={'name': copy_name, 'parents': [output_folder]}).execute()
-    doc_id = new_doc['id']
+    # 3–6 kjører i én try: feiler noe ETTER at dokumentkopien er laget, skal
+    # (a) den halvferdige kopien slettes fra Drive (ellers ligger den igjen og
+    # kan forveksles med en ekte rapport), og (b) token_usage følge unntaket
+    # videre — analysen er fakturert selv om rapporten aldri ble ferdig.
+    doc_id = None
+    try:
+        # 3. Create Doc Copy
+        copy_name = f"Rapport_Skade_{int(time.time())}"
+        new_doc = drive.files().copy(fileId=master_id,
+                                     supportsAllDrives=True,
+                                     body={'name': copy_name, 'parents': [output_folder]}).execute()
+        doc_id = new_doc['id']
 
-    # 4. Process Evidence Image (memory-optimized with aggressive cleanup)
-    evidence_points = (analysis.evidence_points if analysis and analysis.evidence_points else [])
-    if video_path and len(evidence_points) > 0:
-        # Pick the timestamp Gemini identified as the best evidence
-        best_point = analysis.evidence_points[0]
-        print(f"📸 Extracting frame at {best_point.timestamp_ms}ms: {best_point.caption}")
+        # 4. Process Evidence Image (memory-optimized with aggressive cleanup)
+        evidence_points = (analysis.evidence_points if analysis and analysis.evidence_points else [])
+        if video_path and len(evidence_points) > 0:
+            # Pick the timestamp Gemini identified as the best evidence
+            best_point = analysis.evidence_points[0]
+            print(f"📸 Extracting frame at {best_point.timestamp_ms}ms: {best_point.caption}")
 
-        cap = None
-        frame = None
-        try:
-            cap = cv2.VideoCapture(video_path)
-            cap.set(cv2.CAP_PROP_POS_MSEC, best_point.timestamp_ms)
-            ret, frame = cap.read()
+            cap = None
+            frame = None
+            evidence_path = None
+            try:
+                cap = cv2.VideoCapture(video_path)
+                cap.set(cv2.CAP_PROP_POS_MSEC, best_point.timestamp_ms)
+                ret, frame = cap.read()
 
-            if ret and frame is not None:
-                cv2.imwrite("evidence.jpg", frame)
-                print("💾 Frame saved to evidence.jpg")
+                if ret and frame is not None:
+                    # Per-kjøring-unik fil, ALDRI en fast delt sti: motoren
+                    # kjører nå flertrådet, og med en delt «evidence.jpg» kunne
+                    # to samtidige kjøringer overskrive hverandres bevisbilde —
+                    # feil skades bilde i feil rapport, på tvers av testere.
+                    # (.jpg-suffiks kreves så OpenCV velger JPEG-enkoderen;
+                    # fd-en lukkes fordi imwrite åpner via sti.)
+                    os.makedirs(TEMP_PHOTO_DIR, exist_ok=True)
+                    fd, evidence_path = tempfile.mkstemp(dir=TEMP_PHOTO_DIR, suffix=".jpg")
+                    os.close(fd)
+                    cv2.imwrite(evidence_path, frame)
+                    print(f"💾 Frame saved to {evidence_path}")
 
-                # Free frame memory immediately
-                del frame
-                frame = None
+                    # Free frame memory immediately
+                    del frame
+                    frame = None
 
-                upload_and_insert_image(drive, docs, doc_id, "evidence.jpg", "{{damage.cause.picture}}", output_folder)
-            else:
-                print("⚠️ Failed to extract frame from video")
-        finally:
-            # Ensure video capture is always released
-            if cap is not None:
-                cap.release()
-                del cap
+                    upload_and_insert_image(drive, docs, doc_id, evidence_path, "{{damage.cause.picture}}", output_folder)
+                else:
+                    print("⚠️ Failed to extract frame from video")
+            finally:
+                # Ensure video capture is always released
+                if cap is not None:
+                    cap.release()
+                    del cap
 
-            # Delete frame if it still exists
-            if frame is not None:
-                del frame
+                # Delete frame if it still exists
+                if frame is not None:
+                    del frame
 
-            # Force garbage collection to free OpenCV buffers
-            gc.collect()
-            print("🧹 Released video capture and frame buffers")
-    elif photo_records and len(evidence_points) > 0:
-        # Pilotfunn: uten video sto {{damage.cause.picture}} igjen som rå
-        # plassholder i rapporten. Bruk fotoet modellen selv pekte ut som
-        # beste bevis (source_photo_index fra manifestet); fall tilbake til
-        # første foto når indeksen mangler eller er ugyldig.
-        chosen = photo_records[0]
-        idx = getattr(evidence_points[0], "source_photo_index", None)
-        if isinstance(idx, int) and 1 <= idx <= len(photo_records):
-            chosen = photo_records[idx - 1]
-        print(f"📸 Ingen video — bruker inspektørfoto som bevisbilde: {chosen['path']}")
-        try:
-            upload_and_insert_image(drive, docs, doc_id, chosen["path"], "{{damage.cause.picture}}", output_folder)
-        except Exception as exc:
-            print(f"⚠️  Kunne ikke sette inn bevisbilde fra foto: {exc}")
-    else:
-        print("ℹ️ Ingen video- eller fotobevis å bruke som bevisbilde.")
+                if evidence_path is not None:
+                    try:
+                        os.unlink(evidence_path)
+                    except OSError:
+                        pass
 
-    # 5. Final Text Replacement (Gemini + project metadata)
-    replacements = build_replacements(report_meta or {})
+                # Force garbage collection to free OpenCV buffers
+                gc.collect()
+                print("🧹 Released video capture and frame buffers")
+        elif photo_records and len(evidence_points) > 0:
+            # Pilotfunn: uten video sto {{damage.cause.picture}} igjen som rå
+            # plassholder i rapporten. Bruk fotoet modellen selv pekte ut som
+            # beste bevis (source_photo_index fra manifestet); fall tilbake til
+            # første foto når indeksen mangler eller er ugyldig.
+            chosen = photo_records[0]
+            idx = getattr(evidence_points[0], "source_photo_index", None)
+            if isinstance(idx, int) and 1 <= idx <= len(photo_records):
+                chosen = photo_records[idx - 1]
+            print(f"📸 Ingen video — bruker inspektørfoto som bevisbilde: {chosen['path']}")
+            try:
+                upload_and_insert_image(drive, docs, doc_id, chosen["path"], "{{damage.cause.picture}}", output_folder)
+            except Exception as exc:
+                print(f"⚠️  Kunne ikke sette inn bevisbilde fra foto: {exc}")
+        else:
+            print("ℹ️ Ingen video- eller fotobevis å bruke som bevisbilde.")
 
-    # Sikkerhetsnett: hvis bildeinnsettingen over lyktes, er plassholderen
-    # allerede borte og denne erstatningen er en no-op. Hvis den feilet eller
-    # ingen bevis fantes, skal LESEREN aldri se en rå mal-plassholder.
-    replacements["{{damage.cause.picture}}"] = (
-        "Se «Bilder av stedet»." if photo_records else "—"
-    )
-    
-    replacements.update({
-        "{{damage.cause.area}}": analysis.area,
-        "{{damage.cause.source}}": analysis.source,
-        "{{damage.cause.cause}}": analysis.cause,
-        "{{damage.cause.description}}": analysis.description,
-        # Checkbox logic
-        "{{habitable.is_habitable}}": f"Beboelighet: {'☒ Ja' if analysis.is_habitable else '☐ Ja'} {'☒ Nei' if not analysis.is_habitable else '☐ Nei'}",
-        "{{damage.extent.description}}": analysis.extent_description,
-        "{{damage.repairs_needed.description}}": analysis.repairs_description
-    })
-    replace_text_in_doc(docs, doc_id, replacements)
+        # 5. Final Text Replacement (Gemini + project metadata)
+        replacements = build_replacements(report_meta or {})
 
-    # 5b. Bildegalleri: ALLE inspektørfoto inn under «Bilder av stedet», i
-    # opptaksrekkefølge med rom/bildetekst. Pilotfunn: seksjonen sto tom og
-    # testeren kunne ikke se hvilke bilder som faktisk var med i grunnlaget.
-    if photo_records:
-        gallery = []
-        for i, rec in enumerate(photo_records, 1):
-            label_parts = [f"Foto {i}"]
-            if rec["room"]:
-                label_parts.append(f"— {rec['room']}")
-            if rec["caption"]:
-                label_parts.append(f": {rec['caption']}")
-            gallery.append({"path": rec["path"], "label": " ".join(label_parts)})
-        try:
-            insert_photo_gallery(drive, docs, doc_id, gallery, "Bilder av stedet", output_folder)
-            print(f"🖼️  Satte inn {len(gallery)} foto under «Bilder av stedet»")
-        except Exception as exc:
-            print(f"⚠️  Kunne ikke sette inn bildegalleri: {exc}")
+        # Sikkerhetsnett: hvis bildeinnsettingen over lyktes, er plassholderen
+        # allerede borte og denne erstatningen er en no-op. Hvis den feilet eller
+        # ingen bevis fantes, skal LESEREN aldri se en rå mal-plassholder.
+        replacements["{{damage.cause.picture}}"] = (
+            "Se «Bilder av stedet»." if photo_records else "—"
+        )
 
-    _cleanup_photo_files(photo_records)
+        replacements.update({
+            "{{damage.cause.area}}": analysis.area,
+            "{{damage.cause.source}}": analysis.source,
+            "{{damage.cause.cause}}": analysis.cause,
+            "{{damage.cause.description}}": analysis.description,
+            # Checkbox logic
+            "{{habitable.is_habitable}}": f"Beboelighet: {'☒ Ja' if analysis.is_habitable else '☐ Ja'} {'☒ Nei' if not analysis.is_habitable else '☐ Nei'}",
+            "{{damage.extent.description}}": analysis.extent_description,
+            "{{damage.repairs_needed.description}}": analysis.repairs_description
+        })
+        replace_text_in_doc(docs, doc_id, replacements)
 
-    # 6. Share the document with the tester's email (if provided)
-    if tester_email and tester_email.strip():
-        try:
-            share_doc_with_email(drive, doc_id, tester_email.strip(), role='reader')
-        except Exception as e:
-            # Non-fatal: log and continue — report was still generated successfully
-            print(f"⚠️  Could not share doc with {tester_email}: {e}")
+        # 5b. Bildegalleri: ALLE inspektørfoto inn under «Bilder av stedet», i
+        # opptaksrekkefølge med rom/bildetekst. Pilotfunn: seksjonen sto tom og
+        # testeren kunne ikke se hvilke bilder som faktisk var med i grunnlaget.
+        if photo_records:
+            gallery = []
+            for i, rec in enumerate(photo_records, 1):
+                label_parts = [f"Foto {i}"]
+                if rec["room"]:
+                    label_parts.append(f"— {rec['room']}")
+                if rec["caption"]:
+                    label_parts.append(f": {rec['caption']}")
+                gallery.append({"path": rec["path"], "label": " ".join(label_parts)})
+            try:
+                insert_photo_gallery(drive, docs, doc_id, gallery, "Bilder av stedet", output_folder)
+                print(f"🖼️  Satte inn {len(gallery)} foto under «Bilder av stedet»")
+            except Exception as exc:
+                print(f"⚠️  Kunne ikke sette inn bildegalleri: {exc}")
+
+        _cleanup_photo_files(photo_records)
+
+        # 6. Share the document with the tester's email (if provided)
+        if tester_email and tester_email.strip():
+            try:
+                share_doc_with_email(drive, doc_id, tester_email.strip(), role='reader')
+            except Exception as e:
+                # Non-fatal: log and continue — report was still generated successfully
+                print(f"⚠️  Could not share doc with {tester_email}: {e}")
+    except Exception as exc:
+        _cleanup_photo_files(photo_records)
+        orphaned_doc_id = None
+        if doc_id:
+            try:
+                drive.files().delete(fileId=doc_id, supportsAllDrives=True).execute()
+                print(f"🧹 Slettet halvferdig dokumentkopi {doc_id} etter pipelinefeil")
+            except Exception as del_exc:
+                orphaned_doc_id = doc_id
+                print(f"⚠️  Fikk ikke slettet halvferdig dokumentkopi {doc_id}: {del_exc}")
+        raise ReportPipelineError(str(exc), token_usage=token_usage, doc_id=orphaned_doc_id) from exc
 
     print(f"✅ Pipeline Complete: https://docs.google.com/document/d/{doc_id}")
     # A5 (versjonslagring): den strukturerte analysen returneres sammen med

@@ -153,6 +153,45 @@ check "media streams via share" "$(cat "$WORK/evidence.jpg")" "$BODY"
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/share/$SHARE_ID/media/annet-prosjekt-media?vt=$VT")
 check "foreign media id rejected" "404" "$STATUS"
 
+# ── Lesetids-godkjenningsport ────────────────────────────────────────────────
+# Porten gjelder hele lenkens levetid: trekkes godkjenningen, skal en AKTIV
+# lenke slutte å servere både rapport og media — og virke igjen ved ny
+# godkjenning (sjekken skjer ved lesing, ikke bare ved opprettelse).
+PROJECT_UNAPPROVED=$(echo "$PROJECT_APPROVED" | jq -c 'del(.project.reportApproval) | .project.updatedAt="2026-08-04T12:00:00Z"')
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE/api/projects/p1" -H "x-tester-token: $TOKEN" -H 'Content-Type: application/json' -d "$PROJECT_UNAPPROVED")
+check "approval withdrawn upsert" "200" "$STATUS"
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/share/$SHARE_ID/report?vt=$VT")
+check "live link blocked after approval withdrawn" "410" "$STATUS"
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/share/$SHARE_ID/media/$MEDIA_ID?vt=$VT")
+check "live media blocked after approval withdrawn" "410" "$STATUS"
+
+PROJECT_REAPPROVED=$(echo "$PROJECT_APPROVED" | jq -c '.project.updatedAt="2026-08-04T13:00:00Z" | .project.e2eUnknownField="behold-meg"')
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE/api/projects/p1" -H "x-tester-token: $TOKEN" -H 'Content-Type: application/json' -d "$PROJECT_REAPPROVED")
+check "re-approval upsert" "200" "$STATUS"
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/share/$SHARE_ID/report?vt=$VT")
+check "link active again after re-approval" "200" "$STATUS"
+
+# ── Ukjent-felt-rundtur (skjemaevolusjon) ────────────────────────────────────
+# Et felt bare en nyere klientversjon kjenner skal overleve lagring/lesing —
+# egenskapen finnes i dag kun implisitt (spread overalt); denne freder den.
+UNKNOWN=$(curl -s "$BASE/api/projects/p1" -H "x-tester-token: $TOKEN" | jq -r '.project.e2eUnknownField')
+check "unknown field survives round-trip" "behold-meg" "$UNKNOWN"
+
+# ── Stale PUT rekker flettegrunnlaget tilbake (LWW-vakt) ─────────────────────
+STALE=$(curl -s -X PUT "$BASE/api/projects/p1" -H "x-tester-token: $TOKEN" -H 'Content-Type: application/json' -d "$(echo "$PROJECT_APPROVED" | jq -c '.project.updatedAt="2026-08-04T09:00:00Z" | .project.name="Gammel kopi"')")
+check "stale put flagged" "true" "$(echo "$STALE" | jq -r '.stale')"
+check "stale put returns newer copy" "Solbergveien 14, Rykkinn" "$(echo "$STALE" | jq -r '.project.name')"
+
+# ── Idempotent medieopplasting (sha256-dedup) ────────────────────────────────
+DUP_JSON=$(curl -s -X POST "$BASE/api/media" -H "x-tester-token: $TOKEN" -F "file=@$WORK/evidence.jpg;type=image/jpeg" -F "projectId=p1" -F "kind=photo")
+check "duplicate upload reuses id" "$MEDIA_ID" "$(echo "$DUP_JSON" | jq -r '.id')"
+
+# ── Transcribe-kontrakt: JSON {audioRemoteId} ────────────────────────────────
+# Uten Gemini-nøkkel i e2e: en ukjent id skal gi 404 (kontrakten forstås) —
+# ikke 400 «No file uploaded» slik den gamle JSON-kontrakten alltid fikk.
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/transcribe" -H "x-tester-token: $TOKEN" -H 'Content-Type: application/json' -d '{"audioRemoteId":"finnes-ikke"}')
+check "transcribe accepts audioRemoteId contract" "404" "$STATUS"
+
 # ── Share page shell ─────────────────────────────────────────────────────────
 PAGE=$(curl -s "$BASE/share/$SHARE_ID")
 check "share page served" "true" "$(echo "$PAGE" | grep -q 'PIN-koden' && echo true)"

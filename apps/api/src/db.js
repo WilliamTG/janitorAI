@@ -153,6 +153,19 @@ CREATE TABLE IF NOT EXISTS cost_events (
 );
 CREATE INDEX IF NOT EXISTS cost_events_op_created_idx ON cost_events (operation, created_at DESC);
 
+-- Server-side hovedbok over rapportgenereringer: doc_id skrives her i det
+-- motoren svarer, så et generert Google-dokument alltid er oppdagbart selv om
+-- klienten aldri rekker å synke reportUrl (dual-write-hullet mot Drive).
+CREATE TABLE IF NOT EXISTS report_generations (
+  id            BIGSERIAL   PRIMARY KEY,
+  tester_token  VARCHAR,
+  project_id    TEXT,
+  doc_id        TEXT,
+  status        TEXT        NOT NULL DEFAULT 'success',  -- 'success' | 'error'
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS report_generations_tenant_idx ON report_generations (tester_token, project_id, created_at DESC);
+
 -- Incremental migrations for pre-existing deployments
 ALTER TABLE projects        ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
 ALTER TABLE deleted_projects ADD COLUMN IF NOT EXISTS tester_token   VARCHAR;

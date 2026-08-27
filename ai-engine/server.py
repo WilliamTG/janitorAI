@@ -1,4 +1,5 @@
 import os
+import socket
 import tempfile
 import requests
 from urllib.parse import urlparse
@@ -6,10 +7,23 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
-from main import create_report
+from main import create_report, ReportPipelineError
+from prompt import PROMPT_VERSION
 from google_api import connect_to_google_api_personal, download_knowledge_from_drive, export_doc_as_pdf, export_doc_as_docx
 
+# Google Docs/Drive-klientene (httplib2) har ellers ingen timeout: én hengende
+# forbindelse kunne okkupere motoren lenge etter at brukeren fikk feilmelding.
+socket.setdefaulttimeout(120)
+
 app = FastAPI()
+
+
+@app.get("/health")
+def health():
+    # Liveness for oppetidsmonitor: prosessen kjører og kan svare. Bevisst uten
+    # Google-API-sjekk her — den ville hamret OAuth-endepunktet ved hyppig
+    # polling; token-feil oppdages som 503 fra /api/report og i loggene.
+    return {"status": "ok", "prompt_version": PROMPT_VERSION}
 
 class ReportRequest(BaseModel):
     video_url: Optional[str] = None  # Optional uploaded inspection video
@@ -114,8 +128,13 @@ def download_video_from_url(video_url: str, local_dir: str) -> str:
     return local_path
 
 
+# Merk: begge endepunktene er vanlige `def`, ikke `async def` — FastAPI kjører
+# dem da i threadpool. Med `async def` blokkerte det synkrone tungarbeidet
+# (Gemini, Docs-fletting, Drive-eksport) hele event-loopen, så én rapport
+# under generering stengte hele tjenesten for alle andre (head-of-line
+# blocking): tester nr. 2 fikk timeout selv om motoren var frisk.
 @app.get("/api/export/{doc_id}")
-async def export_document(doc_id: str, format: str, fastapi_req: Request):
+def export_document(doc_id: str, format: str, fastapi_req: Request):
     """
     Exports a Google Doc as PDF or DOCX and streams the bytes back.
     Called by the Node.js API when a tester requests a file download.
@@ -159,13 +178,18 @@ async def export_document(doc_id: str, format: str, fastapi_req: Request):
 
 
 @app.post("/api/report")
-async def run_analysis(fastapi_req: Request, request: ReportRequest):
+def run_analysis(fastapi_req: Request, request: ReportRequest):
     client_token = fastapi_req.headers.get("x-tester-token")
     server_token = os.getenv("TESTER_TOKEN")
 
     if client_token != server_token:
         print(f"🚫 Rejected request: wrong token")
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Korrelasjon med API-loggen: backend sender sin request-id videre hit.
+    request_id = fastapi_req.headers.get("x-request-id")
+    if request_id:
+        print(f"🔗 Request-id fra API: {request_id}")
 
     try:
         docs_service, drive_service = connect_to_google_api_personal()
@@ -211,9 +235,23 @@ async def run_analysis(fastapi_req: Request, request: ReportRequest):
             "url": report_url,
             "analysis": analysis.model_dump() if analysis is not None else None,
             "token_usage": token_usage,
+            "prompt_version": PROMPT_VERSION,
         }
+    except ReportPipelineError as e:
+        # Feil ETTER analysen: Gemini er fakturert (token_usage følger med så
+        # API-et kan bokføre kostnaden), og doc_id peker på en halvferdig kopi
+        # som IKKE lot seg slette — den må ryddes manuelt i Drive.
+        print(f"❌ Pipeline error after analysis: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        payload = {"status": "error", "message": str(e), "prompt_version": PROMPT_VERSION}
+        if e.token_usage:
+            payload["token_usage"] = e.token_usage
+        if e.doc_id:
+            payload["doc_id"] = e.doc_id
+        return payload
     except Exception as e:
         print(f"❌ Error during analysis: {str(e)}")
         import traceback
         traceback.print_exc()
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": str(e), "prompt_version": PROMPT_VERSION}

@@ -34,7 +34,7 @@ import {
   ReportMeta,
   UNKNOWN_INSPECTOR,
 } from '@/src/features/projects/types';
-import { contentFromAnalysis } from '@/src/features/projects/reportVersions';
+import { changedFields, contentFromAnalysis } from '@/src/features/projects/reportVersions';
 import {
   ROOM_SUGGESTIONS,
   checklistForRoom,
@@ -813,6 +813,41 @@ export default function ProjectDetailScreen() {
     }
   };
 
+  // Serverens /transcribe forstår to kontrakter: multipart-fil («file») eller
+  // JSON { audioRemoteId }. Den gamle klientkoden sendte JSON { audioUri } —
+  // en kontrakt serveren aldri har forstått, så kallet døde med 400 før
+  // Gemini. Foretrekk den varige serverkopien (ingen re-opplasting, eierskap
+  // verifiseres server-side); fall tilbake til å sende lydbytene som FormData.
+  const requestTranscription = async (
+    audioUri: string,
+    audioRemoteId?: string,
+  ): Promise<Response> => {
+    if (audioRemoteId) {
+      return apiFetch(`${getApiBaseUrl()}/transcribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioRemoteId }),
+      });
+    }
+
+    const formData = new FormData();
+    if (Platform.OS === 'web') {
+      const blobResponse = await fetch(audioUri, { signal: AbortSignal.timeout(30_000) });
+      if (!blobResponse.ok) {
+        throw new Error(`Fikk ikke lest lydopptaket (HTTP ${blobResponse.status})`);
+      }
+      const blob = await blobResponse.blob();
+      const ext = (blob.type.split('/')[1] || 'm4a').split(';')[0];
+      formData.append('file', blob, `audio.${ext}`);
+    } else {
+      const extMatch = audioUri.split('?')[0].match(/\.([A-Za-z0-9]+)$/);
+      const ext = extMatch ? extMatch[1].toLowerCase() : 'm4a';
+      formData.append('file', { uri: audioUri, name: `audio.${ext}`, type: `audio/${ext}` } as any);
+    }
+    // Ikke sett Content-Type manuelt — multipart-boundary settes automatisk.
+    return apiFetch(`${getApiBaseUrl()}/transcribe`, { method: 'POST', body: formData });
+  };
+
   const transcribeNote = async (noteId: string) => {
     if (!project) return;
 
@@ -823,15 +858,7 @@ export default function ProjectDetailScreen() {
     }
 
     try {
-      const response = await apiFetch(`${getApiBaseUrl()}/transcribe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          audioUri: note.audioUri,
-        }),
-      });
+      const response = await requestTranscription(note.audioUri, note.audioRemoteId);
 
       if (!response.ok) {
         console.error('Backend /transcribe error: non-OK response');
@@ -887,15 +914,10 @@ export default function ProjectDetailScreen() {
 
     try {
       setIsTranscribingDescription(true);
-      const response = await apiFetch(`${getApiBaseUrl()}/transcribe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          audioUri: project.projectDescriptionAudioUri,
-        }),
-      });
+      const response = await requestTranscription(
+        project.projectDescriptionAudioUri,
+        project.projectDescriptionAudioRemoteId,
+      );
 
       if (!response.ok) {
         console.error('Backend /transcribe error: non-OK response');
@@ -1462,10 +1484,34 @@ export default function ProjectDetailScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           report_meta: reportMetaDraft,
+          // project_id gir serveren nøkkel til hovedboken (report_generations)
+          // og til én-kjøring-om-gangen-vakten.
+          project_id: snap.id,
           ...(videoFilename ? { video_filename: videoFilename } : {}),
           project: projectContext,
         }),
       });
+
+      if (response.status === 409) {
+        // Serverens idempotens-vakt: en generering pågår allerede for dette
+        // prosjektet (f.eks. en retry etter timeout, eller en annen enhet).
+        // Ikke marker som feilet — den pågående kjøringen eier statusen.
+        let code: string | undefined;
+        try {
+          code = (await response.json())?.code;
+        } catch {
+          // uparsbart svar behandles som generisk feil under
+        }
+        if (code === 'REPORT_IN_PROGRESS') {
+          // Denne forespørselen startet ingen generering — gjenopprett forrige
+          // status/feil OG godkjenningsstempelet som pre-fetch-wipen fjernet.
+          // Uten dette ville et gyldig stempel synkes bort og drepe en aktiv
+          // delingslenke via serverens lesetids-410-port.
+          await updateProjectLocally({ ...snap });
+          toast.show({ message: nb.report.alreadyInProgress, variant: 'info' });
+          return;
+        }
+      }
 
       if (!response.ok) {
         const errMsg = `${nb.report.failed} (HTTP ${response.status})`;
@@ -1490,6 +1536,11 @@ export default function ProjectDetailScreen() {
         // Utkastet arkiveres uendret; final starter som kopi og redigeres.
         const draftContent = contentFromAnalysis(data.analysis);
         const draftAt = new Date().toISOString();
+        // Proveniens: promptversjonen som produserte utkastet lagres med det,
+        // så valideringsbatteriet og draft-vs-godkjent-diffen kan skåres per
+        // promptgenerasjon.
+        const promptVersion =
+          typeof data.prompt_version === 'string' ? data.prompt_version : undefined;
         await updateProjectLocally({
           ...snap,
           reportUrl: data.url,
@@ -1497,8 +1548,19 @@ export default function ProjectDetailScreen() {
           reportError: undefined,
           // Ny rapport er et nytt AI-utkast — aldri arv forrige godkjenning.
           reportApproval: undefined,
-          reportDraft: draftContent ? { content: draftContent, at: draftAt } : undefined,
-          reportFinal: draftContent ? { content: { ...draftContent }, at: draftAt } : undefined,
+          // Eksplisitt tom-markør når analysen mangler (aldri undefined):
+          // finnes-vinner-flettingen ville ellers gjenopplivet FORRIGE
+          // genererings utkast under den nye rapportens URL på andre enheter.
+          reportDraft: {
+            content: draftContent ?? {},
+            at: draftAt,
+            promptVersion,
+          },
+          reportFinal: {
+            content: draftContent ? { ...draftContent } : {},
+            at: draftAt,
+            promptVersion,
+          },
         });
         toast.show({ message: nb.report.ready, variant: 'success' });
       } else {
@@ -2113,6 +2175,18 @@ export default function ProjectDetailScreen() {
                 {nb.report.downloadWord}
               </SecondaryButton>
             </View>
+            {/* Ærlig merking til re-fletting finnes: dokumentfilen inneholder
+                AI-utkastet slik det ble flettet inn — takstpersonens rettelser
+                lever i reportFinal (delingslenken), ikke i Google-dokumentet.
+                Vises kun når de to versjonene faktisk avviker. */}
+            {project && changedFields(project).length > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.spacing.xs }}>
+                <Ionicons name="information-circle-outline" size={16} color={theme.colors.muted} />
+                <Caption muted style={{ flex: 1 }}>
+                  {nb.report.downloadIsDraftWarning}
+                </Caption>
+              </View>
+            )}
           </GlassCard>
         )}
 

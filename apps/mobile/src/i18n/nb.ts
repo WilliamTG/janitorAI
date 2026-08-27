@@ -137,9 +137,13 @@ export const nb = {
     ],
     ready: 'Rapporten er klar',
     failed: 'Rapportgenereringen feilet',
+    alreadyInProgress:
+      'En rapport genereres allerede for dette prosjektet — vent til den er ferdig.',
     openReport: 'Åpne rapporten',
     downloadPdf: 'Last ned PDF',
     downloadWord: 'Last ned Word',
+    downloadIsDraftWarning:
+      'PDF/Word-filen er det opprinnelige AI-utkastet fra dokumentet. Rettelsene dine vises i delingslenken, men er ennå ikke flettet inn i dokumentfilen.',
     interrupted: 'Genereringen ble avbrutt — prøv igjen.',
     unauthorized: 'Tilgangskoden er ugyldig eller utløpt.',
     details: 'Rapportdetaljer',

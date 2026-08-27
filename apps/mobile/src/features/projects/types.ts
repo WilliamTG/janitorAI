@@ -75,6 +75,12 @@ export type ReportVersion = {
   content: ReportContent;
   /** ISO-tidspunkt for når versjonen ble laget/sist endret. */
   at: string;
+  /**
+   * Proveniens: hvilken promptgenerasjon i AI-motoren som produserte utkastet
+   * (motorens PROMPT_VERSION). Gjør draft-vs-godkjent-diffen og
+   * valideringsbatteriet målbare per promptversjon.
+   */
+  promptVersion?: string;
 };
 
 /** Feltnøklene i ReportContent som diffes mellom utkast og godkjent versjon. */
@@ -175,6 +181,13 @@ export type Note = {
 
 export type Project = {
   id: string;
+  /**
+   * Skjemagenerasjon for prosjektdokumentet. Regel hos alle lesere:
+   * «mangler = 1». Fremtidige formendringer gjøres som migrering-ved-lesing
+   * («if (v < 2) …») i loadProjects i stedet for at hver leser gjetter på
+   * dokumentets generasjon. Stemples ved hver lagring (projectsStorage).
+   */
+  schemaVersion?: number;
   name: string;
   inspectionDate: string;
   inspector: string;

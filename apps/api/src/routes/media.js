@@ -212,6 +212,36 @@ router.post("/", heavyLimiter, rejectWhenDiskFull, upload.single("file"), async 
 
     const sha256 = await sha256OfFile(filePath);
 
+    // Idempotent opplasting: en retry etter tapt svar (nett dør etter at
+    // serveren committet) skal ikke lage duplikatrad + duplikatfil. Samme
+    // innhold fra samme tester på samme prosjekt gjenbruker eksisterende id.
+    // Skopet på project_id med vilje: prosjektsletting fjerner media-rader per
+    // project_id, så deling av rad på tvers av prosjekter ville vært farlig.
+    if (sha256) {
+      const pool = getPool();
+      const dup = await pool.query(
+        `SELECT id, file_path FROM media
+         WHERE tester_token = $1 AND sha256 = $2 AND size_bytes = $3
+           AND project_id IS NOT DISTINCT FROM $4
+         LIMIT 1`,
+        [req.testerToken, sha256, req.file.size || null, projectId]
+      );
+      if (dup.rows.length > 0) {
+        // UPDATE-en er det atomiske «kravet» på raden: den nullstiller et ev.
+        // ureferert-merke FØR vi kaster den ferske filen, og feiler kravet
+        // (raden ble slettet av en samtidig sweep) faller vi gjennom til
+        // vanlig INSERT — tempfilen ligger fortsatt på disk.
+        const claimed = await pool.query(
+          "UPDATE media SET unreferenced_at = NULL WHERE id = $1 AND tester_token = $2 RETURNING file_path",
+          [dup.rows[0].id, req.testerToken]
+        );
+        if (claimed.rowCount === 1 && fs.existsSync(claimed.rows[0].file_path)) {
+          fs.unlink(filePath, () => {});
+          return res.json({ id: dup.rows[0].id, sha256, deduplicated: true });
+        }
+      }
+    }
+
     // S3: hindre at tester B planter media under tester A sitt prosjekt. Vi
     // avviser bare når prosjektet FINNES og eies av en annen tester — media
     // lastes ofte opp før prosjektet er synket til serveren, så et prosjekt som
