@@ -52,6 +52,7 @@ import {
   updateProject as updateProjectInStorage,
 } from '@/src/storage/projectsStorage';
 import { pullAndMerge, schedulePush, subscribeToProjectUpdates, touchProject, clearVideoRetryState } from '@/src/sync/projectSync';
+import { fetchReportStatus, resolveStuckReport } from '@/src/sync/reportRecovery';
 import { persistMediaLocally } from '@/src/sync/persistMedia';
 import { displayMediaUri } from '@/src/sync/mediaUri';
 import { useVideoUploadProgress } from '@/src/sync/syncStatus';
@@ -1622,6 +1623,29 @@ export default function ProjectDetailScreen() {
         // 401 må ikke etterlate prosjektet i evig «Behandler …».
         await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: nb.report.unauthorized });
         return;
+      }
+      // Brutt forbindelse betyr ikke at genereringen feilet — motoren kan
+      // fortsatt jobbe, eller alt ble ferdig uten at svaret nådde frem. Spør
+      // hovedboka (/report/status) før forsøket avskrives som feil.
+      const status = await fetchReportStatus(snap.id);
+      if (status) {
+        const outcome = resolveStuckReport(snap, status);
+        if (outcome.kind === 'stillRunning') {
+          await updateProjectLocally({
+            ...snap,
+            reportStatus: 'processing',
+            reportError: undefined,
+            reportApproval: undefined,
+          });
+          toast.show({ message: nb.report.stillRunning, variant: 'info' });
+          return;
+        }
+        if (outcome.kind === 'recovered') {
+          setGoogleDocUrl(outcome.project.reportUrl ?? null);
+          await updateProjectLocally(outcome.project);
+          toast.show({ message: nb.report.recovered, variant: 'success' });
+          return;
+        }
       }
       const errMsg = 'Fikk ikke kontakt med serveren.';
       await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });

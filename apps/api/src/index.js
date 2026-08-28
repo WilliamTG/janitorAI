@@ -821,6 +821,45 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
   }
 });
 
+// ---------- REPORT STATUS (hovedbok-lesing) ----------
+// Hovedboka (report_generations) gjort nyttig for klienten: en generering kan
+// fullføre server-side etter at appens forespørsel døde (låst mobil, lukket
+// fane, brutt nett i 10-minuttersvinduet). Uten dette endepunktet avskrev
+// appen prosjektet som «avbrutt» og brukeren regenererte — dobbel kostnad og
+// et foreldreløst dokument i Drive. Tenant-skopet: kun egen tester_token.
+// Merk: inFlight leses fra prosessens minne — sant så lenge API-et kjører som
+// én instans (in-flight-vakten har samme forutsetning).
+app.get("/report/status/:projectId", async (req, res) => {
+  const projectId = String(req.params.projectId);
+  const entry = reportGenerationsInFlight.get(`${req.testerToken}:${projectId}`);
+  const inFlight = Boolean(
+    entry && Date.now() - entry.startedAt < REPORT_INFLIGHT_TTL_MS
+  );
+
+  if (!isDbEnabled()) return res.json({ inFlight, latest: null });
+  try {
+    const row = await getPool().query(
+      `SELECT doc_id, status, created_at FROM report_generations
+       WHERE tester_token = $1 AND project_id = $2
+       ORDER BY created_at DESC LIMIT 1`,
+      [req.testerToken, projectId]
+    );
+    const latest = row.rows[0]
+      ? {
+          status: row.rows[0].status,
+          createdAt: row.rows[0].created_at,
+          url: row.rows[0].doc_id
+            ? `https://docs.google.com/document/d/${row.rows[0].doc_id}/edit`
+            : null,
+        }
+      : null;
+    res.json({ inFlight, latest });
+  } catch (err) {
+    console.error("GET /report/status error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // ---------- REPORT DOWNLOAD PROXY (PDF / DOCX) ----------
 // GET /api/projects/:id/download/pdf?doc_url=<google-doc-url>
 // GET /api/projects/:id/download/docx?doc_url=<google-doc-url>

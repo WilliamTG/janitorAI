@@ -21,6 +21,7 @@ import apiFetch, {
 } from '@/src/lib/apiFetch';
 import { formatDate, nb } from '@/src/i18n/nb';
 import { getApiBaseUrl } from '@/src/config/api';
+import { fetchReportStatus, resolveStuckReport } from '@/src/sync/reportRecovery';
 import { newId } from '@/src/lib/ids';
 import { CaseFile, NO_DATE_SET, Project, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
 import { formatMinutes, minutesToApproved } from '@/src/features/projects/metrics';
@@ -242,23 +243,44 @@ export default function Index() {
           // server copy that is also still stuck 'processing'.
           const hasStuck = merged.some((p) => p.reportStatus === 'processing');
           if (hasStuck) {
-            const reset = merged.map((p) =>
-              p.reportStatus === 'processing'
-                ? touchProject({
-                    ...p,
-                    reportStatus: 'failed' as const,
-                    reportError: nb.report.interrupted,
-                  })
-                : p
-            );
-            setProjects(reset);
-            await saveProjects(reset);
-            // Push each reset project so the server copy is also corrected.
-            for (const p of reset) {
-              if (p.reportStatus === 'failed' &&
-                  p.reportError === nb.report.interrupted) {
-                schedulePush(p);
+            // Hovedboka først (report_generations via /report/status): en
+            // generering kan ha fullført server-side etter at appen døde.
+            // Da gjenfinnes dokumentet i stedet for å avskrives som avbrutt
+            // (og regenereres til dobbel kostnad). Pågår den ennå, får den stå.
+            const resolved: Project[] = [];
+            const changed: Project[] = [];
+            for (const p of merged) {
+              if (p.reportStatus !== 'processing') {
+                resolved.push(p);
+                continue;
               }
+              const status = await fetchReportStatus(p.id);
+              // Uten svar (offline/eldre server): dagens oppførsel — avbrutt.
+              const outcome = status
+                ? resolveStuckReport(p, status)
+                : ({ kind: 'interrupted' } as const);
+              if (outcome.kind === 'stillRunning') {
+                resolved.push(p);
+              } else if (outcome.kind === 'recovered') {
+                const recovered = touchProject(outcome.project);
+                resolved.push(recovered);
+                changed.push(recovered);
+              } else {
+                const reset = touchProject({
+                  ...p,
+                  reportStatus: 'failed' as const,
+                  reportError: nb.report.interrupted,
+                });
+                resolved.push(reset);
+                changed.push(reset);
+              }
+            }
+            setProjects(resolved);
+            await saveProjects(resolved);
+            // Push corrected projects so the server copy matches (touchProject
+            // advanced updatedAt, so the fix wins future LWW merges).
+            for (const p of changed) {
+              schedulePush(p);
             }
           }
         }
