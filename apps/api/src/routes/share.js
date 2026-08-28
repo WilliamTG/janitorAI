@@ -284,6 +284,18 @@ router.get("/:id/report", requireViewToken, async (req, res) => {
       return res.status(410).json({ error: "Prosjektet finnes ikke lenger" });
     }
 
+    // Godkjenningsporten gjelder hele lenkens levetid, ikke bare opprettelsen:
+    // trekkes godkjenningen (eller nullstilles den av redigering/regenerering),
+    // skal en aktiv lenke slutte å servere innhold — invarianten «AI-utkast
+    // når aldri en mottaker» håndheves ved lesing, der den faktisk teller.
+    const projectData = projectResult.rows[0].data || {};
+    const approval = projectData.reportApproval;
+    if (!approval || !approval.approvedAt) {
+      return res
+        .status(410)
+        .json({ error: "Rapporten er ikke lenger godkjent for deling" });
+    }
+
     // S3: skoper også på eierens tester_token, så eventuelle rader plantet under
     // prosjektet av en annen tester aldri når mottakeren.
     const mediaResult = await pool.query(
@@ -294,7 +306,7 @@ router.get("/:id/report", requireViewToken, async (req, res) => {
 
     res.json({
       expiresAt: req.share.expires_at,
-      report: buildReportPayload(projectResult.rows[0].data || {}, mediaById),
+      report: buildReportPayload(projectData, mediaById),
     });
   } catch (err) {
     console.error("GET /api/share/:id/report error:", sanitizeError(err));
@@ -306,6 +318,21 @@ router.get("/:id/report", requireViewToken, async (req, res) => {
 router.get("/:id/media/:mediaId", requireViewToken, async (req, res) => {
   try {
     const pool = getPool();
+
+    // Samme lesetids-port som /report: uten godkjenning streames heller ikke
+    // bevismedia til mottakeren (JSONB-oppslaget er indeksert på primærnøkkel).
+    const approved = await pool.query(
+      `SELECT 1 FROM projects
+       WHERE id = $1 AND tester_token = $2
+         AND data->'reportApproval'->>'approvedAt' IS NOT NULL`,
+      [req.share.project_id, req.share.tester_token]
+    );
+    if (approved.rows.length === 0) {
+      return res
+        .status(410)
+        .json({ error: "Rapporten er ikke lenger godkjent for deling" });
+    }
+
     const result = await pool.query(
       "SELECT file_path, mime_type FROM media WHERE id = $1 AND project_id = $2 AND tester_token = $3",
       [String(req.params.mediaId), req.share.project_id, req.share.tester_token]

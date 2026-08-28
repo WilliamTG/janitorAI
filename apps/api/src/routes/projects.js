@@ -136,23 +136,33 @@ router.put("/:id", async (req, res) => {
 });
 
 // ── Delete project (tombstoned, scoped) ──────────────────────────────────────
+// Én transaksjon rundt de tre skrivingene: et krasj midt i sekvensen kunne
+// ellers gi sletting UTEN tombstone — og prosjektet gjenoppstår fra en annen
+// enhets kopi ved neste synk. Fil-sletting skjer etter COMMIT (kan ikke rulles
+// tilbake); en krasj der etterlater kun filer som katalogskannen i
+// mediaCleanup rydder senere.
 router.delete("/:id", async (req, res) => {
+  const id = String(req.params.id);
+  const token = req.testerToken;
+  const pool = getPool();
+
+  let mediaRows = [];
+  const client = await pool.connect();
   try {
-    const id = String(req.params.id);
-    const token = req.testerToken;
-    const pool = getPool();
+    await client.query("BEGIN");
 
     // Collect media paths before deleting rows (scoped to this tester).
-    const mediaRows = await pool.query(
+    const media = await client.query(
       "SELECT file_path FROM media WHERE project_id = $1 AND tester_token = $2",
       [id, token]
     );
+    mediaRows = media.rows;
 
-    await pool.query(
+    await client.query(
       "DELETE FROM projects WHERE id = $1 AND tester_token = $2",
       [id, token]
     );
-    await pool.query(
+    await client.query(
       "DELETE FROM media WHERE project_id = $1 AND tester_token = $2",
       [id, token]
     );
@@ -160,7 +170,7 @@ router.delete("/:id", async (req, res) => {
     // aldri kunne kapre en tombstone via samme id. (Prosjekt-IDer er nå
     // uforutsigbare UUID-er fra klienten, så kryss-tester-kollisjon er uansett
     // praktisk umulig; dette er forsvar i dybden mot den globale primærnøkkelen.)
-    await pool.query(
+    await client.query(
       `INSERT INTO deleted_projects (id, deleted_at, tester_token)
        VALUES ($1, now(), $2)
        ON CONFLICT (id) DO UPDATE SET deleted_at = now()
@@ -168,16 +178,25 @@ router.delete("/:id", async (req, res) => {
       [id, token]
     );
 
-    for (const row of mediaRows.rows) {
-      fs.unlink(row.file_path, () => {});
-    }
-
-    reconcileAfterUpsert();
-    res.json({ deleted: true });
+    await client.query("COMMIT");
   } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      // tilkoblingen kan alt være død — release i finally rydder uansett
+    }
     console.error("DELETE /api/projects/:id error:", sanitizeError(err));
-    res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ error: "Server error" });
+  } finally {
+    client.release();
   }
+
+  for (const row of mediaRows) {
+    fs.unlink(row.file_path, () => {});
+  }
+
+  reconcileAfterUpsert();
+  res.json({ deleted: true });
 });
 
 module.exports = router;

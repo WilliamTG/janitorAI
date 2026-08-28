@@ -75,11 +75,30 @@ function fetchWithTimeout(url, options = {}, timeoutMs = 60000) {
 }
 
 // Multer config for uploads (audio / images) — 20 MB cap keeps Render RAM safe
-const upload = multer({ dest: "uploads/", limits: { fileSize: 20 * 1024 * 1024 } });
+const TRANSCRIBE_MAX_BYTES = 20 * 1024 * 1024;
+const upload = multer({ dest: "uploads/", limits: { fileSize: TRANSCRIBE_MAX_BYTES } });
 
 // ---------- HEALTH CHECK (PUBLIC) ----------
-app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
+// Liveness svarer alltid 200, men db-feltet er ærlig: en oppetidsmonitor som
+// poller /health skal oppdage «Postgres nede» før første tester rammes —
+// ikke få «ok» fra en prosess som ikke kan lagre noe.
+app.get("/health", async (req, res) => {
+  const health = { status: "ok" };
+  if (isDbEnabled()) {
+    try {
+      const probe = getPool().query("SELECT 1");
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("db probe timeout")), 2500)
+      );
+      await Promise.race([probe, timeout]);
+      health.db = "ok";
+    } catch (err) {
+      health.db = "error";
+    }
+  } else {
+    health.db = "disabled";
+  }
+  res.json(health);
 });
 
 // ---------- STATIC WEB APP (PUBLIC, production) ----------
@@ -363,15 +382,54 @@ const TRANSCRIPTION_PROMPT = [
 ].join(" ");
 
 app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  // To gyldige kontrakter (DDIA-funn: appen sendte JSON mot et endepunkt som
+  // bare forsto multipart — alltid 400 før Gemini):
+  //   1. multipart med feltet "file" (rå lydbytes)
+  //   2. JSON { audioRemoteId } — serveren leser sin egen varige mediekopi.
+  //      Foretrukket etter synk: ingen re-opplasting, og eierskapet
+  //      verifiseres mot tester_token.
+  let filePath = null;
+  let mimeType = null;
+  let cleanupUpload = false;
 
-  const filePath = req.file.path;
+  if (req.file) {
+    filePath = req.file.path;
+    mimeType = req.file.mimetype || "audio/mp4";
+    cleanupUpload = true; // multer-tempfil — slettes i finally
+  } else if (req.body && req.body.audioRemoteId && isDbEnabled()) {
+    try {
+      const row = await getPool().query(
+        "SELECT file_path, mime_type, size_bytes FROM media WHERE id = $1 AND tester_token = $2",
+        [String(req.body.audioRemoteId), req.testerToken]
+      );
+      if (row.rows.length === 0) {
+        return res.status(404).json({ error: "Audio not found for this tester" });
+      }
+      // Samme RAM-tak som multipart-banen (multer 20 MB): filen base64-kodes i
+      // minnet under, så en 500 MB video via audioRemoteId ville ellers omgått
+      // taket helt. Ukjent størrelse behandles som for stor.
+      const sizeBytes = Number(row.rows[0].size_bytes);
+      if (!Number.isFinite(sizeBytes) || sizeBytes > TRANSCRIBE_MAX_BYTES) {
+        return res.status(413).json({
+          error: "Audio file is too large to transcribe (max 20 MB)",
+          code: "FILE_TOO_LARGE",
+        });
+      }
+      filePath = row.rows[0].file_path;
+      mimeType = row.rows[0].mime_type || "audio/mp4";
+    } catch (err) {
+      console.error("Transcribe media lookup error:", sanitizeError(err));
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  }
+
+  if (!filePath) return res.status(400).json({ error: "No file uploaded" });
+
   const startedAt = Date.now();
 
   try {
     const buffer = await fs.promises.readFile(filePath);
     const base64 = buffer.toString("base64");
-    const mimeType = req.file.mimetype || "audio/mp4";
 
     const response = await fetchWithTimeout(GEMINI_BASE_URL, {
       method: "POST",
@@ -388,8 +446,15 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
 
     const raw = await response.text();
     if (!response.ok) {
-      console.error("Gemini /transcribe error:", { status: response.status, length: raw ? raw.length : 0 });
-      return res.status(500).json({ error: "Gemini error" });
+      // Diagnose (pilotfunn 25.08): statuskoden avgjør tiltaket — 429 = kvote
+      // brukt opp, 400/403 = nøkkelproblem. Logg et utdrag av Gemini-svaret
+      // (aldri nøkkelen) og send status videre så appen/testeren kan skille
+      // «prøv igjen senere» fra «kontakt admin».
+      console.error("Gemini /transcribe error:", {
+        status: response.status,
+        body: raw ? raw.slice(0, 300) : "",
+      });
+      return res.status(502).json({ error: "Gemini error", geminiStatus: response.status });
     }
 
     const data = JSON.parse(raw);
@@ -410,10 +475,15 @@ app.post("/transcribe", heavyLimiter, upload.single("file"), async (req, res) =>
 
     res.json({ text });
   } catch (err) {
+    if (err && err.code === "ENOENT") {
+      // Varig mediekopi mangler på disk (slettet/aldri skrevet) — 404, ikke 500.
+      return res.status(404).json({ error: "Audio file missing on server" });
+    }
     console.error("Backend /transcribe error:", sanitizeError(err));
     res.status(500).json({ error: "Server error" });
   } finally {
-    fs.unlink(filePath, () => {});
+    // Slett KUN multer-tempfilen — aldri den varige mediekopien i MEDIA_DIR.
+    if (cleanupUpload) fs.unlink(filePath, () => {});
   }
 });
 
@@ -453,8 +523,13 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
 
     const raw = await response.text();
     if (!response.ok) {
-      console.error("Gemini /describe-image error:", { status: response.status });
-      return res.status(500).json({ error: "Gemini error" });
+      // Samme diagnose-mønster som /transcribe: status + utdrag i loggen,
+      // status videre i svaret.
+      console.error("Gemini /describe-image error:", {
+        status: response.status,
+        body: raw ? raw.slice(0, 300) : "",
+      });
+      return res.status(502).json({ error: "Gemini error", geminiStatus: response.status });
     }
 
     const data = JSON.parse(raw);
@@ -482,14 +557,59 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
 });
 
 // ---------- GOOGLE DOC REPORT (AI ENGINE PROXY) ----------
+// Rapportgenerering er dyr (Gemini-fakturert) og IKKE idempotent: en retry
+// lager nytt dokument og ny regning. Derfor (a) én kjøring om gangen per
+// prosjekt/tester, (b) proxy-timeout som rommer motorens verstefall på lange
+// befaringsvideoer (tidligere 2 min mot motorens 10+ — retry-fella), og
+// (c) en server-side hovedbok (report_generations) så doc_id aldri kun
+// finnes i klientens hender.
+const REPORT_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
+const REPORT_INFLIGHT_TTL_MS = 15 * 60 * 1000;
+// Signerte medie-URL-er til motoren må overleve hele kjøringen: med standard-
+// TTL (15 min) kunne foto utløpe midt i en lang analyse og droppes stille.
+const REPORT_MEDIA_URL_TTL_MS = 60 * 60 * 1000;
+const reportGenerationsInFlight = new Map(); // key -> startedAt (epoch ms)
+
+function recordReportGeneration({ testerToken, projectId, docId, status }) {
+  if (!isDbEnabled()) return;
+  getPool()
+    .query(
+      `INSERT INTO report_generations (tester_token, project_id, doc_id, status)
+       VALUES ($1, $2, $3, $4)`,
+      [testerToken || null, projectId || null, docId || null, status]
+    )
+    .catch((err) =>
+      console.error("report_generations insert error:", sanitizeError(err))
+    );
+}
+
 app.post("/report/google-doc", heavyLimiter, async (req, res) => {
   const aiEngineUrl = process.env.AI_ENGINE_URL;
   if (!aiEngineUrl) {
     return res.status(503).json({ error: "AI engine not configured" });
   }
 
+  const { report_meta, video_filename, project, project_id } = req.body;
+  const projectId = project_id ? String(project_id) : null;
+  // Nøkkelen navnromsdeles på tester-token: project_id er klientoppgitt og
+  // eierskapsuverifisert, så uten navnrom kunne tester B blokkere tester A
+  // sin generering (409-DoS) ved å sende A sin prosjekt-id.
+  const inflightKey = `${req.testerToken}:${projectId || ""}`;
+
+  const existing = reportGenerationsInFlight.get(inflightKey);
+  if (existing && Date.now() - existing.startedAt < REPORT_INFLIGHT_TTL_MS) {
+    return res.status(409).json({
+      error: "Report generation already in progress for this project",
+      code: "REPORT_IN_PROGRESS",
+    });
+  }
+  // Egen entry-referanse (ikke bare timestamp): etter en TTL-overtakelse skal
+  // den GAMLE kjøringens finally ikke slette den NYE kjøringens vakt.
+  const inflightEntry = { startedAt: Date.now() };
+  reportGenerationsInFlight.set(inflightKey, inflightEntry);
+  let engineCallStarted = false;
+
   try {
-    const { report_meta, video_filename, project } = req.body;
     // Use the token already validated and set by the requireTesterToken middleware.
     // Reading the raw header again would miss Authorization: Bearer tokens.
     const token = req.testerToken;
@@ -515,7 +635,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
       `${req.protocol}://${req.get("host")}`;
     const videoUrl =
       video_filename && video_filename !== "demo"
-        ? signedMediaUrl(apiBaseUrl, video_filename)
+        ? signedMediaUrl(apiBaseUrl, video_filename, REPORT_MEDIA_URL_TTL_MS)
         : null;
 
     // Resolve photo URIs to absolute URLs and strip empty fields so the AI
@@ -560,7 +680,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
             let uri;
             if (p.remoteId) {
               if (!ownedPhotoIds.has(String(p.remoteId))) return null;
-              uri = signedMediaUrl(apiBaseUrl, p.remoteId);
+              uri = signedMediaUrl(apiBaseUrl, p.remoteId, REPORT_MEDIA_URL_TTL_MS);
             } else {
               uri = String(p.uri);
             }
@@ -596,6 +716,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     // so the backend needs AI_ENGINE_TOKEN set to that same value.
     const aiToken = process.env.AI_ENGINE_TOKEN || "";
     const startedAt = Date.now();
+    engineCallStarted = true;
     const response = await fetchWithTimeout(
       `${aiEngineUrl}/api/report`,
       {
@@ -603,6 +724,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
         headers: {
           "Content-Type": "application/json",
           "x-tester-token": aiToken,
+          ...(req.requestId ? { "X-Request-Id": req.requestId } : {}),
         },
         body: JSON.stringify({
           ...(videoUrl ? { video_url: videoUrl } : {}),
@@ -611,7 +733,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
           tester_email: req.testerEmail || "",
         }),
       },
-      120000 // rapportgenerering er tung — 2 min
+      REPORT_PROXY_TIMEOUT_MS
     );
 
     const data = await response.json();
@@ -621,12 +743,14 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     }
 
     // COGS: AI-motoren returnerer token_usage fra Gemini-analysen (den store
-    // kostnadsdriveren). Fire-and-forget.
+    // kostnadsdriveren) — også ved pipelinefeil ETTER analysen, som ellers var
+    // fakturert men usynlig i kostnadsmålingen. Fire-and-forget.
+    const failed = data && data.status === "error";
     const tu = data && data.token_usage;
     if (tu) {
       recordCost({
         testerToken: req.testerToken,
-        operation: "report",
+        operation: failed ? "report_failed" : "report",
         model: tu.model || "gemini-2.5-flash",
         usage: {
           input: tu.input_tokens || 0,
@@ -637,10 +761,50 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
       }).catch(() => {});
     }
 
+    if (failed) {
+      // Motoren svarer 200 med {status:'error'} — uten denne loggen passerte
+      // pipelinefeil backend helt sporløst (kun klientens logError så dem).
+      console.error("AI engine reported pipeline error:", {
+        requestId: req.requestId || null,
+        projectId,
+        message: data.message ? String(data.message).slice(0, 300) : null,
+        orphanedDocId: data.doc_id || null,
+      });
+      recordReportGeneration({
+        testerToken: req.testerToken,
+        projectId,
+        docId: data.doc_id || null,
+        status: "error",
+      });
+    } else {
+      const docMatch = String(data.url || "").match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
+      recordReportGeneration({
+        testerToken: req.testerToken,
+        projectId,
+        docId: docMatch ? docMatch[1] : null,
+        status: "success",
+      });
+    }
+
     res.json(data);
   } catch (err) {
     console.error("Backend /report/google-doc error:", sanitizeError(err));
+    // Hovedbok også ved timeout/nettverksfeil ETTER at motorkallet startet:
+    // motoren kan ha fullført (og fakturert) selv om svaret gikk tapt —
+    // raden gjør forsøket avstembart mot Drive-mappen.
+    if (engineCallStarted) {
+      recordReportGeneration({
+        testerToken: req.testerToken,
+        projectId,
+        docId: null,
+        status: "error",
+      });
+    }
     res.status(500).json({ error: "Server error" });
+  } finally {
+    if (reportGenerationsInFlight.get(inflightKey) === inflightEntry) {
+      reportGenerationsInFlight.delete(inflightKey);
+    }
   }
 });
 
@@ -732,7 +896,14 @@ app.use(sendNotFound);
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
-  console.error("Unhandled error:", req.method, req.path, sanitizeError(err));
+  // Full stack i loggen (aldri i responsen — S17 gjaldt responskroppen):
+  // uten stack er en pilothendelse i praksis ufeilsøkbar fra serversiden.
+  console.error(
+    "Unhandled error:",
+    req.method,
+    req.path,
+    err && err.stack ? err.stack : sanitizeError(err)
+  );
   if (err && err.type === "entity.parse.failed") {
     return res.status(400).json({ error: "Invalid JSON" });
   }

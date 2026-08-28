@@ -51,7 +51,9 @@ const lightTheme: AppTheme = {
     accent: '#23545C',
     accentStrong: '#1A4148',
     danger: '#A6453A',
-    copper: '#A65E2E',
+    // Justert fra #A65E2E: består WCAG AA (4,5:1) for liten tekst også på
+    // surface-flaten #F1F3F3 (4,75:1), ikke bare på hvite kort.
+    copper: '#9F5A2C',
     shadow: 'rgba(27, 38, 43, 0.10)',
     glassOverlay: 'rgba(255,255,255,0.5)',
     overlay: 'rgba(27, 38, 43, 0.30)',

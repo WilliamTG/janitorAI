@@ -136,8 +136,24 @@ def download_knowledge_from_drive(drive_service, folder_id, local_path):
         filename = file['name']
 
         request = drive_service.files().get_media(fileId=file_id)
-        with open(os.path.join(local_path, filename), 'wb') as f:
-            f.write(request.execute())
+        data = request.execute()
+
+        # Atomisk skriving (mkstemp + rename): motoren kjører nå flertrådet,
+        # og en samtidig rapportkjøring som leser kunnskapsbasen skal aldri se
+        # en halvskrevet PDF. Tempnavnet har ingen .pdf-endelse, så
+        # upload_knowledge_base plukker det aldri opp.
+        import tempfile as _tempfile
+        fd, tmp_path = _tempfile.mkstemp(dir=local_path)
+        try:
+            with os.fdopen(fd, 'wb') as f:
+                f.write(data)
+            os.replace(tmp_path, os.path.join(local_path, filename))
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
 
 def download_video_from_drive(drive_service, folder_id, video_filename, local_dir):

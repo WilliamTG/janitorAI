@@ -30,6 +30,20 @@ export default function RootLayout() {
     }
   }, []);
 
+  // Be nettleseren frede lagringen: localStorage (prosjektlisten) og IndexedDB
+  // (video før opplasting) er eneste kopi av usynkede feltdata — uten
+  // persist() er de «best effort» og kan kastes av nettleseren under
+  // lagringspress. Best effort her også: eldre nettlesere mangler API-et.
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      try {
+        (navigator as any)?.storage?.persist?.()?.catch?.(() => {});
+      } catch {
+        // ikke støttet — ufarlig
+      }
+    }
+  }, []);
+
   return (
     <AppThemeProvider>
       <ToastProvider>

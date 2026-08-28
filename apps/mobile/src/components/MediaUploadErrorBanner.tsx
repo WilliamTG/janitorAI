@@ -2,7 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { clearLostMedia, useLostMediaNotice, useMediaUploadError, useOversizedFileError } from '@/src/sync/syncStatus';
+import {
+  clearLostMedia,
+  useLostMediaNotice,
+  useMediaUploadError,
+  useOversizedFileError,
+  useProjectTooLarge,
+} from '@/src/sync/syncStatus';
 import { Caption, useAppTheme } from '@/src/ui';
 
 // Amber palette for the "file too large" banner — distinct from the red danger
@@ -42,15 +48,51 @@ export default function MediaUploadErrorBanner() {
   }, [oversizedError]);
 
   const lostMedia = useLostMediaNotice();
+  const tooLargeProjectId = useProjectTooLarge();
+  const [tooLargeDismissed, setTooLargeDismissed] = useState(false);
+
+  React.useEffect(() => {
+    if (!tooLargeProjectId) setTooLargeDismissed(false);
+  }, [tooLargeProjectId]);
 
   const showOversized = oversizedError && !oversizedDismissed;
   const showGeneric = mediaError && !genericDismissed;
   const showLost = lostMedia !== null;
+  const showTooLarge = Boolean(tooLargeProjectId) && !tooLargeDismissed;
 
-  if (!showOversized && !showGeneric && !showLost) return null;
+  if (!showOversized && !showGeneric && !showLost && !showTooLarge) return null;
 
   return (
     <>
+      {showTooLarge && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.spacing.sm,
+            paddingHorizontal: theme.spacing.md,
+            paddingVertical: theme.spacing.sm,
+            backgroundColor: theme.colors.danger + '22',
+            borderRadius: theme.radii.md,
+            borderWidth: 1,
+            borderColor: theme.colors.danger + '55',
+            marginBottom: theme.spacing.sm,
+          }}
+        >
+          <Ionicons name="cloud-upload-outline" size={18} color={theme.colors.danger} />
+          <Caption style={{ flex: 1, color: theme.colors.danger }}>
+            Et prosjekt er for stort til å synkroniseres til serveren, og nye endringer i det blir
+            bare lagret på denne enheten. Ta kontakt med oss, så løser vi det.
+          </Caption>
+          <Pressable
+            onPress={() => setTooLargeDismissed(true)}
+            accessibilityLabel="Lukk varsel om prosjektstørrelse"
+            hitSlop={8}
+          >
+            <Ionicons name="close-outline" size={18} color={theme.colors.danger} />
+          </Pressable>
+        </View>
+      )}
       {showLost && lostMedia && (
         <View
           style={{
