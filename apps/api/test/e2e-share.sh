@@ -186,6 +186,16 @@ check "stale put returns newer copy" "Solbergveien 14, Rykkinn" "$(echo "$STALE"
 DUP_JSON=$(curl -s -X POST "$BASE/api/media" -H "x-tester-token: $TOKEN" -F "file=@$WORK/evidence.jpg;type=image/jpeg" -F "projectId=p1" -F "kind=photo")
 check "duplicate upload reuses id" "$MEDIA_ID" "$(echo "$DUP_JSON" | jq -r '.id')"
 
+# ── iPhone-video (.mov): whitelistet endelse + riktig MIME ved servering ─────
+# Regresjon for pilotfunn 28.08: .mov ble strippet til endelsesløs fil med
+# application/octet-stream, og Gemini avviste hele rapportkjøringen.
+printf 'fake-mov-bytes-%s' "$RANDOM" > "$WORK/befaring.mov"
+MOV_JSON=$(curl -s -X POST "$BASE/api/media" -H "x-tester-token: $TOKEN" -F "file=@$WORK/befaring.mov;type=video/quicktime" -F "projectId=p1" -F "kind=video")
+MOV_ID=$(echo "$MOV_JSON" | jq -r '.id')
+check "mov upload accepted" "yes" "$([ -n "$MOV_ID" ] && [ "$MOV_ID" != "null" ] && echo yes || echo no)"
+MOV_CT=$(curl -s -o /dev/null -D - "$BASE/api/media/$MOV_ID" -H "x-tester-token: $TOKEN" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type" {print $2}')
+check "mov served as video/quicktime" "video/quicktime" "$MOV_CT"
+
 # ── Transcribe-kontrakt: JSON {audioRemoteId} ────────────────────────────────
 # Uten Gemini-nøkkel i e2e: en ukjent id skal gi 404 (kontrakten forstås) —
 # ikke 400 «No file uploaded» slik den gamle JSON-kontrakten alltid fikk.

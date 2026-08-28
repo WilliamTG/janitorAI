@@ -104,8 +104,10 @@ def download_video_from_url(video_url: str, local_dir: str) -> str:
     # Derive file extension from Content-Type so Gemini can detect mime type
     content_type = response.headers.get("Content-Type", "video/mp4").split(";")[0].strip()
     ext = _mimetypes.guess_extension(content_type) or ".mp4"
-    # guess_extension can return ".mp4v" for video/mp4 — normalise
-    if ext in (".mp4v", ".mpg4"):
+    # guess_extension can return ".mp4v" for video/mp4 — normalise. ".bin"
+    # (application/octet-stream fra en eldre server) ville fått Gemini til å
+    # avvise opplastingen — anta mp4, Gemini sniffer containeren selv.
+    if ext in (".mp4v", ".mpg4", ".bin"):
         ext = ".mp4"
     local_path = os.path.join(local_dir, media_id + ext)
 

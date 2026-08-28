@@ -166,6 +166,17 @@ CREATE TABLE IF NOT EXISTS report_generations (
 );
 CREATE INDEX IF NOT EXISTS report_generations_tenant_idx ON report_generations (tester_token, project_id, created_at DESC);
 
+-- Healing (idempotent): iPhone-video (.mov/.m4v) ble tidligere lagret med
+-- mime_type application/octet-stream fordi endelsen ikke var whitelistet —
+-- Gemini avviste dermed rapportkjøringer. original_name husker den ekte
+-- endelsen, så eksisterende rader repareres her ved boot.
+UPDATE media SET mime_type = 'video/quicktime'
+  WHERE mime_type = 'application/octet-stream'
+    AND (lower(original_name) LIKE '%.mov' OR lower(original_name) LIKE '%.qt' OR lower(original_name) LIKE '%.quicktime');
+UPDATE media SET mime_type = 'video/mp4'
+  WHERE mime_type = 'application/octet-stream'
+    AND lower(original_name) LIKE '%.m4v';
+
 -- Incremental migrations for pre-existing deployments
 ALTER TABLE projects        ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
 ALTER TABLE deleted_projects ADD COLUMN IF NOT EXISTS tester_token   VARCHAR;
