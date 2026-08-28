@@ -149,6 +149,9 @@ export const nb = {
     downloadIsDraftWarning:
       'PDF/Word-filen er det opprinnelige AI-utkastet fra dokumentet. Rettelsene dine vises i delingslenken, men er ennå ikke flettet inn i dokumentfilen.',
     interrupted: 'Genereringen ble avbrutt — prøv igjen.',
+    stillRunning:
+      'Rapporten lages fortsatt på serveren — resultatet hentes inn når du åpner prosjektlisten om noen minutter.',
+    recovered: 'Fant rapporten fra forrige forsøk — dokumentet er klart.',
     unauthorized: 'Tilgangskoden er ugyldig eller utløpt.',
     details: 'Rapportdetaljer',
     approvedBy: 'Godkjent av takstperson',

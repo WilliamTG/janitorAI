@@ -108,6 +108,15 @@ check "B cannot revoke A's share" "404" \
 check "B cannot plant media in A's project" "403" \
   "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/media" -H "x-tester-token: $TOKEN_B" -F "file=@$WORK/a.jpg;type=image/jpeg" -F "projectId=projA" -F "kind=photo")"
 
+# B forsøker å lese A sin rapporthovedbok (gjenopprettingsendepunktet er
+# tenant-skopet: prosjekt-id-en er klientoppgitt, raden må filtreres på token)
+asPg "$PGBIN/psql" -h 127.0.0.1 -p "$PGPORT" -U docrai -d docrai_iso -q -c \
+  "INSERT INTO report_generations (tester_token, project_id, doc_id, status) VALUES ('$TOKEN_A', 'projA', 'DOCA', 'success')"
+check "B cannot read A's report ledger" "null" \
+  "$(curl -s "$BASE/report/status/projA" -H "x-tester-token: $TOKEN_B" | jq -r '.latest')"
+check "A can read own report ledger" "success" \
+  "$(curl -s "$BASE/report/status/projA" -H "x-tester-token: $TOKEN_A" | jq -r '.latest.status')"
+
 # B forsøker å slette A sitt prosjekt (skopet delete skal ikke røre A sin rad)
 curl -s -o /dev/null -X DELETE "$BASE/api/projects/projA" -H "x-tester-token: $TOKEN_B"
 

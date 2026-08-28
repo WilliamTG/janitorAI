@@ -7,7 +7,16 @@ Formålet: et etterprøvbart gulv under kredittprisingen
 (`docs/prising-bruksbasert.md`) og et regnestykke i stedet for en
 overraskelse når Gemini-kvoten diskuteres.
 
-## Slik hentes tallene (kjøres mot produksjonsbasen)
+## Enkleste vei: admin-endepunktet
+
+`GET /api/admin/cost?days=30` (header `x-admin-secret`) returnerer alt
+dette ferdig regnet: per operasjon (snitt/p95/maks tokens, snitt- og
+sumkostnad), `perTester` (fordeling per tester per uke) og `rapportSvinn`
+(feilede rapportkjøringer og tapt kostnad). SQL-en under er referansen
+for hva endepunktet regner — bruk den bare hvis du vil spørre basen
+direkte.
+
+## Slik hentes tallene (SQL-referanse)
 
 Gjennomsnitt, p95 og antall per operasjon siste 30 dager:
 
