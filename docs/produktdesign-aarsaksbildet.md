@@ -7,6 +7,13 @@ spørretreet blir produktflater i DocrAI.
 **Designkanvas (UI/UX-mockups, deles med teamet):**
 https://claude.ai/code/artifact/b5c57291-8998-4b65-bc96-6bee6a5cf96f
 
+**Interaktiv HTML-prototype (klikkbar flyt med levende logikk):**
+https://claude.ai/code/artifact/a76ee5f2-ea00-4050-8e07-7a88e65b5fff
+— veiviser-svar flytter hypotesene, «Før du drar»-punktene avgjør hva
+rapporten kan slå fast (membran/rørdel avklart bare hvis målingen er
+utført), og rapporten låses opp først ved godkjenning. Verifisert i
+nettleser (begge årsaksstier + godkjenningsport).
+
 **Evidensstatus:** Dette er et ekte pilotsignal — fageksperten lager selv
 et spørretre for årsaksanalyse og har levert kunnskapsgrunnlaget uoppfordret.
 Nei-lista-disiplinen er dermed oppfylt for retningen; byggerekkefølgen
