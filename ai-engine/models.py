@@ -1,5 +1,29 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
+from enum import Enum
+
+
+class WaterDamageSource(str, Enum):
+    """
+    De fem hovedkildene til vannskade (docs/fagkunnskap-vannskadeaarsaker.md),
+    pluss USIKKER. Modellen dekker ~98 % av sakene — resten skal falle ut som
+    USIKKER, ALDRI tvinges inn i en av de fem kategoriene (falsk sikkerhet er
+    farligere enn usikkerhet).
+    """
+    NEDBOR = "NEDBØR"
+    TRYKKSATT_ROR = "TRYKKSATT_RØR"
+    AVLOPSROR = "AVLØPSRØR"
+    KONDENS = "KONDENS"
+    UTETT_BAD = "UTETT_BAD"
+    USIKKER = "USIKKER"
+
+
+class AcuteOrGradual(str, Enum):
+    """Forsikringsgrensen akutt vs. gradvis. USIKKER er et fullverdig svar."""
+    AKUTT = "AKUTT"
+    GRADVIS = "GRADVIS"
+    USIKKER = "USIKKER"
+
 
 class Evidence(BaseModel):
     timestamp_ms: Optional[int] = Field(
@@ -16,8 +40,19 @@ class Evidence(BaseModel):
 
 class DamageAnalysis(BaseModel):
     area: str = Field(description="Rommet som inspiseres")
-    source: str = Field(description="Kilden til skaden")
+    source: str = Field(description="Kilden til skaden, i fritekst (fyldig beskrivelse)")
+    source_category: WaterDamageSource = Field(
+        description="Kildekategori for vannskaden — én av de fem hovedkildene (NEDBØR, "
+                     "TRYKKSATT_RØR, AVLØPSRØR, KONDENS, UTETT_BAD), eller USIKKER. Velg kun én "
+                     "av de fem når bevisene utvetydig peker dit; tving ALDRI frem en kategori — "
+                     "USIKKER er et fullverdig og forventet svar."
+    )
     cause: str = Field(description="Den tekniske årsaken")
+    acute_or_gradual: AcuteOrGradual = Field(
+        description="AKUTT (plutselig, uforutsett utstrømning) vs. GRADVIS (utvikling over tid) — "
+                     "avgjør forsikringsdekning. Bruk USIKKER når de visuelle tegnene ikke er "
+                     "entydige. Begrunnelsen skal alltid fremgå av `cause`/`description`."
+    )
     description: str = Field(description="Fyldig faglig beskrivelse på norsk. Hold deg strengt til det som er synlig.")
     evidence_points: List[Evidence] = Field(description="Liste over 2-3 bevispunkter med tidsstempel")
     is_habitable: bool

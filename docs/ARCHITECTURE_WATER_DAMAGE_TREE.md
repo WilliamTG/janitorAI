@@ -162,6 +162,15 @@ med `buildingYear`). Dette er trygg, liten, verifiserbar kode — men det er
 signalberikelse, ikke en diagnose-motor, og det overstyrer aldri LLM-ens
 resonnering.
 
+## 3.7 Vurderingsmatrise: Plan A (utvidet) vs. Plan B
+
+| Dimensjon | Plan A — utvidet enkeltkall | Plan B — to-stegs kodemotor |
+|---|---|---|
+| **Pålitelighet** | Ett kall, samme temp=0/seed=42-oppsett som allerede måles mot 11-case-batteriet. Fritekstbegrunnelse (`cause`/`description`) gjør usikkerhet synlig fremfor skjult. | Steg 2 er 100 % deterministisk, MEN steg 1 (LLM-faktautrekk) kan fortsatt hallusinere — determinismen er kun nedstrøms. Risiko for falsk trygghet («koden sier X») rundt en usikker inngang. |
+| **Kost/latens** | Ingen endring i antall LLM-kall (fortsatt ett). Signalinjeksjon er kode, ikke tokens av betydning. | Et andre fullstendig LLM-kall dobler i praksis den dyreste kostlinjen (~55-62k input-tokens/rapport), siden video/foto/kunnskapsbase må gjenbrukes eller tilstand bæres mellom kallene. |
+| **Vedlikehold** | Rører kun `ai-engine/prompt.py` og `ai-engine/models.py` — samme filer, samme `PROMPT_VERSION`- og valideringsbatteri-mønster som i dag. | Ny kodemotor (`executeWaterDamageTree()`) uten testinfrastruktur i et repo med null automatiserte tester for `ai-engine/`; ingen delt skjema-mekanisme mot en fremtidig TS-basert appwizard (`packages/shared` er tomt). |
+| **Produktjustering** | Er strukturelt identisk med trinn (a) i `docs/produktdesign-aarsaksbildet.md`s allerede vedtatte byggerekkefølge. | Kolliderer med prinsippet «AI velger aldri årsak» / «Evidens foran fasit» — koden ville produsere «ubestridelig fakta» der produktdesignet krever en rangert hypotese takstpersonen avgjør. |
+
 ## 4. Anbefaling
 
 **Bygg en utvidet Plan A: «Guided Single-Pass + Deterministic Signal

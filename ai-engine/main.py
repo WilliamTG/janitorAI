@@ -206,7 +206,10 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
 
         # Build contents from every available source. No evidence type has an
         # automatic priority; Gemini reconciles the supplied material.
-        context_text = build_inspector_context(project or {})
+        # report_meta (building year, inspection date) feeds the deterministic
+        # case-signal block computed in build_case_signals() — see
+        # docs/ARCHITECTURE_WATER_DAMAGE_TREE.md §3.6/steg 0.
+        context_text = build_inspector_context(project or {}, report_meta)
         context_parts = [context_text] if context_text else []
         manifest = _photo_manifest(photo_records)
         if manifest:
