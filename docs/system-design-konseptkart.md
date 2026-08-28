@@ -203,8 +203,11 @@ hele systemer.
 ## Slik brukes dette
 
 1. Slå opp begrepet her, les kapitlet i boka for substansen.
-2. Se `docs/system-design-laerdommer.md` for hva konseptene betyr *for
+2. Trenger du substansen i egne ord uten boka for hånden: se
+   `docs/systemdesign-handbok.md` — vårt selvstendige oppslagsverk over
+   samme fagområde, med DocrAI som gjennomgående eksempel.
+3. Se `docs/system-design-laerdommer.md` for hva konseptene betyr *for
    vår kode* — verifiserte observasjoner med fil:linje, prioriterte
    forslag og en eksplisitt ikke-bygg-liste for pilotskala.
-3. For mekanikkene bak (replikering, quorum, LSM, klokker): se
+4. For mekanikkene bak (replikering, quorum, LSM, klokker): se
    `docs/ddia-konseptkart.md` og `docs/ddia-laerdommer.md`.

@@ -5,7 +5,9 @@ Guide» (Alex Xu) holdt opp mot vår faktiske kodebase — samme øvelse som
 `docs/ddia-laerdommer.md` (27. aug), og et bevisst komplement til den:
 DDIA ga oss *pålitelighetsmekanikkene* (fletting, idempotens, timeouts,
 sveip-sikkerhet); Xu handler om *systemsammensetning og skalering*.
-Begrepsindeksen med egne ord ligger i `docs/system-design-konseptkart.md`.
+Begrepsindeksen med egne ord ligger i `docs/system-design-konseptkart.md`;
+det selvstendige oppslagsverket over fagområdet (egne ord, DocrAI som
+eksempel) ligger i `docs/systemdesign-handbok.md`.
 
 Boka er skrevet for hyperskala-intervjuer (millioner av brukere). DocrAI
 er et pilotprodukt med én partner og en håndfull testere. Hovedverdien av
