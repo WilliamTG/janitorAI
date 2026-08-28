@@ -58,7 +58,7 @@ kontrakter og mål før du velger».
 
 ## Del 2 — Forslag som gjør løsningen bedre (prioritert)
 
-### 1. Rate limiting per tester, ikke bare per IP — og 429-håndtering i appen
+### 1. Rate limiting per tester, ikke bare per IP — og 429-håndtering i appen ✅ implementert 28. aug
 
 **Observasjon (verifisert):** begge limiterne våre nøkler på IP-adresse
 (`apps/api/src/middleware/rateLimiters.js:12-31` bruker standard
@@ -85,7 +85,7 @@ pilotforvirring før den oppstår. Dette er det ene kodeendringsforslaget
 i dokumentet jeg mener har evidens nok *nå* (kjent kontor-oppsett hos
 pilotpartneren + kjent symptomforveksling).
 
-### 2. Overslagsregning på pilotøkonomien — med våre egne tall
+### 2. Overslagsregning på pilotøkonomien — med våre egne tall ✅ metode + spørringer i `docs/overslag-pilotokonomi.md`
 
 **Observasjon:** `cost_events` har ekte tall per operasjon, men vi har
 ingen samlet «hva koster én befaring»-regning, og prisdokumentet
@@ -99,7 +99,7 @@ tallene, bokas metode. Det gir kredittprisingen et etterprøvbart gulv og
 gjør Gemini-kvotespørsmålet (fortsatt åpent fra pilotloggen) til et
 regnestykke i stedet for en overraskelse. Ingen kode kreves.
 
-### 3. Mål videoopplastingsfeil før noe bygges på opplasting
+### 3. Mål videoopplastingsfeil før noe bygges på opplasting ✅ instrumentert 28. aug
 
 **Observasjon (verifisert):** video lastes opp som ett enkelt
 XHR/FormData-kall på inntil 500 MB (`apps/api/src/routes/media.js:143`,
@@ -181,9 +181,14 @@ først, foreslå minste løsning, navngi selv hva som vil knirke.
 
 - Kodeobservasjonene i del 1–2 er verifisert mot arbeidstreet på
   `main` (e001591) i dag; fil:linje-referanser gjelder den revisjonen.
-- Ingen kodeendringer følger med dette dokumentet. Forslag 1 (per-tester
-  rate limiting + 429 i appen) er det eneste jeg anbefaler å bygge uten
-  ytterligere evidens; 2 er ren analyse; 3–5 har eksplisitte evidenskrav
-  før bygging, i tråd med nei-lista.
+- Forslag 1 er implementert (heavyLimiter nøkler på `tester_token` med
+  IPv6-trygg IP-fallback, 429 svarer med `code: RATE_LIMITED` +
+  `retryAfterSeconds` + `Retry-After`, appen viser «prøv igjen om X
+  minutter»; regresjonstest i `apps/api/test/e2e-rate-limit.sh`).
+  Forslag 2 har fått metode + SQL i `docs/overslag-pilotokonomi.md`
+  (tallene fylles inn mot produksjonsbasen). Forslag 3 er instrumentert:
+  feilede videoopplastinger logger nå prosent sendt + filstørrelse til
+  `error_logs`. Forslag 4–5 har fortsatt eksplisitte evidenskrav før
+  bygging, i tråd med nei-lista.
 - Render-deployene av PR #15 (backend, ai-engine, docrai.io-eksport) er
   fortsatt utestående brukerhandling og påvirkes ikke av dette dokumentet.

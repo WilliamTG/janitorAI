@@ -18,6 +18,10 @@ export const nb = {
     search: 'Søk',
     loadingEllipsis: 'Laster …',
     error: 'Noe gikk galt',
+    rateLimited: (minutes: number) =>
+      minutes <= 1
+        ? 'Mange KI-forespørsler på kort tid — vent et minutt og prøv igjen.'
+        : `Mange KI-forespørsler på kort tid — prøv igjen om ca. ${minutes} minutter.`,
   },
 
   tabs: {
