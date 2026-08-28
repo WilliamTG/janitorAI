@@ -20,7 +20,7 @@ takstpersonen dokumenterer — og kontrolleres før rapporten godkjennes.
 AI foreslår med evidens; takstpersonen avgjør. Årsaken låses først ved
 godkjenningsstempelet (samme port som i dag).
 
-## De fire produktflatene (se kanvasen)
+## De fem produktflatene (se kanvasen)
 
 1. **Befaring — «Neste blikk»** (mobil): Årsaksbildet lytter med på
    notater/foto og viser maks tre stille forslag til neste observasjon,
@@ -37,6 +37,13 @@ godkjenningsstempelet (samme port som i dag).
    evidenskjeder (transkripsjonssitater, foto, målinger), «taler imot»,
    utelukkede kilder med begrunnelse, akutt/gradvis-vurdering og
    Byggforsk-henvisning. Handlinger: bekreft / velg annen / usikker.
+5. **Ferdig rapport — ut til mottaker** (delingslenken): Sluttleveransen
+   slik forsikringsselskapet ser den. Godkjenningsstempel (kobber),
+   skadeårsak med sporbare evidensreferanser, utelukkede kilder,
+   klassifisering (gradvis/akutt) med membran/rørdel-avklaringen fra
+   «Før du drar»-målingen, Byggforsk-henvisning, tiltak, dokumentasjons-
+   vedlegg og proveniensfotnote (kunnskapsversjon + promptversjon,
+   AI-utkast arkivert uendret).
 
 ## Designprinsippene
 
