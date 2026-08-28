@@ -110,6 +110,7 @@ router.get("/cost", async (req, res) => {
          ROUND(AVG(input_tokens))::int             AS snitt_input_tokens,
          ROUND(AVG(output_tokens))::int            AS snitt_output_tokens,
          ROUND(AVG(total_tokens))::int             AS snitt_total_tokens,
+         (percentile_cont(0.95) WITHIN GROUP (ORDER BY total_tokens))::int AS p95_total_tokens,
          MAX(total_tokens)::int                    AS maks_total_tokens,
          ROUND(AVG(est_cost_usd)::numeric, 6)      AS snitt_kostnad_usd,
          ROUND(SUM(est_cost_usd)::numeric, 4)      AS sum_kostnad_usd,
@@ -120,10 +121,36 @@ router.get("/cost", async (req, res) => {
        ORDER BY sum_kostnad_usd DESC NULLS LAST`,
       [String(days)]
     );
+    // Overslagsregningen (docs/overslag-pilotokonomi.md) selvbetjent: fordeling
+    // per tester/uke (er forbruket jevnt eller drevet av én?) og tapt kostnad
+    // på feilede rapportkjøringer (betalte tokens uten leveranse).
+    const perTester = await pool.query(
+      `SELECT COALESCE(t.tester_name, LEFT(c.tester_token, 8) || '…') AS tester,
+              date_trunc('week', c.created_at)::date AS uke,
+              COUNT(*)::int                          AS antall,
+              ROUND(SUM(c.est_cost_usd)::numeric, 4) AS sum_kostnad_usd
+       FROM cost_events c
+       LEFT JOIN tester_tokens t ON t.token = c.tester_token
+       WHERE c.created_at >= now() - ($1 || ' days')::interval
+       GROUP BY 1, 2
+       ORDER BY uke DESC, sum_kostnad_usd DESC NULLS LAST`,
+      [String(days)]
+    );
+    const rapportSvinn = await pool.query(
+      `SELECT COUNT(*) FILTER (WHERE operation = 'report')::int        AS rapporter_ok,
+              COUNT(*) FILTER (WHERE operation = 'report_failed')::int AS rapporter_feilet,
+              ROUND(COALESCE(SUM(est_cost_usd) FILTER (WHERE operation = 'report_failed'), 0)::numeric, 4) AS tapt_kostnad_usd
+       FROM cost_events
+       WHERE created_at >= now() - ($1 || ' days')::interval`,
+      [String(days)]
+    );
+
     res.json({
       windowDays: days,
       note: "Kostnad er ESTIMAT (verifiser priser mot Google før kredittpris settes).",
       operations: result.rows,
+      perTester: perTester.rows,
+      rapportSvinn: rapportSvinn.rows[0],
     });
   } catch (err) {
     console.error("GET /api/admin/cost error:", sanitizeError(err));

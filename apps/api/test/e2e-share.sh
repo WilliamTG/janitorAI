@@ -192,6 +192,18 @@ check "duplicate upload reuses id" "$MEDIA_ID" "$(echo "$DUP_JSON" | jq -r '.id'
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/transcribe" -H "x-tester-token: $TOKEN" -H 'Content-Type: application/json' -d '{"audioRemoteId":"finnes-ikke"}')
 check "transcribe accepts audioRemoteId contract" "404" "$STATUS"
 
+# ── Rapportstatus fra hovedboka (report_generations) ─────────────────────────
+# Gjenopprettingsflyten: tom hovedbok → null; suksessrad → status + avledet
+# dokument-URL, så en klient som mistet svaret kan gjenfinne dokumentet.
+RSTATUS=$(curl -s "$BASE/report/status/proj-status-test" -H "x-tester-token: $TOKEN")
+check "report status: empty ledger" "false null" "$(echo "$RSTATUS" | jq -r '"\(.inFlight) \(.latest)"')"
+asPg "$PGBIN/psql" -h 127.0.0.1 -p "$PGPORT" -U docrai -d docrai_e2e -q -c \
+  "INSERT INTO report_generations (tester_token, project_id, doc_id, status) VALUES ('$TOKEN', 'proj-status-test', 'DOC123abc', 'success')"
+RSTATUS=$(curl -s "$BASE/report/status/proj-status-test" -H "x-tester-token: $TOKEN")
+check "report status: success row visible" "success" "$(echo "$RSTATUS" | jq -r '.latest.status')"
+check "report status: url derived from doc_id" \
+  "https://docs.google.com/document/d/DOC123abc/edit" "$(echo "$RSTATUS" | jq -r '.latest.url')"
+
 # ── Share page shell ─────────────────────────────────────────────────────────
 PAGE=$(curl -s "$BASE/share/$SHARE_ID")
 check "share page served" "true" "$(echo "$PAGE" | grep -q 'PIN-koden' && echo true)"

@@ -116,16 +116,21 @@ opplasting (f.eks. tus-protokollen fremfor egenutviklet) neste steg —
 med evidens i hånda. Hvis ikke, har vi spart oss kompleksiteten. Dette
 er bokas egen metode brukt mot bokas egen løsning.
 
-### 4. Veikart, betinget: rapportgenerering som jobb med varsling
+### 4. Veikart, betinget: rapportgenerering som jobb med varsling — minste steg bygget 28. aug
 
 I dag holder appen en forespørsel åpen i inntil 10 minutter mens
 motoren jobber (proxy-timeouten fra PR #15). Det er riktig enkelt nå.
-*Hvis* generereringstiden vokser (flere Byggforsk-oppslag, lengre
-videoer), er bokas mønster (kap. 10/15) neste form: registrer jobb →
-svar med jobb-id → appen poller eller long-poller status →
-`report_generations` er allerede hovedboka en slik jobbstatus kan leses
-fra. Ikke bygg før 10-minuttersgrensen faktisk trues; da er
-migrasjonsstien kort fordi hovedboka finnes.
+**Minste steg av jobbmodellen er nå bygget:** hovedboka er lesbar for
+klienten (`GET /report/status/:projectId`, tenant-skopet), og appen spør
+den før et fastlåst «processing»-prosjekt avskrives — fullførte serveren
+mens appen var død, gjenfinnes dokument-URL-en i stedet for at brukeren
+regenererer til dobbel kostnad. Full jobbmodell (jobb-id + polling som
+*primær* flyt) er fortsatt betinget: bygges først hvis
+generereringstiden vokser mot 10-minuttersgrensen. Kjent resthull,
+bevisst ikke tettet: ryker *proxyens* timeout mens motoren fortsatt
+jobber, skriver serveren en feilrad uten doc_id — dokumentet kan da
+finnes i Drive uten at hovedboka vet id-en (krever at motoren selv
+skriver fullføringen; det er full jobbmodell).
 
 ### 5. Veikart, betinget: per-note-PUT hvis prosjekt-JSON vokser
 
