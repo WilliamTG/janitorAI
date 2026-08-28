@@ -190,3 +190,27 @@ brutt ned på budskapsvariant og listesegment. Månedlig: kost per pilot
 (timer × timepris + utlegg), henvisningsandel av nye leads (målet er > 30 %
 innen uke 12 — i en bransje på 1 500 personer er munn-til-munn den eneste
 kanalen som skalerer).
+
+## 11. Fagperson først (OpenEvidence-regelen)
+
+Fra TIME100-gjennomgangen (`docs/time100-ai-laerdommer.md`): OpenEvidence
+vant det amerikanske legemarkedet via jungeltelegraf blant fagfolk — mot en
+kirkegård av verktøy sykehusadministrasjonen hadde kjøpt som legene aldri
+brukte. Samme dynamikk gjelder takstbransjen, og regelen kodifiseres her:
+
+1. **Selg aldri til ledelsen før fagfolket elsker verktøyet.** En
+   foretaksavtale uten entusiastiske takstpersoner blir hylleveware og
+   brenner referansen. Piloter signeres med foretaket, men drives av en
+   navngitt fagperson som selv har valgt verktøyet.
+2. **Én takstperson skal kunne ta i bruk DocrAI alene, uten innkjøp.**
+   Lav friksjon for individet (egen konto, egen pris) er distribusjonsmodellen
+   — ikke et midlertidig kompromiss.
+3. **Delingslenken er jungeltelegrafen.** Hver godkjente rapport som deles
+   PIN-beskyttet med et forsikringsselskap er en demonstrasjon for neste
+   potensielle bruker. Kvaliteten på delingsvisningen er derfor et
+   salgsverktøy, ikke bare en produktflate (henger sammen med §7
+   referral-løkken og >30 %-henvisningsmålet i §10).
+4. **Fagpersonens veto er salgsargumentet.** «AI foreslår. Du avgjør» (slik
+   det alt står på /om) er ikke et forbehold, men grunnen til at en
+   takstperson tør å sette navnet sitt på rapporten — og navnet er det
+   bransjen handler i.

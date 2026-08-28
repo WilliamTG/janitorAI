@@ -110,8 +110,10 @@ byggeoppgaver — og leverandørrisikoen håndteres av punkt 3.
 
 ## Status
 
-Analyse, ingen kodeendringer. Ett nytt dokument foreslått (modellbytte-
-runbook), to eksisterende dokumenter bør oppdateres (GTM-regelen i
-kampanjedokumentet; prinsippsetningen på salgsflatene). Alt annet er
-bekreftelse av valg som allerede står i `founders-playbook-docrai.md`
-og nei-lista.
+Analyse, ingen kodeendringer. Oppfølgingene er utført samme dag:
+modellbytte-runbooken finnes (`docs/modellbytte-runbook.md`), GTM-regelen
+er kodifisert (`docs/kampanje-takstpersoner.md` §11 «Fagperson først»),
+og prinsippsetningen viste seg allerede å stå på salgsflaten (/om:
+«AI foreslår. Du avgjør. Det er systemet – ikke et forbehold») — ingen
+endring nødvendig der. Alt annet er bekreftelse av valg som allerede
+står i `founders-playbook-docrai.md` og nei-lista.
