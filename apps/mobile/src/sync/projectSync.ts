@@ -330,7 +330,10 @@ async function doUploadMedia(
       }
 
       const type = blob.type || meta.type;
-      const ext = type.split('/')[1] || 'bin';
+      // Safari gir video/quicktime for .mov-opptak — filnavnet må bære den
+      // vanlige endelsen, ellers whitelister ikke serveren den.
+      const subtype = (type.split('/')[1] || 'bin').split(';')[0].toLowerCase();
+      const ext = subtype === 'quicktime' ? 'mov' : subtype;
       formData.append('file', blob, `${kind}.${ext}`);
     } else {
       formData.append('file', { uri, name: meta.name, type: meta.type } as any);
