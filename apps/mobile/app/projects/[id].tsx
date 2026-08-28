@@ -813,6 +813,23 @@ export default function ProjectDetailScreen() {
     }
   };
 
+  // 429 fra serverens rate limiter: hent ventetiden fra svaret (kroppsfeltet
+  // foretrekkes — Retry-After-headeren er ikke alltid CORS-lesbar) så meldingen
+  // kan si «om X minutter» i stedet for generisk feil. null når svaret ikke er 429.
+  const rateLimitWaitMinutes = async (response: Response): Promise<number | null> => {
+    if (response.status !== 429) return null;
+    let seconds = 15 * 60; // limiter-vinduet som fallback
+    try {
+      const body: any = await response.clone().json();
+      const fromBody = Number(body?.retryAfterSeconds);
+      if (Number.isFinite(fromBody) && fromBody > 0) seconds = fromBody;
+    } catch {
+      const fromHeader = Number(response.headers?.get?.('retry-after'));
+      if (Number.isFinite(fromHeader) && fromHeader > 0) seconds = fromHeader;
+    }
+    return Math.max(1, Math.ceil(seconds / 60));
+  };
+
   // Serverens /transcribe forstår to kontrakter: multipart-fil («file») eller
   // JSON { audioRemoteId }. Den gamle klientkoden sendte JSON { audioUri } —
   // en kontrakt serveren aldri har forstått, så kallet døde med 400 før
@@ -859,6 +876,12 @@ export default function ProjectDetailScreen() {
 
     try {
       const response = await requestTranscription(note.audioUri, note.audioRemoteId);
+
+      const waitMin = await rateLimitWaitMinutes(response);
+      if (waitMin !== null) {
+        toast.show({ message: nb.common.rateLimited(waitMin), variant: 'info' });
+        return;
+      }
 
       if (!response.ok) {
         console.error('Backend /transcribe error: non-OK response');
@@ -918,6 +941,12 @@ export default function ProjectDetailScreen() {
         project.projectDescriptionAudioUri,
         project.projectDescriptionAudioRemoteId,
       );
+
+      const waitMin = await rateLimitWaitMinutes(response);
+      if (waitMin !== null) {
+        toast.show({ message: nb.common.rateLimited(waitMin), variant: 'info' });
+        return;
+      }
 
       if (!response.ok) {
         console.error('Backend /transcribe error: non-OK response');
@@ -983,6 +1012,12 @@ export default function ProjectDetailScreen() {
         method: 'POST',
         body: formData,
       });
+
+      const waitMin = await rateLimitWaitMinutes(response);
+      if (waitMin !== null) {
+        toast.show({ message: nb.common.rateLimited(waitMin), variant: 'info' });
+        return;
+      }
 
       if (!response.ok) {
         console.error('Backend /describe-image error: non-OK response');
@@ -1509,6 +1544,18 @@ export default function ProjectDetailScreen() {
           // delingslenke via serverens lesetids-410-port.
           await updateProjectLocally({ ...snap });
           toast.show({ message: nb.report.alreadyInProgress, variant: 'info' });
+          return;
+        }
+      }
+
+      {
+        // Rate limit: ingen generering startet — gjenopprett snapshotet
+        // (inkl. godkjenningsstempelet) på samme måte som 409-grenen, så et
+        // gyldig stempel ikke synkes bort og dreper en aktiv delingslenke.
+        const waitMin = await rateLimitWaitMinutes(response);
+        if (waitMin !== null) {
+          await updateProjectLocally({ ...snap });
+          toast.show({ message: nb.common.rateLimited(waitMin), variant: 'info' });
           return;
         }
       }
