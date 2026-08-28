@@ -24,7 +24,20 @@ const CORS_ORIGINS = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
-app.use(cors(CORS_ORIGINS.length ? { origin: CORS_ORIGINS } : {}));
+app.use(
+  cors({
+    ...(CORS_ORIGINS.length ? { origin: CORS_ORIGINS } : {}),
+    // Rate limit-headerne er ikke CORS-safelisted; uten eksponering kan ikke
+    // webappen lese Retry-After/RateLimit-* fra et 429-svar.
+    exposedHeaders: [
+      "Retry-After",
+      "RateLimit",
+      "RateLimit-Limit",
+      "RateLimit-Remaining",
+      "RateLimit-Reset",
+    ],
+  })
+);
 
 // Eksplisitt body-tak (S15): prosjekt-bloben lagres som JSONB; 300kb holder for
 // store befaringer med mange notater, og hindrer at en klient dytter inn

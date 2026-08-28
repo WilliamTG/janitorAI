@@ -224,11 +224,23 @@ function uploadWithProgress(
     // Do NOT set Content-Type — the browser/RN fills in the multipart boundary automatically.
     if (token) xhr.setRequestHeader('x-tester-token', token);
 
+    // Måling før bygging: hvor langt opplastingen kom og hvor stor fila var
+    // inngår i feilmeldingen (→ error_logs via logError hos kalleren). Det er
+    // tallene som avgjør om gjenopptakbar/chunket opplasting noen gang trengs
+    // — se docs/system-design-laerdommer.md del 2.3.
+    let lastPct = 0;
+    let totalBytes = 0;
     xhr.upload.onprogress = (e: ProgressEvent) => {
       if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
+        totalBytes = e.total;
+        lastPct = Math.round((e.loaded / e.total) * 100);
+        onProgress(lastPct);
       }
     };
+    const progressInfo = () =>
+      totalBytes > 0
+        ? ` (${lastPct}% of ${Math.round(totalBytes / (1024 * 1024))} MB sent)`
+        : '';
 
     xhr.onload = () => {
       const text = xhr.responseText;
@@ -239,8 +251,8 @@ function uploadWithProgress(
       });
     };
 
-    xhr.onerror = () => reject(new Error('Network error during video upload'));
-    xhr.ontimeout = () => reject(new Error('Video upload timed out'));
+    xhr.onerror = () => reject(new Error(`Network error during video upload${progressInfo()}`));
+    xhr.ontimeout = () => reject(new Error(`Video upload timed out${progressInfo()}`));
     xhr.send(formData);
   });
 }
