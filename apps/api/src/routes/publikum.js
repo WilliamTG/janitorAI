@@ -58,6 +58,7 @@ const ROBOTS = [
   "Disallow: /ui-endringer",
   "Disallow: /underlag-demo",
   "Disallow: /fargealternativer",
+  "Disallow: /agent-readiness",
   "",
 ];
 
