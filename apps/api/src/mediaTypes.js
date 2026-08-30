@@ -23,6 +23,15 @@ const MIME_BY_EXT = {
   ".caf": "audio/x-caf",
   ".mp4": "video/mp4",
   ".3gp": "video/3gpp",
+  // iPhone tar opp video som QuickTime (.mov). Uten disse ble endelsen
+  // strippet ved lagring, MIME ble application/octet-stream, videotaket ble
+  // fototaket (50 MB) — og Gemini avviste rapportkjøringen med
+  // «Unsupported MIME type: application/octet-stream» (pilotfunn 28.08).
+  ".mov": "video/quicktime",
+  ".qt": "video/quicktime",
+  // Safari-web kan navngi etter blob-MIME: video/quicktime → «video.quicktime».
+  ".quicktime": "video/quicktime",
+  ".m4v": "video/mp4",
 };
 
 // Avled en trygg MIME-type fra en filendelse (med punktum, små bokstaver).

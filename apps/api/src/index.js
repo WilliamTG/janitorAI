@@ -205,6 +205,7 @@ app.get("/underlag-demo", (req, res) => sendPresentationPage(req, res, "underlag
 app.get("/totalbilde", (req, res) => sendPresentationPage(req, res, "totalbilde.html"));
 app.get("/ui-total", (req, res) => sendPresentationPage(req, res, "ui-total.html"));
 app.get("/fargealternativer", (req, res) => sendPresentationPage(req, res, "fargealternativer.html"));
+app.get("/agent-readiness", (req, res) => sendPresentationPage(req, res, "agent-readiness.html"));
 
 // ---------- SHARE PAGE (public HTML shell; data endpoints gate on PIN) ------
 // Registered before the static/SPA fallback so /share/:id is never swallowed

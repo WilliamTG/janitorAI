@@ -125,6 +125,7 @@ router.use(requireDb);
 const ALLOWED_EXTENSIONS = new Set([
   ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif",
   ".m4a", ".mp3", ".wav", ".aac", ".ogg", ".webm", ".caf", ".mp4", ".3gp",
+  ".mov", ".qt", ".quicktime", ".m4v",
 ]);
 
 const storage = multer.diskStorage({
