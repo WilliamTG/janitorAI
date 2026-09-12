@@ -2,3 +2,4 @@
 - [Sync design decisions](sync-design.md) — offline-first LWW sync: pending-delete queue prevents resurrection; strip device-local URIs from server copies; dedupe media uploads by URI.
 - [Media orphan cleanup](media-cleanup.md) — never delete unreferenced server media immediately; per-note merge can transiently drop references, so mark + grace period + atomic conditional delete.
 - [Google Doc idempotency](google-doc-idempotency.md) — claim a stable attempt in Drive before AI work; retries reconcile the same document and never rely on the API ledger alone.
+- [Workspace audit lockfiles](workspace-audit-lockfiles.md) — after workspace dependency changes, verify installed and lockfile resolutions directly; npm can leave stale vulnerable entries behind.
