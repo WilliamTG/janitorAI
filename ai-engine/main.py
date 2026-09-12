@@ -348,7 +348,7 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
         usage = getattr(gemini_response, "usage_metadata", None)
         if usage is not None:
             token_usage = {
-                "model": "gemini-2.5-flash",
+                "model": "gemini-3.8-flash",
                 "input_tokens": getattr(usage, "prompt_token_count", None),
                 "output_tokens": getattr(usage, "candidates_token_count", None),
                 "total_tokens": getattr(usage, "total_token_count", None),
