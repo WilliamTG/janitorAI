@@ -1093,12 +1093,18 @@ export function mergeProjects(
   const localNewer = toTime(local.updatedAt) > toTime(server.updatedAt);
   if (localNewer) changed = true;
   const base = localNewer ? local : server;
+  const isTestProject =
+    base.isTestProject || local.isTestProject || server.isTestProject ? true : undefined;
+  const sourceProjectId =
+    base.sourceProjectId || local.sourceProjectId || server.sourceProjectId;
 
   const project: Project = {
     ...base,
     id: server.id,
     notes,
     deletedNotes,
+    ...(isTestProject ? { isTestProject: true } : {}),
+    ...(sourceProjectId ? { sourceProjectId } : {}),
     updatedAt: new Date(
       Math.max(toTime(local.updatedAt), toTime(server.updatedAt)),
     ).toISOString(),
@@ -1122,7 +1128,9 @@ export function mergeProjects(
   if (
     project.reportDraft !== server.reportDraft ||
     project.reportUrl !== server.reportUrl ||
-    project.caseFile !== server.caseFile
+    project.caseFile !== server.caseFile ||
+    project.isTestProject !== server.isTestProject ||
+    project.sourceProjectId !== server.sourceProjectId
   ) {
     changed = true;
   }

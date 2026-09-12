@@ -92,6 +92,9 @@ export const nb = {
     nameFromAddressHint: 'Tips: bruk adressen som prosjektnavn',
     useAddress: 'Bruk adressen',
     projectMenu: 'Prosjektmeny',
+    testProject: 'Testprosjekt',
+    createTestCopy: 'Lag testkopi',
+    testCopyCreated: 'Testprosjektet ble opprettet',
     timeToApproved: (duration: string) => `Befaring → godkjent rapport: ${duration}`,
   },
 
@@ -132,7 +135,11 @@ export const nb = {
 
   report: {
     generate: 'Lag rapport',
+    generateTest: 'Lag testrapport',
+    regenerateTest: 'Kjør rapport på nytt',
     generating: 'Lager rapport …',
+    testProjectHint:
+      'Dette prosjektet kan brukes om igjen. Hver kjøring lager et nytt Google-dokument, mens tidligere forsøk beholdes i rapporthistorikken.',
     generatingSteps: [
       'Samler befaringens dokumentasjon',
       'Vurderer observasjoner',

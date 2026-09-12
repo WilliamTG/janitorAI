@@ -160,9 +160,12 @@ CREATE TABLE IF NOT EXISTS report_generations (
   id            BIGSERIAL   PRIMARY KEY,
   tester_token  VARCHAR,
   project_id    TEXT,
+  attempt_id    TEXT,
   doc_id        TEXT,
-  status        TEXT        NOT NULL DEFAULT 'success',  -- 'success' | 'error'
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  is_test_project BOOLEAN NOT NULL DEFAULT FALSE,
+  status        TEXT        NOT NULL DEFAULT 'processing', -- processing | success | error
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS report_generations_tenant_idx ON report_generations (tester_token, project_id, created_at DESC);
 
@@ -185,6 +188,12 @@ ALTER TABLE media           ADD COLUMN IF NOT EXISTS unreferenced_at TIMESTAMPTZ
 ALTER TABLE media           ADD COLUMN IF NOT EXISTS sha256          TEXT;
 ALTER TABLE tester_tokens   ADD COLUMN IF NOT EXISTS email           TEXT;
 ALTER TABLE user_actions    ADD COLUMN IF NOT EXISTS device_info    JSONB;
+ALTER TABLE report_generations ADD COLUMN IF NOT EXISTS is_test_project BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE report_generations ADD COLUMN IF NOT EXISTS attempt_id TEXT;
+ALTER TABLE report_generations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+CREATE UNIQUE INDEX IF NOT EXISTS report_generations_attempt_idx
+  ON report_generations (tester_token, project_id, attempt_id)
+  WHERE attempt_id IS NOT NULL;
 `;
 
 // ── Default-token seed + data migration ──────────────────────────────────────

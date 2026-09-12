@@ -5,6 +5,7 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const fs = require("fs");
+const { randomUUID } = require("crypto");
 const requireTesterToken = require("./middleware/requireTesterToken");
 const { generalLimiter, heavyLimiter } = require("./middleware/rateLimiters");
 const requestLogger = require("./middleware/requestLogger");
@@ -584,27 +585,87 @@ const REPORT_INFLIGHT_TTL_MS = 15 * 60 * 1000;
 const REPORT_MEDIA_URL_TTL_MS = 60 * 60 * 1000;
 const reportGenerationsInFlight = new Map(); // key -> startedAt (epoch ms)
 
-function recordReportGeneration({ testerToken, projectId, docId, status }) {
+async function beginReportGeneration({
+  testerToken,
+  projectId,
+  attemptId,
+  isTestProjectHint,
+}) {
+  if (!isDbEnabled()) return Boolean(isTestProjectHint);
+
+  const pool = getPool();
+  const persisted = projectId
+    ? await pool.query(
+        "SELECT data FROM projects WHERE id = $1 AND tester_token = $2",
+        [projectId, testerToken]
+      )
+    : { rows: [] };
+
+  // New test copies are pushed before generation. Refuse an unpersisted test
+  // hint so the ledger classification cannot depend on a client-only flag.
+  if (isTestProjectHint && persisted.rows.length === 0) {
+    const err = new Error("Test project must be synced before report generation");
+    err.code = "TEST_PROJECT_NOT_SYNCED";
+    throw err;
+  }
+  const isTestProject =
+    persisted.rows.length > 0 &&
+    persisted.rows[0].data &&
+    persisted.rows[0].data.isTestProject === true;
+
+  const inserted = await pool.query(
+    `INSERT INTO report_generations
+       (tester_token, project_id, attempt_id, doc_id, status, is_test_project)
+     VALUES ($1, $2, $3, NULL, 'processing', $4)
+     ON CONFLICT DO NOTHING
+     RETURNING attempt_id`,
+    [testerToken || null, projectId || null, attemptId, isTestProject]
+  );
+  if (inserted.rows.length === 0) {
+    const err = new Error("Report attempt already exists");
+    err.code = "REPORT_ATTEMPT_EXISTS";
+    throw err;
+  }
+  return isTestProject;
+}
+
+async function finishReportGeneration({
+  testerToken,
+  projectId,
+  attemptId,
+  docId,
+  status,
+}) {
   if (!isDbEnabled()) return;
-  getPool()
-    .query(
-      `INSERT INTO report_generations (tester_token, project_id, doc_id, status)
-       VALUES ($1, $2, $3, $4)`,
-      [testerToken || null, projectId || null, docId || null, status]
-    )
-    .catch((err) =>
-      console.error("report_generations insert error:", sanitizeError(err))
-    );
+  const updated = await getPool().query(
+    `UPDATE report_generations
+     SET doc_id = $4, status = $5, updated_at = now()
+     WHERE tester_token = $1 AND project_id = $2 AND attempt_id = $3`,
+    [testerToken || null, projectId || null, attemptId, docId || null, status]
+  );
+  if (updated.rowCount !== 1) {
+    throw new Error("Report generation ledger row was not updated");
+  }
 }
 
 app.post("/report/google-doc", heavyLimiter, async (req, res) => {
-  const aiEngineUrl = process.env.AI_ENGINE_URL;
-  if (!aiEngineUrl) {
-    return res.status(503).json({ error: "AI engine not configured" });
-  }
-
-  const { report_meta, video_filename, project, project_id } = req.body;
+  const {
+    report_meta,
+    video_filename,
+    project,
+    project_id,
+    is_test_project,
+    report_attempt_id,
+  } = req.body;
   const projectId = project_id ? String(project_id) : null;
+  const isTestProjectHint = is_test_project === true;
+  const attemptId =
+    typeof report_attempt_id === "string" &&
+    report_attempt_id.length > 0 &&
+    report_attempt_id.length <= 128
+      ? report_attempt_id
+      : randomUUID();
+  const aiEngineUrl = process.env.AI_ENGINE_URL;
   // Nøkkelen navnromsdeles på tester-token: project_id er klientoppgitt og
   // eierskapsuverifisert, så uten navnrom kunne tester B blokkere tester A
   // sin generering (409-DoS) ved å sende A sin prosjekt-id.
@@ -619,14 +680,38 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
   }
   // Egen entry-referanse (ikke bare timestamp): etter en TTL-overtakelse skal
   // den GAMLE kjøringens finally ikke slette den NYE kjøringens vakt.
-  const inflightEntry = { startedAt: Date.now() };
+  const inflightEntry = { startedAt: Date.now(), attemptId };
   reportGenerationsInFlight.set(inflightKey, inflightEntry);
-  let engineCallStarted = false;
+  let generationStarted = false;
+  let generationRecorded = false;
+  const recordCurrentGeneration = async ({ docId = null, status }) => {
+    if (generationRecorded) return;
+    await finishReportGeneration({
+      testerToken: req.testerToken,
+      projectId,
+      attemptId,
+      docId,
+      status,
+    });
+    generationRecorded = true;
+  };
 
   try {
     // Use the token already validated and set by the requireTesterToken middleware.
     // Reading the raw header again would miss Authorization: Bearer tokens.
     const token = req.testerToken;
+    await beginReportGeneration({
+      testerToken: token,
+      projectId,
+      attemptId,
+      isTestProjectHint,
+    });
+    generationStarted = true;
+
+    if (!aiEngineUrl) {
+      await recordCurrentGeneration({ status: "error" });
+      return res.status(503).json({ error: "AI engine not configured" });
+    }
 
     // Video is optional. When supplied, verify that it belongs to this tester
     // before allowing the AI engine to fetch it.
@@ -637,6 +722,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
         [String(video_filename), token]
       );
       if (ownsVideo.rows.length === 0) {
+        await recordCurrentGeneration({ status: "error" });
         return res.status(404).json({ status: "error", message: "Video not found for this tester." });
       }
     }
@@ -730,7 +816,6 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     // so the backend needs AI_ENGINE_TOKEN set to that same value.
     const aiToken = process.env.AI_ENGINE_TOKEN || "";
     const startedAt = Date.now();
-    engineCallStarted = true;
     const response = await fetchWithTimeout(
       `${aiEngineUrl}/api/report`,
       {
@@ -753,13 +838,14 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
     const data = await response.json();
     if (!response.ok) {
       console.error("AI engine /api/report error:", { status: response.status });
+      await recordCurrentGeneration({ docId: data && data.doc_id, status: "error" });
       return res.status(502).json({ error: "AI engine error" });
     }
 
     // COGS: AI-motoren returnerer token_usage fra Gemini-analysen (den store
     // kostnadsdriveren) — også ved pipelinefeil ETTER analysen, som ellers var
     // fakturert men usynlig i kostnadsmålingen. Fire-and-forget.
-    const failed = data && data.status === "error";
+    const failed = data && (data.status === "error" || !data.url);
     const tu = data && data.token_usage;
     if (tu) {
       recordCost({
@@ -784,17 +870,13 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
         message: data.message ? String(data.message).slice(0, 300) : null,
         orphanedDocId: data.doc_id || null,
       });
-      recordReportGeneration({
-        testerToken: req.testerToken,
-        projectId,
+      await recordCurrentGeneration({
         docId: data.doc_id || null,
         status: "error",
       });
     } else {
       const docMatch = String(data.url || "").match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
-      recordReportGeneration({
-        testerToken: req.testerToken,
-        projectId,
+      await recordCurrentGeneration({
         docId: docMatch ? docMatch[1] : null,
         status: "success",
       });
@@ -802,17 +884,31 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
 
     res.json(data);
   } catch (err) {
+    if (err && err.code === "TEST_PROJECT_NOT_SYNCED") {
+      return res.status(409).json({
+        error: err.message,
+        code: err.code,
+      });
+    }
+    if (err && err.code === "REPORT_ATTEMPT_EXISTS") {
+      return res.status(409).json({
+        error: err.message,
+        code: err.code,
+      });
+    }
     console.error("Backend /report/google-doc error:", sanitizeError(err));
     // Hovedbok også ved timeout/nettverksfeil ETTER at motorkallet startet:
     // motoren kan ha fullført (og fakturert) selv om svaret gikk tapt —
     // raden gjør forsøket avstembart mot Drive-mappen.
-    if (engineCallStarted) {
-      recordReportGeneration({
-        testerToken: req.testerToken,
-        projectId,
-        docId: null,
-        status: "error",
-      });
+    if (generationStarted) {
+      try {
+        await recordCurrentGeneration({ status: "error" });
+      } catch (ledgerErr) {
+        console.error(
+          "report_generations update error:",
+          sanitizeError(ledgerErr)
+        );
+      }
     }
     res.status(500).json({ error: "Server error" });
   } finally {
@@ -832,23 +928,40 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
 // én instans (in-flight-vakten har samme forutsetning).
 app.get("/report/status/:projectId", async (req, res) => {
   const projectId = String(req.params.projectId);
+  const attemptId =
+    typeof req.query.attempt_id === "string" && req.query.attempt_id
+      ? req.query.attempt_id
+      : null;
   const entry = reportGenerationsInFlight.get(`${req.testerToken}:${projectId}`);
   const inFlight = Boolean(
-    entry && Date.now() - entry.startedAt < REPORT_INFLIGHT_TTL_MS
+    entry &&
+      (!attemptId || entry.attemptId === attemptId) &&
+      Date.now() - entry.startedAt < REPORT_INFLIGHT_TTL_MS
   );
 
   if (!isDbEnabled()) return res.json({ inFlight, latest: null });
   try {
-    const row = await getPool().query(
-      `SELECT doc_id, status, created_at FROM report_generations
-       WHERE tester_token = $1 AND project_id = $2
-       ORDER BY created_at DESC LIMIT 1`,
-      [req.testerToken, projectId]
-    );
+    const row = attemptId
+      ? await getPool().query(
+          `SELECT attempt_id, doc_id, status, is_test_project, created_at
+           FROM report_generations
+           WHERE tester_token = $1 AND project_id = $2 AND attempt_id = $3
+           LIMIT 1`,
+          [req.testerToken, projectId, attemptId]
+        )
+      : await getPool().query(
+          `SELECT attempt_id, doc_id, status, is_test_project, created_at
+           FROM report_generations
+           WHERE tester_token = $1 AND project_id = $2
+           ORDER BY created_at DESC LIMIT 1`,
+          [req.testerToken, projectId]
+        );
     const latest = row.rows[0]
       ? {
           status: row.rows[0].status,
           createdAt: row.rows[0].created_at,
+          isTestProject: Boolean(row.rows[0].is_test_project),
+          attemptId: row.rows[0].attempt_id || null,
           url: row.rows[0].doc_id
             ? `https://docs.google.com/document/d/${row.rows[0].doc_id}/edit`
             : null,

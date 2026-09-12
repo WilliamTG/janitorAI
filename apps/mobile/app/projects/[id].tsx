@@ -51,7 +51,14 @@ import {
   getProject,
   updateProject as updateProjectInStorage,
 } from '@/src/storage/projectsStorage';
-import { pullAndMerge, schedulePush, subscribeToProjectUpdates, touchProject, clearVideoRetryState } from '@/src/sync/projectSync';
+import {
+  clearVideoRetryState,
+  pullAndMerge,
+  pushProject,
+  schedulePush,
+  subscribeToProjectUpdates,
+  touchProject,
+} from '@/src/sync/projectSync';
 import { fetchReportStatus, resolveStuckReport } from '@/src/sync/reportRecovery';
 import { persistMediaLocally } from '@/src/sync/persistMedia';
 import { displayMediaUri } from '@/src/sync/mediaUri';
@@ -1469,11 +1476,17 @@ export default function ProjectDetailScreen() {
 
     const t0 = Date.now();
     // Snapshot to avoid stale-closure bugs across async boundaries
-    const snap = project;
+    let snap = project;
+    const reportAttemptId = newId();
 
     try {
       setIsGeneratingGoogleDoc(true);
       setGoogleDocUrl(null);
+      // Test-project identity must exist server-side before the ledger derives
+      // its authoritative classification from the tenant-scoped project row.
+      if (snap.isTestProject) {
+        snap = await pushProject(snap);
+      }
       // Ny generering gir en ny rapportversjon — godkjenningen gjelder den
       // gamle og nullstilles. Feiler genereringen, gjenoppretter feilbanene
       // (...snap) både forrige rapport og stempelet dens.
@@ -1482,6 +1495,7 @@ export default function ProjectDetailScreen() {
         reportStatus: 'processing',
         reportError: undefined,
         reportApproval: undefined,
+        reportAttemptId,
       });
 
       // A report can be based on any available inspection evidence. Include a
@@ -1523,6 +1537,8 @@ export default function ProjectDetailScreen() {
           // project_id gir serveren nøkkel til hovedboken (report_generations)
           // og til én-kjøring-om-gangen-vakten.
           project_id: snap.id,
+          report_attempt_id: reportAttemptId,
+          is_test_project: Boolean(snap.isTestProject),
           ...(videoFilename ? { video_filename: videoFilename } : {}),
           project: projectContext,
         }),
@@ -1564,7 +1580,7 @@ export default function ProjectDetailScreen() {
       if (!response.ok) {
         const errMsg = `${nb.report.failed} (HTTP ${response.status})`;
         logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
-        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
+        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg, reportAttemptId: undefined });
         toast.show({ message: nb.report.failed, variant: 'error' });
         return;
       }
@@ -1573,7 +1589,7 @@ export default function ProjectDetailScreen() {
       if (data.status === 'error') {
         const errMsg = data.message || 'AI-motoren returnerte en feil.';
         logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
-        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
+        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg, reportAttemptId: undefined });
         toast.show({ message: nb.report.failed, variant: 'error' });
         return;
       }
@@ -1594,6 +1610,7 @@ export default function ProjectDetailScreen() {
           reportUrl: data.url,
           reportStatus: 'ready',
           reportError: undefined,
+          reportAttemptId: undefined,
           // Ny rapport er et nytt AI-utkast — aldri arv forrige godkjenning.
           reportApproval: undefined,
           // Eksplisitt tom-markør når analysen mangler (aldri undefined):
@@ -1614,20 +1631,20 @@ export default function ProjectDetailScreen() {
       } else {
         const errMsg = 'Fikk ingen dokumentlenke fra AI-motoren.';
         logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
-        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
+        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg, reportAttemptId: undefined });
         toast.show({ message: nb.report.failed, variant: 'error' });
       }
     } catch (error) {
       logError(error, 'generate-google-doc').catch(() => {});
       if (await handleApiError(error)) {
         // 401 må ikke etterlate prosjektet i evig «Behandler …».
-        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: nb.report.unauthorized });
+        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: nb.report.unauthorized, reportAttemptId: undefined });
         return;
       }
       // Brutt forbindelse betyr ikke at genereringen feilet — motoren kan
       // fortsatt jobbe, eller alt ble ferdig uten at svaret nådde frem. Spør
       // hovedboka (/report/status) før forsøket avskrives som feil.
-      const status = await fetchReportStatus(snap.id);
+      const status = await fetchReportStatus(snap.id, reportAttemptId);
       if (status) {
         const outcome = resolveStuckReport(snap, status);
         if (outcome.kind === 'stillRunning') {
@@ -1636,6 +1653,7 @@ export default function ProjectDetailScreen() {
             reportStatus: 'processing',
             reportError: undefined,
             reportApproval: undefined,
+            reportAttemptId,
           });
           toast.show({ message: nb.report.stillRunning, variant: 'info' });
           return;
@@ -1648,7 +1666,7 @@ export default function ProjectDetailScreen() {
         }
       }
       const errMsg = 'Fikk ikke kontakt med serveren.';
-      await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg });
+      await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg, reportAttemptId: undefined });
       toast.show({ message: errMsg, variant: 'error' });
     } finally {
       setIsGeneratingGoogleDoc(false);
@@ -2186,16 +2204,33 @@ export default function ProjectDetailScreen() {
   const renderReport = () => {
     const displayUrl = googleDocUrl || project?.reportUrl;
     const reportFailed = project?.reportStatus === 'failed';
+    const generateLabel = project?.isTestProject
+      ? displayUrl
+        ? nb.report.regenerateTest
+        : nb.report.generateTest
+      : nb.report.generate;
 
     return (
       <View style={{ gap: theme.spacing.md }}>
+        {project?.isTestProject ? (
+          <GlassCard style={{ gap: theme.spacing.xs }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+              <Ionicons name="flask-outline" size={18} color={theme.colors.accent} />
+              <Body style={{ color: theme.colors.accent, fontWeight: '700' }}>
+                {nb.projects.testProject}
+              </Body>
+            </View>
+            <Caption muted>{nb.report.testProjectHint}</Caption>
+          </GlassCard>
+        ) : null}
         <PrimaryButton
+          testID="generate-report"
           onPress={generateGoogleDocReport}
           loading={isGeneratingGoogleDoc}
           disabled={!isTokenValid || isGeneratingGoogleDoc}
           style={{ minHeight: 56 }}
         >
-          {isGeneratingGoogleDoc ? nb.report.generating : nb.report.generate}
+          {isGeneratingGoogleDoc ? nb.report.generating : generateLabel}
         </PrimaryButton>
 
         {!isTokenValid && (
@@ -2863,6 +2898,25 @@ export default function ProjectDetailScreen() {
 
   const renderTopBar = () => (
     <View style={{ gap: theme.spacing.sm }}>
+      {project?.isTestProject ? (
+        <View
+          style={{
+            alignSelf: 'flex-start',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 5,
+            paddingHorizontal: theme.spacing.sm,
+            paddingVertical: 4,
+            borderRadius: theme.radii.pill,
+            backgroundColor: `${theme.colors.accent}1A`,
+          }}
+        >
+          <Ionicons name="flask-outline" size={14} color={theme.colors.accent} />
+          <Caption style={{ color: theme.colors.accent, fontWeight: '700' }}>
+            {nb.projects.testProject}
+          </Caption>
+        </View>
+      ) : null}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: theme.spacing.sm }}>
         <SyncStatusIndicator />
         <IconButton onPress={() => setShowTokenModal(true)} accessibilityLabel={nb.auth.accessTitle}>

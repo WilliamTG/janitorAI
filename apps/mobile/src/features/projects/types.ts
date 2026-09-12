@@ -188,6 +188,10 @@ export type Project = {
    * dokumentets generasjon. Stemples ved hver lagring (projectsStorage).
    */
   schemaVersion?: number;
+  /** Replayable copy used for repeated report-quality testing. */
+  isTestProject?: boolean;
+  /** Original project that supplied this test project's inspection evidence. */
+  sourceProjectId?: string;
   name: string;
   inspectionDate: string;
   inspector: string;
@@ -216,6 +220,8 @@ export type Project = {
   reportUrl?: string;
   /** Lifecycle status of the most recent report generation attempt. */
   reportStatus?: 'processing' | 'ready' | 'failed';
+  /** Correlates recovery with the exact durable server-ledger attempt. */
+  reportAttemptId?: string;
   /** Takstpersonens godkjenning av gjeldende rapport; kreves før deling. */
   reportApproval?: ReportApproval;
   /** AI-utkastet slik motoren leverte det — arkiveres uendret (A5). */

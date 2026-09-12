@@ -2,7 +2,6 @@
 // All queries are strictly scoped to req.testerToken so testers are isolated.
 
 const express = require("express");
-const fs = require("fs");
 const { getPool, requireDb } = require("../db");
 const { reconcileAfterUpsert } = require("../mediaCleanup");
 
@@ -138,32 +137,28 @@ router.put("/:id", async (req, res) => {
 // ── Delete project (tombstoned, scoped) ──────────────────────────────────────
 // Én transaksjon rundt de tre skrivingene: et krasj midt i sekvensen kunne
 // ellers gi sletting UTEN tombstone — og prosjektet gjenoppstår fra en annen
-// enhets kopi ved neste synk. Fil-sletting skjer etter COMMIT (kan ikke rulles
-// tilbake); en krasj der etterlater kun filer som katalogskannen i
-// mediaCleanup rydder senere.
+// enhets kopi ved neste synk. Medier markeres som urefererte i samme transaksjon
+// og slettes først etter cleanup-fristen, med en ny referansesjekk.
 router.delete("/:id", async (req, res) => {
   const id = String(req.params.id);
   const token = req.testerToken;
   const pool = getPool();
 
-  let mediaRows = [];
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
-    // Collect media paths before deleting rows (scoped to this tester).
-    const media = await client.query(
-      "SELECT file_path FROM media WHERE project_id = $1 AND tester_token = $2",
-      [id, token]
-    );
-    mediaRows = media.rows;
 
     await client.query(
       "DELETE FROM projects WHERE id = $1 AND tester_token = $2",
       [id, token]
     );
+    // Never unlink here: a local-first test copy may reference these IDs before
+    // its debounced PUT reaches the server. The grace-period sweep rechecks all
+    // live project JSON atomically before it removes a row and file.
     await client.query(
-      "DELETE FROM media WHERE project_id = $1 AND tester_token = $2",
+      `UPDATE media
+       SET unreferenced_at = now()
+       WHERE project_id = $1 AND tester_token = $2`,
       [id, token]
     );
     // S14: behold eierens tester_token ved konflikt — en annen tester skal
@@ -189,10 +184,6 @@ router.delete("/:id", async (req, res) => {
     return res.status(500).json({ error: "Server error" });
   } finally {
     client.release();
-  }
-
-  for (const row of mediaRows) {
-    fs.unlink(row.file_path, () => {});
   }
 
   reconcileAfterUpsert();
