@@ -149,7 +149,7 @@ def _upload_inspector_photos(genai_client, project: dict) -> list:
                 photo_deadline = time.monotonic() + 120  # maks 2 min
                 while photo_file.state.name == "PROCESSING":
                     if time.monotonic() > photo_deadline:
-                        raise TimeoutError("Gemini foto-prosessering tok for lang tid (>2 min)")
+                        raise TimeoutError(" foto-prosessering tok for lang tid (>2 min)")
                     time.sleep(1)
                     photo_file = genai_client.files.get(name=photo_file.name)
                 if photo_file.state.name == "FAILED":
@@ -309,7 +309,7 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
 
         print("🧠 Sending content to Gemini for analysis...")
         gemini_response = genai_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.8-flash",
             contents=contents,
             config={"response_mime_type": "application/json",
                     "response_schema": DamageAnalysis,
