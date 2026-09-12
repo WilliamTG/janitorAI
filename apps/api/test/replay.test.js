@@ -5,6 +5,7 @@ const {
   cloneProjectData,
   normalizeSelectedProjectIds,
   getReplayProject,
+  deleteReplayProject,
 } = require("../src/replay");
 const { processItem } = require("../src/replayWorker");
 const {
@@ -204,6 +205,136 @@ test("replay project inspection returns tenant-safe signed media without tester 
   assert.equal(result.media[0].url.startsWith("https://api.example.test/api/media/photo-1?"), true);
   assert.equal(JSON.stringify(result).includes("secret-tenant-token"), false);
   assert.equal(result.replay.sourceProjectId, "source-1");
+});
+
+test("replay copy deletion removes only a terminal copy and retains audit history", async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [] };
+      if (sql.includes("FROM replay_batch_items i")) {
+        return {
+          rows: [{
+            id: 21,
+            batch_id: 10,
+            tester_token: "tenant-a",
+            source_project_id: "source-1",
+            copy_project_id: "copy-1",
+            state: "succeeded",
+            lease_until: null,
+            copy_deleted_at: null,
+            batch_status: "completed",
+          }],
+        };
+      }
+      if (sql.includes("SELECT id, data") && sql.includes("FROM projects")) {
+        return {
+          rows: [{
+            id: "copy-1",
+            data: { id: "copy-1", isTestProject: true, sourceProjectId: "source-1" },
+          }],
+        };
+      }
+      if (sql.includes("UPDATE replay_batch_items")) {
+        return { rows: [{ copy_deleted_at: "2026-09-12T12:00:00.000Z" }] };
+      }
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+
+  const result = await deleteReplayProject({ connect: async () => client }, "copy-1");
+
+  assert.deepEqual(result, {
+    deleted: true,
+    projectId: "copy-1",
+    batchId: 10,
+    copyDeletedAt: "2026-09-12T12:00:00.000Z",
+  });
+  const projectLock = calls.find((call) => call.sql.includes("SELECT id, data"));
+  assert.deepEqual(projectLock.params, ["copy-1", "tenant-a"]);
+  assert.ok(calls.some((call) => call.sql.startsWith("DELETE FROM projects")));
+  assert.ok(calls.some((call) => call.sql.includes("INSERT INTO deleted_projects")));
+  assert.ok(calls.some((call) => call.sql.includes("UPDATE media")));
+  assert.ok(calls.some((call) => call.sql.includes("copy_deleted_at = now()")));
+  assert.equal(calls.some((call) => call.sql.startsWith("DELETE FROM replay_batch_items")), false);
+});
+
+test("replay copy deletion protects source projects", async () => {
+  const calls = [];
+  const client = {
+    async query(sql) {
+      calls.push(sql);
+      if (sql === "BEGIN" || sql === "ROLLBACK") return { rows: [] };
+      if (sql.includes("FROM replay_batch_items i")) {
+        return {
+          rows: [{
+            id: 22,
+            batch_id: 11,
+            tester_token: "tenant-a",
+            source_project_id: "source-1",
+            copy_project_id: "copy-2",
+            state: "succeeded",
+            lease_until: null,
+            copy_deleted_at: null,
+            batch_status: "completed",
+          }],
+        };
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+    release() {},
+  };
+
+  await assert.rejects(
+    deleteReplayProject({ connect: async () => client }, "source-1"),
+    { code: "REPLAY_SOURCE_PROTECTED" }
+  );
+  assert.equal(calls[0], "BEGIN");
+  assert.match(calls[1], /FROM replay_batch_items i/);
+  assert.equal(calls[2], "ROLLBACK");
+  assert.equal(calls.some((sql) => sql.startsWith("DELETE FROM projects")), false);
+});
+
+test("replay copy deletion protects active or leased workers", async () => {
+  const client = {
+    async query(sql) {
+      if (sql === "BEGIN" || sql === "ROLLBACK") return { rows: [] };
+      if (sql.includes("FROM replay_batch_items i")) {
+        return {
+          rows: [{
+            id: 23,
+            batch_id: 12,
+            tester_token: "tenant-b",
+            source_project_id: "source-2",
+            copy_project_id: "copy-3",
+            state: "running",
+            lease_until: "2026-09-12T12:10:00.000Z",
+            copy_deleted_at: null,
+            batch_status: "running",
+          }],
+        };
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+    release() {},
+  };
+
+  await assert.rejects(
+    deleteReplayProject({ connect: async () => client }, "copy-3"),
+    { code: "REPLAY_PROJECT_ACTIVE" }
+  );
+});
+
+test("admin replay dashboard requires confirmed deletion and exposes safe copy actions", () => {
+  const html = fs.readFileSync(
+    require.resolve("../src/admin-dashboard.html"), "utf8"
+  );
+  assert.match(html, /deleteReplayProject/);
+  assert.match(html, /confirmed: true/);
+  assert.match(html, /Delete replay copy/);
+  assert.match(html, /source project will be kept/);
 });
 
 test("strict Google Docs legacy URL validation", () => {
