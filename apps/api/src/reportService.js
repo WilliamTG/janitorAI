@@ -42,6 +42,33 @@ function findRemoteId(value, predicate) {
   return null;
 }
 
+function collectRemoteIds(value, requested = new Set()) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectRemoteIds(item, requested));
+  } else if (value && typeof value === "object") {
+    Object.entries(value).forEach(([key, child]) => {
+      if (key.toLowerCase().endsWith("remoteid") && child != null && String(child).trim()) {
+        requested.add(String(child));
+      }
+      collectRemoteIds(child, requested);
+    });
+  }
+  return requested;
+}
+
+function selectReportSnapshot(persisted, projectOverride) {
+  return projectOverride && typeof projectOverride === "object" && !Array.isArray(projectOverride)
+    ? projectOverride
+    : (persisted && typeof persisted === "object" ? persisted : {});
+}
+
+function selectVideoId(snapshot, videoFilename) {
+  if (videoFilename && videoFilename !== "demo") return String(videoFilename);
+  return findRemoteId(snapshot, (keyName) =>
+    keyName === "videoremoteid" || keyName === "video_remote_id"
+  );
+}
+
 async function begin(pool, testerToken, projectId, attemptId, testHint, resumeExistingAttempt) {
   const persisted = projectId
     ? await pool.query("SELECT data FROM projects WHERE id=$1 AND tester_token=$2", [projectId, testerToken])
@@ -131,7 +158,7 @@ function projectContext(source, apiBaseUrl, ownedPhotoIds, testerToken) {
 async function generateReport({
   testerToken, projectId, attemptId = randomUUID(), isTestProjectHint = false,
   reportMeta = {}, videoFilename = null, apiBaseUrl,
-  requestId = null, resumeExistingAttempt = false,
+  requestId = null, resumeExistingAttempt = false, projectOverride = null,
 }) {
   if (!isDbEnabled()) {
     const err = new Error("Persistence not configured");
@@ -164,7 +191,7 @@ async function generateReport({
       isTestProjectHint,
       resumeExistingAttempt
     );
-    source = begun.source;
+    source = selectReportSnapshot(begun.source, projectOverride);
     if (begun.existingDocId) {
       await pool.query(
         `UPDATE projects SET data=data || $3::jsonb,updated_at=now()
@@ -179,22 +206,15 @@ async function generateReport({
     started = true;
     const base = apiBaseUrl || process.env.API_BASE_URL;
     if (!base) throw new Error("API_BASE_URL is required for report media");
-    const requested = new Set();
-    const walk = (value) => {
-      if (Array.isArray(value)) value.forEach(walk);
-      else if (value && typeof value === "object") Object.entries(value).forEach(([k, v]) => {
-        if (k.toLowerCase().endsWith("remoteid") && v) requested.add(String(v));
-        walk(v);
-      });
-    };
-    walk(source);
+    const requested = collectRemoteIds(source);
+    const explicitVideo = videoFilename && videoFilename !== "demo"
+      ? String(videoFilename) : null;
+    if (explicitVideo) requested.add(explicitVideo);
     const owned = requested.size
       ? await pool.query("SELECT id FROM media WHERE id=ANY($1) AND tester_token=$2", [[...requested], testerToken])
       : { rows: [] };
     const ownedIds = new Set(owned.rows.map((row) => String(row.id)));
-    const videoId = findRemoteId(source, (keyName) =>
-      (keyName === "videoremoteid" || keyName === "video_remote_id"));
-    const requestedVideo = videoId || (videoFilename && videoFilename !== "demo" ? String(videoFilename) : null);
+    const requestedVideo = selectVideoId(source, videoFilename);
     if (requestedVideo && !ownedIds.has(requestedVideo)) {
       const err = new Error("Video not found for this tester");
       err.code = "MEDIA_NOT_OWNED";
@@ -303,4 +323,7 @@ module.exports = {
   REPORT_PROXY_TIMEOUT_MS,
   REPORT_MEDIA_URL_TTL_MS,
   canResumeExistingAttempt,
+  collectRemoteIds,
+  selectReportSnapshot,
+  selectVideoId,
 };

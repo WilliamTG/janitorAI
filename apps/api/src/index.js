@@ -591,6 +591,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
       isTestProjectHint: body.is_test_project === true,
       reportMeta: body.report_meta || {},
       videoFilename: body.video_filename || null,
+      projectOverride: body.project,
       apiBaseUrl: process.env.API_BASE_URL || `${req.protocol}://${req.get("host")}`,
       requestId: req.requestId || null,
     });

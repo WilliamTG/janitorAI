@@ -5,7 +5,12 @@ const {
   cloneProjectData,
 } = require("../src/replay");
 const { processItem } = require("../src/replayWorker");
-const { canResumeExistingAttempt } = require("../src/reportService");
+const {
+  canResumeExistingAttempt,
+  collectRemoteIds,
+  selectReportSnapshot,
+  selectVideoId,
+} = require("../src/reportService");
 const { createBatch, scopeDigest } = require("../src/replay");
 const fs = require("node:fs");
 
@@ -21,6 +26,35 @@ test("admin dashboard treats queued replay batches as active and pollable", () =
   );
   assert.match(html, /active = \['queued','pending','running','active','processing','in_progress'\]/);
   assert.match(html, /!?\['queued','pending','running','active','processing','in_progress'\]\.includes\(replayStatus\(batch\)\)/);
+});
+
+test("report snapshots prefer a newer HTTP override but replay uses persisted data", () => {
+  const persisted = { name: "stale", notes: [{ text: "old" }] };
+  const newer = { name: "new", notes: [{ text: "fresh" }] };
+  assert.equal(selectReportSnapshot(persisted, newer), newer);
+  assert.equal(selectReportSnapshot(persisted, null), persisted);
+});
+
+test("explicit video filename takes precedence over snapshot video ID", () => {
+  const snapshot = { videoRemoteId: "stale-video" };
+  assert.equal(selectVideoId(snapshot, "new-video"), "new-video");
+  assert.equal(selectVideoId(snapshot, "demo"), "stale-video");
+});
+
+test("media ownership candidates include every snapshot ID and explicit video", () => {
+  const candidates = collectRemoteIds({
+    notes: [{ photos: [{ remoteId: "photo-1" }] }],
+    videoRemoteId: "snapshot-video",
+  });
+  candidates.add("explicit-video");
+  assert.deepEqual([...candidates].sort(), ["explicit-video", "photo-1", "snapshot-video"]);
+});
+
+test("HTTP report adapter forwards the request project snapshot override", () => {
+  const indexSource = fs.readFileSync(
+    require.resolve("../src/index.js"), "utf8"
+  );
+  assert.match(indexSource, /projectOverride:\s*body\.project/);
 });
 
 test("batch creation locks the transaction before active-batch discovery", async () => {
