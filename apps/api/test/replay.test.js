@@ -3,6 +3,8 @@ const assert = require("node:assert/strict");
 const {
   strictGoogleDocUrl,
   cloneProjectData,
+  normalizeSelectedProjectIds,
+  getReplayProject,
 } = require("../src/replay");
 const { processItem } = require("../src/replayWorker");
 const {
@@ -76,6 +78,132 @@ test("batch creation locks the transaction before active-batch discovery", async
   assert.equal(calls[0], "BEGIN");
   assert.equal(calls[1], "SELECT pg_advisory_xact_lock($1)");
   assert.match(calls[2], /FROM replay_batches|FROM projects p/);
+});
+
+test("replay selection accepts unique IDs and rejects an empty selection", () => {
+  assert.deepEqual(normalizeSelectedProjectIds(["a", "a", " b "]), ["a", "b"]);
+  assert.throws(() => normalizeSelectedProjectIds([]), {
+    code: "REPLAY_SELECTION_INVALID",
+  });
+  assert.throws(() => normalizeSelectedProjectIds(["", "  "]), {
+    code: "REPLAY_SELECTION_INVALID",
+  });
+});
+
+test("batch creation only inserts the selected projects from the signed preview scope", async () => {
+  const calls = [];
+  const scopeRows = [
+    { source_project_id: "source-a", tester_token: "tenant-a", report_doc_id: "doc-a" },
+    { source_project_id: "source-b", tester_token: "tenant-b", report_doc_id: "doc-b" },
+  ];
+  const client = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (sql === "SELECT pg_advisory_xact_lock($1)") return { rows: [] };
+      if (sql.includes("FROM projects p")) return { rows: scopeRows };
+      if (sql.includes("FROM replay_batches")) return { rows: [] };
+      if (sql.includes("INSERT INTO replay_batches")) {
+        return { rows: [{ id: 10, status: "queued", requested_at: new Date() }] };
+      }
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+
+  await createBatch(
+    { connect: async () => client },
+    scopeDigest(scopeRows),
+    ["source-b"]
+  );
+
+  const itemInsert = calls.find((call) => call.sql.includes("INSERT INTO replay_batch_items"));
+  assert.ok(itemInsert);
+  assert.equal(itemInsert.params[2], "source-b");
+  assert.equal(
+    calls.filter((call) => call.sql.includes("INSERT INTO replay_batch_items")).length,
+    1
+  );
+});
+
+test("batch creation rejects a project outside the signed preview scope", async () => {
+  const scopeRows = [
+    { source_project_id: "source-a", tester_token: "tenant-a", report_doc_id: "doc-a" },
+  ];
+  const client = {
+    async query(sql) {
+      if (sql === "SELECT pg_advisory_xact_lock($1)") return { rows: [] };
+      if (sql.includes("FROM projects p")) return { rows: scopeRows };
+      return { rows: [] };
+    },
+    release() {},
+  };
+
+  await assert.rejects(
+    createBatch({ connect: async () => client }, scopeDigest(scopeRows), ["not-eligible"]),
+    { code: "REPLAY_SELECTION_STALE" }
+  );
+});
+
+test("replay project inspection returns tenant-safe signed media without tester tokens", async () => {
+  const pool = {
+    async query(sql) {
+      if (sql.includes("SELECT p.id, p.data")) {
+        return {
+          rows: [{
+            id: "copy-1",
+            tester_token: "secret-tenant-token",
+            tester_name: "Inspector",
+            updated_at: "2026-09-12T10:00:00.000Z",
+            data: {
+              id: "copy-1",
+              name: "Copied inspection",
+              isTestProject: true,
+              notes: [{ text: "Wall damp", photos: [{ remoteId: "photo-1" }] }],
+            },
+          }],
+        };
+      }
+      if (sql.includes("SELECT i.batch_id")) {
+        return {
+          rows: [{
+            batch_id: 10,
+            source_project_id: "source-1",
+            copy_project_id: "copy-1",
+            state: "pending",
+            progress: 0,
+            error: null,
+            started_at: null,
+            finished_at: null,
+            batch_status: "queued",
+            source_data: { name: "Original inspection" },
+            copy_data: { name: "Copied inspection" },
+          }],
+        };
+      }
+      if (sql.includes("SELECT id, kind, mime_type")) {
+        return {
+          rows: [{
+            id: "photo-1",
+            kind: "photo",
+            mime_type: "image/jpeg",
+            original_name: "wall.jpg",
+            size_bytes: 123,
+            created_at: "2026-09-12T10:00:00.000Z",
+          }],
+        };
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+  };
+
+  const result = await getReplayProject(pool, "copy-1", {
+    mediaBaseUrl: "https://api.example.test",
+  });
+  assert.equal(result.role, "replay-copy");
+  assert.equal(result.tester, "Inspector");
+  assert.equal(result.media[0].url.startsWith("https://api.example.test/api/media/photo-1?"), true);
+  assert.equal(JSON.stringify(result).includes("secret-tenant-token"), false);
+  assert.equal(result.replay.sourceProjectId, "source-1");
 });
 
 test("strict Google Docs legacy URL validation", () => {

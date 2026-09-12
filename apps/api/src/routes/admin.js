@@ -9,6 +9,7 @@ const {
   preview: replayPreview,
   createBatch: createReplayBatch,
   getBatch: getReplayBatch,
+  getReplayProject,
 } = require("../replay");
 
 const router = express.Router();
@@ -55,6 +56,21 @@ router.get("/replay/preview", async (req, res) => {
   }
 });
 
+router.get("/replay/projects/:id", async (req, res) => {
+  try {
+    const configuredBase = process.env.API_BASE_URL;
+    const requestBase = `${req.protocol}://${req.get("host")}`;
+    const project = await getReplayProject(getPool(), req.params.id, {
+      mediaBaseUrl: (configuredBase || requestBase).replace(/\/$/, ""),
+    });
+    if (!project) return res.status(404).json({ error: "Replay project not found" });
+    res.json({ project });
+  } catch (err) {
+    console.error("GET /api/admin/replay/projects/:id error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 router.post("/replay/batches", async (req, res) => {
   if (!req.body || req.body.confirmed !== true) {
     return res.status(400).json({ error: "confirmed:true is required" });
@@ -63,11 +79,18 @@ router.post("/replay/batches", async (req, res) => {
     if (typeof req.body.previewId !== "string" || !req.body.previewId) {
       return res.status(400).json({ error: "previewId is required" });
     }
-    const batch = await createReplayBatch(getPool(), req.body.previewId);
+    const batch = await createReplayBatch(
+      getPool(),
+      req.body.previewId,
+      req.body.projectIds
+    );
     res.status(batch.existing ? 200 : 201).json({ batch });
   } catch (err) {
-    if (err && err.code === "REPLAY_PREVIEW_STALE") {
+    if (err && ["REPLAY_PREVIEW_STALE", "REPLAY_SELECTION_STALE"].includes(err.code)) {
       return res.status(409).json({ error: err.message, code: err.code });
+    }
+    if (err && err.code === "REPLAY_SELECTION_INVALID") {
+      return res.status(400).json({ error: err.message, code: err.code });
     }
     console.error("POST /api/admin/replay/batches error:", sanitizeError(err));
     res.status(500).json({ error: "Server error" });
