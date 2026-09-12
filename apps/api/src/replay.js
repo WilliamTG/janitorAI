@@ -3,6 +3,7 @@
 // with a small fake pool and reused by the admin routes and startup worker.
 
 const { randomUUID, createHmac } = require("crypto");
+const { signedMediaUrl } = require("./mediaSign");
 
 const TERMINAL_BATCH_STATES = new Set(["completed", "failed", "cancelled"]);
 const TERMINAL_ITEM_STATES = new Set(["succeeded", "failed", "skipped", "cancelled"]);
@@ -129,6 +130,46 @@ function maskedTesterLabel(row) {
   return "Unnamed tester";
 }
 
+function collectRemoteIds(value, result = new Set()) {
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectRemoteIds(entry, result));
+  } else if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      if (
+        (key.toLowerCase() === "remoteid" || key.toLowerCase().endsWith("remoteid")) &&
+        child != null &&
+        String(child).trim()
+      ) {
+        result.add(String(child));
+      }
+      collectRemoteIds(child, result);
+    }
+  }
+  return result;
+}
+
+function projectEvidenceSummary(data) {
+  const project = data && typeof data === "object" ? data : {};
+  const notes = Array.isArray(project.notes) ? project.notes : [];
+  const photoIds = collectRemoteIds(
+    notes.map((note) => note && note.photos).filter(Boolean)
+  );
+  const videoIds = collectRemoteIds({
+    videoRemoteId: project.videoRemoteId,
+    videoUri: project.videoUri,
+    video: project.video,
+  });
+  const transcriptionCount = notes.filter(
+    (note) => note && typeof note.transcription === "string" && note.transcription.trim()
+  ).length;
+  return {
+    noteCount: notes.length,
+    photoCount: photoIds.size,
+    videoCount: videoIds.size,
+    transcriptionCount,
+  };
+}
+
 async function discoverEligible(pool) {
   const result = await pool.query(`
     SELECT DISTINCT ON (p.tester_token, p.id)
@@ -161,6 +202,12 @@ async function preview(pool) {
     sourceProjectId: row.source_project_id,
     tester: maskedTesterLabel(row),
     projectName: row.data && row.data.name ? String(row.data.name) : row.source_project_id,
+    inspectionDate: row.data && row.data.inspectionDate
+      ? String(row.data.inspectionDate)
+      : null,
+    inspector: row.data && row.data.inspector ? String(row.data.inspector) : null,
+    updatedAt: row.data && row.data.updatedAt ? String(row.data.updatedAt) : null,
+    evidence: projectEvidenceSummary(row.data),
     reportDocument: row.report_doc_id,
   }));
   const testerAccountCount = new Set(rows.map((row) => String(row.tester_token))).size;
@@ -176,7 +223,29 @@ async function preview(pool) {
   };
 }
 
-async function createBatch(pool, expectedPreviewId) {
+function normalizeSelectedProjectIds(selectedProjectIds) {
+  if (selectedProjectIds == null) return null;
+  if (!Array.isArray(selectedProjectIds) || selectedProjectIds.length === 0) {
+    const error = new Error("At least one replay project must be selected");
+    error.code = "REPLAY_SELECTION_INVALID";
+    throw error;
+  }
+  const ids = [...new Set(
+    selectedProjectIds
+      .filter((id) => typeof id === "string" || typeof id === "number")
+      .map((id) => String(id).trim())
+      .filter(Boolean)
+  )];
+  if (!ids.length) {
+    const error = new Error("At least one replay project must be selected");
+    error.code = "REPLAY_SELECTION_INVALID";
+    throw error;
+  }
+  return ids;
+}
+
+async function createBatch(pool, expectedPreviewId, selectedProjectIds = null) {
+  const selectedIds = normalizeSelectedProjectIds(selectedProjectIds);
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -204,6 +273,20 @@ async function createBatch(pool, expectedPreviewId) {
       stale.code = "REPLAY_PREVIEW_STALE";
       throw stale;
     }
+    const eligibleById = new Map(
+      scopeRows.rows.map((row) => [String(row.source_project_id), row])
+    );
+    const rowsToReplay = selectedIds
+      ? selectedIds.map((id) => eligibleById.get(id)).filter(Boolean)
+      : scopeRows.rows;
+    if (selectedIds && rowsToReplay.length !== selectedIds.length) {
+      const invalid = selectedIds.find((id) => !eligibleById.has(id));
+      const error = new Error(
+        `Replay selection is stale or contains an ineligible project${invalid ? `: ${invalid}` : ""}`
+      );
+      error.code = "REPLAY_SELECTION_STALE";
+      throw error;
+    }
     const active = await client.query(
       `SELECT id, status FROM replay_batches
        WHERE status IN ('queued','running') ORDER BY id DESC LIMIT 1 FOR UPDATE`
@@ -215,7 +298,7 @@ async function createBatch(pool, expectedPreviewId) {
     const batch = await client.query(
       `INSERT INTO replay_batches (status) VALUES ('queued') RETURNING id, status, requested_at`
     );
-    const rows = { rows: scopeRows.rows };
+    const rows = { rows: rowsToReplay };
     for (const row of rows.rows) {
       const copyId = randomUUID();
       const attemptId = randomUUID();
@@ -241,6 +324,108 @@ async function createBatch(pool, expectedPreviewId) {
   } finally {
     client.release();
   }
+}
+
+async function getReplayProject(pool, projectId, { mediaBaseUrl } = {}) {
+  const projectResult = await pool.query(
+    `SELECT p.id, p.data, p.updated_at, t.tester_name
+       FROM projects p
+       LEFT JOIN tester_tokens t ON t.token = p.tester_token
+      WHERE p.id = $1
+      LIMIT 1`,
+    [String(projectId)]
+  );
+  if (!projectResult.rows.length) return null;
+
+  const row = projectResult.rows[0];
+  const replayResult = await pool.query(
+    `SELECT i.batch_id, i.source_project_id, i.copy_project_id, i.state,
+            i.progress, i.error, i.started_at, i.finished_at,
+            b.status AS batch_status,
+            sp.data AS source_data,
+            cp.data AS copy_data
+       FROM replay_batch_items i
+       JOIN replay_batches b ON b.id = i.batch_id
+       LEFT JOIN projects sp
+         ON sp.id = i.source_project_id AND sp.tester_token = i.tester_token
+       LEFT JOIN projects cp
+         ON cp.id = i.copy_project_id AND cp.tester_token = i.tester_token
+      WHERE i.source_project_id = $1 OR i.copy_project_id = $1
+      ORDER BY i.id DESC`,
+    [String(projectId)]
+  );
+
+  const remoteIds = [...collectRemoteIds(row.data)];
+  const mediaResult = remoteIds.length
+    ? await pool.query(
+        `SELECT id, kind, mime_type, original_name, size_bytes, created_at
+           FROM media
+          WHERE tester_token = $1 AND id = ANY($2)`,
+        [replayResult.rows[0]?.tester_token || null, remoteIds]
+      )
+    : { rows: [] };
+  // The project lookup intentionally does not return tester_token. Use a
+  // tenant value from a second, narrow query only for media authorization.
+  // This value is never included in the response.
+  if (remoteIds.length && !replayResult.rows[0]?.tester_token) {
+    const owner = await pool.query(
+      "SELECT tester_token FROM projects WHERE id=$1 LIMIT 1",
+      [String(projectId)]
+    );
+    if (owner.rows.length) {
+      const authorizedMedia = await pool.query(
+        `SELECT id, kind, mime_type, original_name, size_bytes, created_at
+           FROM media
+          WHERE tester_token = $1 AND id = ANY($2)`,
+        [owner.rows[0].tester_token, remoteIds]
+      );
+      mediaResult.rows = authorizedMedia.rows;
+    }
+  }
+
+  const mediaById = new Map(mediaResult.rows.map((media) => [String(media.id), media]));
+  const base = typeof mediaBaseUrl === "string" ? mediaBaseUrl.replace(/\/$/, "") : "";
+  const media = mediaResult.rows.map((entry) => ({
+    id: String(entry.id),
+    kind: entry.kind || null,
+    mimeType: entry.mime_type || null,
+    originalName: entry.original_name || null,
+    sizeBytes: entry.size_bytes == null ? null : Number(entry.size_bytes),
+    createdAt: entry.created_at || null,
+    url: base ? signedMediaUrl(base, entry.id, 10 * 60 * 1000) : null,
+  }));
+
+  const replayItems = replayResult.rows.map((item) => ({
+    batchId: item.batch_id,
+    sourceProjectId: item.source_project_id,
+    copyProjectId: item.copy_project_id,
+    state: item.state,
+    progress: item.progress,
+    error: item.error,
+    startedAt: item.started_at,
+    finishedAt: item.finished_at,
+    batchStatus: item.batch_status,
+    sourceProjectName: item.source_data?.name || null,
+    copyProjectName: item.copy_data?.name || null,
+  }));
+  const relation = replayItems[0] || null;
+  const role = relation
+    ? String(projectId) === String(relation.copyProjectId) ? "replay-copy" : "source"
+    : "source";
+  const missingMediaIds = remoteIds.filter((id) => !mediaById.has(String(id)));
+
+  return {
+    projectId: String(row.id),
+    tester: maskedTesterLabel(row),
+    role,
+    project: row.data || {},
+    updatedAt: row.updated_at || null,
+    evidence: projectEvidenceSummary(row.data),
+    media,
+    missingMediaIds,
+    replay: relation,
+    replayHistory: replayItems,
+  };
 }
 
 async function getBatch(pool, id) {
@@ -283,9 +468,12 @@ module.exports = {
   TERMINAL_ITEM_STATES,
   strictGoogleDocUrl,
   scopeDigest,
+  projectEvidenceSummary,
+  normalizeSelectedProjectIds,
   cloneProjectData,
   discoverEligible,
   preview,
   createBatch,
+  getReplayProject,
   getBatch,
 };
