@@ -2337,7 +2337,9 @@ export default function ProjectDetailScreen() {
               [
                 ['area', nb.report.fieldArea, false],
                 ['source', nb.report.fieldSource, false],
+                ['sourceCategory', 'Kildekategori', false],
                 ['cause', nb.report.fieldCause, true],
+                ['acuteOrGradual', 'Tidsforløp', false],
                 ['description', nb.report.fieldDescription, true],
                 ['extentDescription', nb.report.fieldExtent, true],
                 ['repairsDescription', nb.report.fieldRepairs, true],

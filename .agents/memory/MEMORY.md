@@ -3,3 +3,4 @@
 - [Media orphan cleanup](media-cleanup.md) — never delete unreferenced server media immediately; per-note merge can transiently drop references, so mark + grace period + atomic conditional delete.
 - [Google Doc idempotency](google-doc-idempotency.md) — claim a stable attempt in Drive before AI work; retries reconcile the same document and never rely on the API ledger alone.
 - [Workspace audit lockfiles](workspace-audit-lockfiles.md) — after workspace dependency changes, verify installed and lockfile resolutions directly; npm can leave stale vulnerable entries behind.
+- [Metro workspace watcher](metro-workspace-watcher.md) — monorepo Metro watchFolders must exclude transient workspace profiles such as `.config` or startup can fail on disappearing Chromium paths.

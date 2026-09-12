@@ -60,8 +60,12 @@ export type ReportContent = {
   area?: string;
   /** Kilden til skaden. */
   source?: string;
+  /** Strukturert kildekategori fra vannskadeanalysen. */
+  sourceCategory?: string;
   /** Den tekniske årsaken. */
   cause?: string;
+  /** Om skadeutviklingen vurderes som akutt eller gradvis. */
+  acuteOrGradual?: string;
   /** Fyldig faglig beskrivelse. */
   description?: string;
   /** Fysisk spredning og berørte materialer. */
@@ -87,7 +91,9 @@ export type ReportVersion = {
 export const REPORT_CONTENT_FIELDS = [
   'area',
   'source',
+  'sourceCategory',
   'cause',
+  'acuteOrGradual',
   'description',
   'extentDescription',
   'repairsDescription',
