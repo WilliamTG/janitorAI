@@ -42,6 +42,23 @@ function isLocalUri(value) {
     (LOCAL_URI.test(value.trim()) || value.startsWith("/") || value.startsWith("~"));
 }
 
+function hasDurableMediaId(value) {
+  return Object.entries(value || {}).some(([entryKey, entryValue]) =>
+    (entryKey.toLowerCase() === "remoteid" || entryKey.toLowerCase().endsWith("remoteid")) &&
+    entryValue != null && String(entryValue).trim()
+  );
+}
+
+function isKnownLostEvidence(value) {
+  if (!value || typeof value !== "object" || value.lost !== true || hasDurableMediaId(value)) {
+    return false;
+  }
+  return Object.entries(value).some(([entryKey, entryValue]) =>
+    (entryKey.toLowerCase() === "uri" || entryKey.toLowerCase().endsWith("uri")) &&
+    typeof entryValue === "string" && entryValue.trim()
+  );
+}
+
 function clearReportFields(project) {
   const result = { ...project };
   for (const key of [
@@ -62,7 +79,13 @@ function cloneProjectData(source, { copyProjectId, batchId, ownedMediaIds, sourc
   const errors = [];
 
   function visit(value, key, parent) {
-    if (Array.isArray(value)) return value.map((entry) => visit(entry, key, parent));
+    if (Array.isArray(value)) {
+      const collection = String(key || "").toLowerCase();
+      const entries = collection === "photos"
+        ? value.filter((entry) => !isKnownLostEvidence(entry))
+        : value;
+      return entries.map((entry) => visit(entry, key, parent));
+    }
     if (!value || typeof value !== "object") {
       if (typeof value === "string" && isLocalUri(value) &&
           /(?:uri|url|audio|video|photo|description|media)/i.test(key || "")) {
@@ -71,10 +94,7 @@ function cloneProjectData(source, { copyProjectId, batchId, ownedMediaIds, sourc
       return value;
     }
     const output = {};
-    const hasDurableMediaId = Object.entries(value).some(([entryKey, entryValue]) =>
-      (entryKey.toLowerCase() === "remoteid" || entryKey.toLowerCase().endsWith("remoteid")) &&
-      entryValue != null && String(entryValue).trim()
-    );
+    const objectHasDurableMediaId = hasDurableMediaId(value);
     for (const [childKey, childValue] of Object.entries(value)) {
       const lower = childKey.toLowerCase();
       if (["report", "reporturl", "reportstatus", "reporterror", "reportapproval",
@@ -91,7 +111,7 @@ function cloneProjectData(source, { copyProjectId, batchId, ownedMediaIds, sourc
       if (lower === "uri" || lower.endsWith("uri") || lower === "url") {
         // Remote media IDs are the durable representation.  URLs are never
         // copied, except ordinary non-evidence metadata URLs.
-        if (hasDurableMediaId &&
+        if (objectHasDurableMediaId &&
             (lower === "uri" || lower.endsWith("uri") ||
              /(?:audio|video|photo|description|media)/i.test(lower))) {
           continue;

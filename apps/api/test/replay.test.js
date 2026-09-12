@@ -397,6 +397,40 @@ test("clone rejects missing and cross-tenant media instead of dropping evidence"
   });
 });
 
+test("clone omits only explicitly lost photos without durable media", () => {
+  const source = {
+    id: "source",
+    notes: [{
+      photos: [
+        { uri: "idb://lost-photo", lost: true, caption: "Unavailable original" },
+        { uri: "file:///durable-photo", remoteId: "media-1", caption: "Durable photo" },
+      ],
+    }],
+  };
+  const before = JSON.stringify(source);
+  const copy = cloneProjectData(source, {
+    copyProjectId: "copy",
+    sourceProjectId: "source",
+    batchId: 1,
+    ownedMediaIds: ["media-1"],
+  });
+
+  assert.equal(JSON.stringify(source), before);
+  assert.deepEqual(copy.notes[0].photos, [{
+    remoteId: "media-1",
+    caption: "Durable photo",
+  }]);
+});
+
+test("clone still rejects a lost photo with an unowned durable media ID", () => {
+  assert.throws(() => cloneProjectData({
+    id: "source",
+    notes: [{ photos: [{ uri: "file:///lost", lost: true, remoteId: "foreign-media" }] }],
+  }, { copyProjectId: "copy", batchId: 1, ownedMediaIds: [] }), {
+    code: "REPLAY_UNREPRESENTABLE_EVIDENCE",
+  });
+});
+
 function fakePool(source, mediaIds = []) {
   const calls = [];
   return {
@@ -422,4 +456,40 @@ test("worker isolates a failed item and records a durable failure", async () => 
   assert.ok(finish);
   assert.equal(finish.params[1], "failed");
   assert.match(finish.params[3], /engine unavailable/);
+});
+
+test("worker processes durable evidence when a known-lost photo is present", async () => {
+  const pool = fakePool({
+    id: "source",
+    notes: [{
+      photos: [
+        { uri: "idb://lost-photo", lost: true, caption: "Unavailable original" },
+        { uri: "file:///durable-photo", remoteId: "media-1", caption: "Durable photo" },
+      ],
+    }],
+  }, ["media-1"]);
+  const item = {
+    id: 2, batch_id: 5, source_project_id: "source", copy_project_id: "copy",
+    report_attempt_id: "attempt", tester_token: "tenant-a",
+  };
+  let generatedFor = null;
+
+  await processItem(pool, item, async (request) => {
+    generatedFor = request;
+  });
+
+  assert.deepEqual(generatedFor, {
+    testerToken: "tenant-a",
+    projectId: "copy",
+    attemptId: "attempt",
+  });
+  const insert = pool.calls.find((call) => call.sql.startsWith("INSERT INTO projects"));
+  assert.ok(insert);
+  const copied = JSON.parse(insert.params[1]);
+  assert.deepEqual(copied.notes[0].photos, [{
+    remoteId: "media-1",
+    caption: "Durable photo",
+  }]);
+  const finish = pool.calls.find((call) => call.sql.includes("SET state=$2"));
+  assert.equal(finish.params[1], "succeeded");
 });
