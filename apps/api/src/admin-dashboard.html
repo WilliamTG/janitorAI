@@ -300,6 +300,7 @@
     .badge-created,.badge-generated { background:rgba(34,197,94,.15); color:var(--success); }
     .badge-skipped { background:rgba(245,158,11,.14); color:#fcd34d; }
     .badge-failed { background:rgba(239,68,68,.14); color:var(--danger-h); }
+     .badge-deleted { background:rgba(148,163,184,.16); color:var(--muted); }
     .replay-table { width:100%; border-collapse:collapse; font-size:.82rem; }
     .replay-table th { text-align:left; color:var(--muted); font-weight:500; font-size:.76rem; padding:0 .5rem .6rem; border-bottom:1px solid var(--border); }
     .replay-table td { padding:.65rem .5rem; border-bottom:1px solid var(--border); vertical-align:top; }
@@ -762,6 +763,7 @@
       generated: count(['generated', 'completed', 'complete'], 'generated'),
       skipped: count(['skipped'], 'skipped'),
       failed: count(['failed', 'error'], 'failed'),
+       deleted: count(['deleted'], 'deleted'),
       pending: count(['pending', 'remaining'], 'pending'),
     };
   }
@@ -911,6 +913,11 @@
     const media = Array.isArray(payload.media) ? payload.media : [];
     const notes = Array.isArray(project.notes) ? project.notes : [];
     const rooms = Array.isArray(project.rooms) ? project.rooms : [];
+     const relationState = String(relation?.state || '').toLowerCase();
+     const deletable = payload.role === 'replay-copy' &&
+       relation &&
+       !relation.copyDeletedAt &&
+       ['succeeded', 'failed', 'skipped', 'cancelled'].includes(relationState);
     const reportUrl = safeHttpsUrl(project.reportUrl);
     const relationText = relation
       ? `${payload.role === 'replay-copy' ? 'Replay copy of' : 'Source project'} · batch ${relation.batchId} · ${relation.state}`
@@ -950,6 +957,11 @@
       ? `<div class="replay-warning">Some referenced media is unavailable on the server: ${payload.missingMediaIds.map(escHtml).join(', ')}</div>`
       : '';
     const rawProject = escHtml(JSON.stringify(project, null, 2));
+     const deleteAction = deletable
+       ? `<button class="btn-danger" onclick="deleteReplayProject('${encodeURIComponent(payload.projectId)}')">Delete replay copy</button>`
+       : payload.role === 'replay-copy' && relation && !relation.copyDeletedAt
+         ? '<span class="replay-warning" style="margin:0;">Deletion unavailable while replay is active.</span>'
+         : '';
 
     wrap.innerHTML = `
       <div class="replay-detail-header">
@@ -959,6 +971,7 @@
         </div>
         <div class="replay-actions">
           ${reportUrl ? `<a class="btn-ghost" href="${escHtml(reportUrl)}" target="_blank" rel="noopener noreferrer">Open Google Doc ↗</a>` : ''}
+           ${deleteAction}
           <button class="btn-ghost" onclick="closeReplayProject()">Close</button>
         </div>
       </div>
@@ -1014,6 +1027,32 @@
       '<div class="empty-state">Choose Inspect on a source project or replay result to view its evidence.</div>';
   }
 
+  async function deleteReplayProject(encodedProjectId) {
+    const projectId = decodeURIComponent(String(encodedProjectId || ''));
+    if (!projectId) return;
+    if (!confirm('Delete this generated replay copy?\n\nThe original source project will be kept. Shared photos, video, and audio will not be removed immediately.')) return;
+    try {
+      const res = await apiFetch(`/api/admin/replay/projects/${encodeURIComponent(projectId)}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ confirmed: true }),
+      });
+      const data = await res.json();
+      if (res.status === 404) {
+        closeReplayProject();
+        showStatus('This replay copy is already gone.', 'info');
+        await loadLatestReplay();
+        return;
+      }
+      if (res.status === 409) throw new Error(data.error || 'This replay copy cannot be deleted yet.');
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
+      closeReplayProject();
+      showStatus('Replay copy deleted. The source project and shared media were kept.', 'success');
+      await loadLatestReplay();
+    } catch (err) {
+      showStatus('Could not delete replay copy: ' + err.message, 'error');
+    }
+  }
+
   async function startReplayBatch() {
     const projects = replayProjects(replayPreviewState);
     const selectedIds = [...replaySelectedProjectIds];
@@ -1048,17 +1087,17 @@
     if (data?.counts && !batch.counts) batch.counts = data.counts;
     if (data?.progress && !batch.progress) batch.progress = data.progress;
     if (data?.total != null && batch.total == null) batch.total = data.total;
-    const items = data?.items || batch.items || [];
+     const items = data?.items || batch.items || [];
     if (items.length) batch.items = items;
     const counts = replayCounts(batch);
     const total = Math.max(
       Number(replayValue(batch, ['total', 'total_items', 'project_count'], 0)),
       items.length,
     );
-    const cancelled = items.filter(item =>
+     const cancelled = items.filter(item =>
       ['cancelled', 'canceled'].includes(String(item.status || '').toLowerCase())
     ).length;
-    const done = counts.generated + counts.skipped + counts.failed + cancelled;
+     const done = counts.generated + counts.skipped + counts.failed + counts.deleted + cancelled;
     const percent = total ? Math.min(100, Math.round(done / total * 100)) : 0;
     const status = replayStatus(batch);
     const active = ['queued','pending','running','active','processing','in_progress'].includes(status);
@@ -1072,16 +1111,29 @@
       const itemStatus = String(item.status || 'pending').toLowerCase();
       const label = itemStatus.replace(/_/g, ' ');
       const sourceId = item.sourceProjectId || item.source_project_id || item.projectId || item.project_id || '';
-      const copyId = item.copyProjectId || item.copy_project_id || '';
+       const copyId = item.copyProjectId || item.copy_project_id || '';
+       const copyDeletedAt = item.copyDeletedAt || item.copy_deleted_at || null;
       const name = item.projectName || item.project_name || item.name || sourceId || 'Project';
       const reason = item.reason || item.error || item.message || '—';
-      const inspect = sourceId || copyId
+       const itemDeletable = copyId && !copyDeletedAt &&
+         ['generated', 'succeeded', 'failed', 'skipped', 'cancelled'].includes(itemStatus);
+       const copyAction = copyId
+         ? copyDeletedAt
+           ? '<span class="badge badge-deleted">Replay copy deleted</span>'
+           : itemDeletable
+             ? `<button class="btn-danger" style="font-size:.7rem;padding:.25rem .5rem;" onclick="deleteReplayProject('${encodeURIComponent(copyId)}')">Delete copy</button>`
+             : ''
+         : '';
+       const inspect = sourceId || copyId || copyAction
         ? `<div class="replay-actions" style="margin-top:.35rem;">
             ${sourceId ? `<button class="btn-ghost" style="font-size:.7rem;padding:.25rem .5rem;" onclick="openReplayProject('${encodeURIComponent(sourceId)}')">Source</button>` : ''}
-            ${copyId ? `<button class="btn-ghost" style="font-size:.7rem;padding:.25rem .5rem;" onclick="openReplayProject('${encodeURIComponent(copyId)}')">Replay copy</button>` : ''}
-          </div>`
+             ${copyId && !copyDeletedAt ? `<button class="btn-ghost" style="font-size:.7rem;padding:.25rem .5rem;" onclick="openReplayProject('${encodeURIComponent(copyId)}')">Replay copy</button>` : ''}
+             ${copyAction}
+           </div>`
         : '';
-      return `<tr><td><div class="replay-project-name">${escHtml(name)}</div>${inspect}</td><td><span class="badge badge-${escHtml(itemStatus)}">${escHtml(label)}</span></td><td class="reason">${escHtml(reason)}</td></tr>`;
+       const badgeStatus = copyDeletedAt ? 'deleted' : itemStatus;
+       const badgeLabel = copyDeletedAt ? 'deleted' : label;
+       return `<tr><td><div class="replay-project-name">${escHtml(name)}</div>${inspect}</td><td><span class="badge badge-${escHtml(badgeStatus)}">${escHtml(badgeLabel)}</span></td><td class="reason">${escHtml(reason)}</td></tr>`;
     }).join('');
     document.getElementById('replayBatch').innerHTML = `
       <div class="replay-status"><div><strong>Batch ${escHtml(String(batchId || '—'))}</strong><div style="color:var(--muted);font-size:.8rem;margin-top:.25rem;">Status: ${escHtml(status)}</div></div><div class="replay-actions">${actionButtons}</div></div>
@@ -1090,7 +1142,8 @@
         <div class="replay-metric"><strong>${counts.created}</strong><span>Created</span></div>
         <div class="replay-metric"><strong>${counts.generated}</strong><span>Generated</span></div>
         <div class="replay-metric"><strong>${counts.skipped}</strong><span>Skipped</span></div>
-        <div class="replay-metric"><strong>${counts.failed}</strong><span>Failed</span></div>
+         <div class="replay-metric"><strong>${counts.failed}</strong><span>Failed</span></div>
+         <div class="replay-metric"><strong>${counts.deleted}</strong><span>Deleted</span></div>
         <div class="replay-metric"><strong>${counts.pending}</strong><span>Pending</span></div>
       </div>
        ${rows ? `<div class="replay-scroll"><table class="replay-table"><thead><tr><th>Project</th><th>Status</th><th>Reason</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty-state">No replay items returned for this batch.</div>'}

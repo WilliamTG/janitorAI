@@ -10,7 +10,9 @@ const {
   createBatch: createReplayBatch,
   getBatch: getReplayBatch,
   getReplayProject,
+  deleteReplayProject,
 } = require("../replay");
+const { reconcileAfterUpsert } = require("../mediaCleanup");
 
 const router = express.Router();
 
@@ -67,6 +69,30 @@ router.get("/replay/projects/:id", async (req, res) => {
     res.json({ project });
   } catch (err) {
     console.error("GET /api/admin/replay/projects/:id error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.delete("/replay/projects/:id", async (req, res) => {
+  if (!req.body || req.body.confirmed !== true) {
+    return res.status(400).json({ error: "confirmed:true is required" });
+  }
+  try {
+    const result = await deleteReplayProject(getPool(), req.params.id);
+    if (!result) {
+      return res.status(404).json({ error: "Replay copy not found" });
+    }
+    reconcileAfterUpsert();
+    res.json(result);
+  } catch (err) {
+    if (err && [
+      "REPLAY_SOURCE_PROTECTED",
+      "REPLAY_PROJECT_ACTIVE",
+      "REPLAY_PROJECT_NOT_COPY",
+    ].includes(err.code)) {
+      return res.status(409).json({ error: err.message, code: err.code });
+    }
+    console.error("DELETE /api/admin/replay/projects/:id error:", sanitizeError(err));
     res.status(500).json({ error: "Server error" });
   }
 });

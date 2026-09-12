@@ -250,6 +250,7 @@ ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
 ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
 ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
 ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS copy_deleted_at TIMESTAMPTZ;
 ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 CREATE INDEX IF NOT EXISTS replay_batch_items_claim_idx

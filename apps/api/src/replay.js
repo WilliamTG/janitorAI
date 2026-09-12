@@ -340,7 +340,7 @@ async function getReplayProject(pool, projectId, { mediaBaseUrl } = {}) {
   const row = projectResult.rows[0];
   const replayResult = await pool.query(
     `SELECT i.batch_id, i.source_project_id, i.copy_project_id, i.state,
-            i.progress, i.error, i.started_at, i.finished_at,
+            i.progress, i.error, i.started_at, i.finished_at, i.copy_deleted_at,
             b.status AS batch_status,
             sp.data AS source_data,
             cp.data AS copy_data
@@ -382,6 +382,7 @@ async function getReplayProject(pool, projectId, { mediaBaseUrl } = {}) {
     sourceProjectId: item.source_project_id,
     copyProjectId: item.copy_project_id,
     state: item.state,
+    copyDeletedAt: item.copy_deleted_at || null,
     progress: item.progress,
     error: item.error,
     startedAt: item.started_at,
@@ -410,12 +411,131 @@ async function getReplayProject(pool, projectId, { mediaBaseUrl } = {}) {
   };
 }
 
+function replayDeletionError(message, code) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+/**
+ * Delete an admin-created replay copy without deleting its source or shared
+ * evidence. The replay item is locked while the role/state/project checks and
+ * deletion happen so a worker cannot race a destructive admin action.
+ */
+async function deleteReplayProject(pool, projectId) {
+  const id = String(projectId || "").trim();
+  if (!id) return null;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const relationResult = await client.query(
+      `SELECT i.id, i.batch_id, i.tester_token, i.source_project_id,
+              i.copy_project_id, i.state, i.lease_until, i.copy_deleted_at,
+              b.status AS batch_status
+         FROM replay_batch_items i
+         JOIN replay_batches b ON b.id = i.batch_id
+        WHERE i.source_project_id = $1 OR i.copy_project_id = $1
+        ORDER BY i.id DESC
+        FOR UPDATE OF i, b`,
+      [id]
+    );
+    if (!relationResult.rows.length) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    const relation = relationResult.rows.find(
+      (row) => String(row.copy_project_id) === id
+    );
+    if (!relation) {
+      throw replayDeletionError(
+        "Original replay source projects cannot be deleted here",
+        "REPLAY_SOURCE_PROTECTED"
+      );
+    }
+    if (relation.copy_deleted_at) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+    if (
+      !TERMINAL_ITEM_STATES.has(String(relation.state)) ||
+      relation.lease_until
+    ) {
+      throw replayDeletionError(
+        "Replay copies can only be deleted after processing has finished",
+        "REPLAY_PROJECT_ACTIVE"
+      );
+    }
+
+    const projectResult = await client.query(
+      `SELECT id, data
+         FROM projects
+        WHERE id = $1 AND tester_token = $2
+        FOR UPDATE`,
+      [id, relation.tester_token]
+    );
+    if (!projectResult.rows.length) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    const project = projectResult.rows[0].data || {};
+    if (
+      project.isTestProject !== true ||
+      String(project.sourceProjectId || "") !== String(relation.source_project_id)
+    ) {
+      throw replayDeletionError(
+        "Only generated replay copies can be deleted here",
+        "REPLAY_PROJECT_NOT_COPY"
+      );
+    }
+
+    await client.query(
+      "DELETE FROM projects WHERE id = $1 AND tester_token = $2",
+      [id, relation.tester_token]
+    );
+    await client.query(
+      `UPDATE media
+          SET unreferenced_at = now()
+        WHERE project_id = $1 AND tester_token = $2`,
+      [id, relation.tester_token]
+    );
+    await client.query(
+      `INSERT INTO deleted_projects (id, deleted_at, tester_token)
+       VALUES ($1, now(), $2)
+       ON CONFLICT (id) DO UPDATE SET deleted_at = now()
+         WHERE deleted_projects.tester_token = EXCLUDED.tester_token`,
+      [id, relation.tester_token]
+    );
+    const auditResult = await client.query(
+      `UPDATE replay_batch_items
+          SET copy_deleted_at = now(), updated_at = now()
+        WHERE id = $1
+        RETURNING copy_deleted_at`,
+      [relation.id]
+    );
+    await client.query("COMMIT");
+    return {
+      deleted: true,
+      projectId: id,
+      batchId: relation.batch_id,
+      copyDeletedAt: auditResult.rows[0]?.copy_deleted_at || null,
+    };
+  } catch (error) {
+    try { await client.query("ROLLBACK"); } catch (_) {}
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function getBatch(pool, id) {
   const batch = await pool.query("SELECT * FROM replay_batches WHERE id = $1", [id]);
   if (!batch.rows.length) return null;
   const items = await pool.query(
     `SELECT i.id, i.source_project_id, i.copy_project_id, i.state, i.progress,
-            i.error, i.started_at, i.finished_at, t.tester_name,
+            i.error, i.started_at, i.finished_at, i.copy_deleted_at, t.tester_name,
             source_project.data->>'name' AS project_name
        FROM replay_batch_items i
        LEFT JOIN tester_tokens t ON t.token=i.tester_token
@@ -437,14 +557,20 @@ async function getBatch(pool, id) {
     summary,
     counts: {
       created: mappedItems.filter((item) => Number(item.progress) >= 25).length,
-      generated: summary.succeeded || 0,
+       generated: mappedItems.filter(
+         (item) => item.state === "succeeded" && !item.copy_deleted_at
+       ).length,
+       deleted: mappedItems.filter((item) => Boolean(item.copy_deleted_at)).length,
       skipped: summary.skipped || 0,
       failed: summary.failed || 0,
       pending: (summary.pending || 0) + (summary.running || 0),
     },
     items: mappedItems.map((item) => ({
       ...item,
-      status: item.state === "succeeded" ? "generated" : item.state,
+      status: item.copy_deleted_at
+        ? "deleted"
+        : item.state === "succeeded" ? "generated" : item.state,
+      copyDeletedAt: item.copy_deleted_at || null,
     })),
   };
 }
@@ -461,5 +587,6 @@ module.exports = {
   preview,
   createBatch,
   getReplayProject,
+  deleteReplayProject,
   getBatch,
 };
