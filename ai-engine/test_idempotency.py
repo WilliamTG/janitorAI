@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from report_idempotency import (
     PROCESSING_RETRY_AFTER_SECONDS,
+    abandon_attempt,
     reconcile_attempt,
     validate_report_attempt_id,
 )
@@ -27,6 +28,7 @@ class FakeFiles:
 
     def delete(self, **kwargs):
         self.deleted.append(kwargs["fileId"])
+        self.items[:] = [item for item in self.items if item.get("id") != kwargs["fileId"]]
         return FakeRequest({})
 
 
@@ -81,6 +83,23 @@ class AttemptIdempotencyTests(unittest.TestCase):
             reconcile_attempt(drive, "attempt", allow_processing=True, return_state=True),
             {"id": "old", "state": "processing"},
         )
+
+    def test_analysis_abandonment_removes_processing_attempt_and_allows_retry(self):
+        recent = datetime.now(timezone.utc).isoformat()
+        drive = FakeDrive([{"id": "owned", "createdTime": recent,
+                            "appProperties": {
+                                "report_attempt_id": "attempt",
+                                "report_state": "processing",
+                            }}])
+        self.assertTrue(abandon_attempt(drive, "owned", "owned"))
+        self.assertIsNone(reconcile_attempt(drive, "attempt"))
+
+    def test_abandonment_never_deletes_unowned_canonical(self):
+        drive = FakeDrive([{"id": "canonical", "appProperties": {
+            "report_attempt_id": "attempt", "report_state": "complete",
+        }}])
+        self.assertFalse(abandon_attempt(drive, "canonical", "request-copy"))
+        self.assertEqual(drive._files.deleted, [])
 
 
 if __name__ == "__main__":

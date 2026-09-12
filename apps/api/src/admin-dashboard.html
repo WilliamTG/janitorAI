@@ -805,7 +805,7 @@
     const done = counts.generated + counts.skipped + counts.failed + cancelled;
     const percent = total ? Math.min(100, Math.round(done / total * 100)) : 0;
     const status = replayStatus(batch);
-    const active = ['pending','running','active','processing','in_progress'].includes(status);
+    const active = ['queued','pending','running','active','processing','in_progress'].includes(status);
     const resumable = ['paused','failed','cancelled','canceled'].includes(status);
     const cancellable = active;
     const batchId = batch.id || batch.batch_id;
@@ -854,7 +854,7 @@
 
   function beginReplayPolling(batch) {
     if (replayPollTimer) clearTimeout(replayPollTimer);
-    if (!['pending','running','active','processing','in_progress'].includes(replayStatus(batch))) return;
+    if (!['queued','pending','running','active','processing','in_progress'].includes(replayStatus(batch))) return;
     replayPollTimer = setTimeout(async () => {
       await loadReplayBatch(batch.id || batch.batch_id);
     }, 2500);

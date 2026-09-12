@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from report_idempotency import (
     validate_report_attempt_id as _pure_validate_report_attempt_id,
     reconcile_attempt as _pure_reconcile_attempt,
+    abandon_attempt as _pure_abandon_attempt,
 )
 
 TEMP_PHOTO_DIR = "./temp_photos"
@@ -62,6 +63,10 @@ def _find_attempt_file(drive, attempt_id: str, allow_processing: bool = False,
     return _pure_reconcile_attempt(
         drive, attempt_id, allow_processing=allow_processing, return_state=return_state
     )
+
+
+def _abandon_attempt(drive, doc_id: str | None, owned_doc_id: str | None) -> bool:
+    return _pure_abandon_attempt(drive, doc_id, owned_doc_id)
 
 
 def _validate_media_url(url: str) -> None:
@@ -221,44 +226,53 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
         doc_id = new_doc["id"]
         # Close the list-then-copy race. The oldest attempt file is canonical;
         # a concurrent request must not proceed to Gemini with a second copy.
-        canonical = _find_attempt_file(
-            drive, report_attempt_id, allow_processing=True, return_state=True
-        )
+        try:
+            canonical = _find_attempt_file(
+                drive, report_attempt_id, allow_processing=True, return_state=True
+            )
+        except Exception:
+            _abandon_attempt(drive, doc_id, doc_id)
+            raise
         if canonical and canonical["id"] != doc_id:
             try:
-                drive.files().delete(fileId=doc_id, supportsAllDrives=True).execute()
+                _abandon_attempt(drive, doc_id, doc_id)
             except Exception:
                 pass
             if canonical["state"] == "complete":
                 raise ReportAlreadyComplete(canonical["id"])
             raise RuntimeError("Report attempt is already processing")
-    genai_client = genai.Client(api_key=gemini_key)
-
-    # 2. Gemini Analysis (multimodal). Video is useful evidence when present,
-    # but reports must also work from notes, transcriptions, photos, and metadata.
     video_file = None
-    if video_path:
-        print("🤖 Gemini is analyzing available video evidence...")
-        video_file = genai_client.files.upload(file=video_path)
-        # Denial-of-Wallet-vern: bind ventingen på videoprosessering (ellers kan en
-        # fil som henger i PROCESSING holde en fakturerbar jobb åpen i det uendelige).
-        video_deadline = time.monotonic() + 300  # maks 5 min
-        while video_file.state.name == "PROCESSING":
-            if time.monotonic() > video_deadline:
-                raise TimeoutError("Gemini video-prosessering tok for lang tid (>5 min)")
-            time.sleep(2)
-            video_file = genai_client.files.get(name=video_file.name)
-        if video_file.state.name == "FAILED":
-            raise RuntimeError("Gemini klarte ikke å prosessere videoen")
-
-    # Upload inspector photos (if any) so Gemini can analyse them with every
-    # other available inspection source. Local copies are kept for the report's
-    # evidence image + photo gallery and cleaned up at the end.
     photo_records = []
-    if project:
-        photo_records = _upload_inspector_photos(genai_client, project)
-        if photo_records:
-            print(f"📸 {len(photo_records)} inspector photo(s) ready for Gemini")
+    try:
+        genai_client = genai.Client(api_key=gemini_key)
+
+        # 2. Gemini Analysis (multimodal). Video is useful evidence when present,
+        # but reports must also work from notes, transcriptions, photos, and metadata.
+        if video_path:
+            print("🤖 Gemini is analyzing available video evidence...")
+            video_file = genai_client.files.upload(file=video_path)
+            # Denial-of-Wallet-vern: bind ventingen på videoprosessering (ellers kan en
+            # fil som henger i PROCESSING holde en fakturerbar jobb åpen i det uendelige).
+            video_deadline = time.monotonic() + 300  # maks 5 min
+            while video_file.state.name == "PROCESSING":
+                if time.monotonic() > video_deadline:
+                    raise TimeoutError("Gemini video-prosessering tok for lang tid (>5 min)")
+                time.sleep(2)
+                video_file = genai_client.files.get(name=video_file.name)
+            if video_file.state.name == "FAILED":
+                raise RuntimeError("Gemini klarte ikke å prosessere videoen")
+
+        # Upload inspector photos (if any) so Gemini can analyse them with every
+        # other available inspection source. Local copies are cleaned up below.
+        if project:
+            photo_records = _upload_inspector_photos(genai_client, project)
+            if photo_records:
+                print(f"📸 {len(photo_records)} inspector photo(s) ready for Gemini")
+    except Exception:
+        _cleanup_photo_files(photo_records)
+        if doc_id:
+            _abandon_attempt(drive, doc_id, doc_id)
+        raise
     photo_files = [rec["file"] for rec in photo_records]
 
     # Feiler noe i analysefasen (kunnskapsopplasting, Gemini-kallet,
@@ -323,25 +337,33 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
                 punkt.technical_reference = verifisert
     except Exception:
         _cleanup_photo_files(photo_records)
+        if doc_id:
+            _abandon_attempt(drive, doc_id, doc_id)
         raise
 
-    # COGS: fang tokenforbruk fra rå-responsen før den forkastes, så backend kan
-    # måle faktisk kostnad per rapport (docs/prising-bruksbasert.md).
-    token_usage = None
-    usage = getattr(gemini_response, "usage_metadata", None)
-    if usage is not None:
-        token_usage = {
-            "model": "gemini-2.5-flash",
-            "input_tokens": getattr(usage, "prompt_token_count", None),
-            "output_tokens": getattr(usage, "candidates_token_count", None),
-            "total_tokens": getattr(usage, "total_token_count", None),
-        }
+    try:
+        # COGS: fang tokenforbruk fra rå-responsen før den forkastes, så backend kan
+        # måle faktisk kostnad per rapport (docs/prising-bruksbasert.md).
+        token_usage = None
+        usage = getattr(gemini_response, "usage_metadata", None)
+        if usage is not None:
+            token_usage = {
+                "model": "gemini-2.5-flash",
+                "input_tokens": getattr(usage, "prompt_token_count", None),
+                "output_tokens": getattr(usage, "candidates_token_count", None),
+                "total_tokens": getattr(usage, "total_token_count", None),
+            }
 
-    # Free memory after analysis - contents list can be large.
-    # photo_records beholdes: de lokale kopiene brukes til bevisbilde/galleri.
-    del contents, knowledge_files, video_file, photo_files
-    gc.collect()
-    print("🧹 Cleared analysis objects from memory")
+        # Free memory after analysis - contents list can be large.
+        # photo_records beholdes: de lokale kopiene brukes til bevisbilde/galleri.
+        del contents, knowledge_files, video_file, photo_files
+        gc.collect()
+        print("🧹 Cleared analysis objects from memory")
+    except Exception:
+        _cleanup_photo_files(photo_records)
+        if doc_id:
+            _abandon_attempt(drive, doc_id, doc_id)
+        raise
 
     # 3–6 kjører i én try: feiler noe ETTER at dokumentkopien er laget, skal
     # (a) den halvferdige kopien slettes fra Drive (ellers ligger den igjen og
@@ -494,7 +516,7 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
         orphaned_doc_id = None
         if doc_id:
             try:
-                drive.files().delete(fileId=doc_id, supportsAllDrives=True).execute()
+                _abandon_attempt(drive, doc_id, doc_id)
                 print(f"🧹 Slettet halvferdig dokumentkopi {doc_id} etter pipelinefeil")
             except Exception as del_exc:
                 orphaned_doc_id = doc_id

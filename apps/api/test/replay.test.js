@@ -7,11 +7,20 @@ const {
 const { processItem } = require("../src/replayWorker");
 const { canResumeExistingAttempt } = require("../src/reportService");
 const { createBatch, scopeDigest } = require("../src/replay");
+const fs = require("node:fs");
 
 test("only replay workers may resume a processing ledger attempt", () => {
   assert.equal(canResumeExistingAttempt(true, "processing"), true);
   assert.equal(canResumeExistingAttempt(false, "processing"), false);
   assert.equal(canResumeExistingAttempt(true, "success"), false);
+});
+
+test("admin dashboard treats queued replay batches as active and pollable", () => {
+  const html = fs.readFileSync(
+    require.resolve("../src/admin-dashboard.html"), "utf8"
+  );
+  assert.match(html, /active = \['queued','pending','running','active','processing','in_progress'\]/);
+  assert.match(html, /!?\['queued','pending','running','active','processing','in_progress'\]\.includes\(replayStatus\(batch\)\)/);
 });
 
 test("batch creation locks the transaction before active-batch discovery", async () => {

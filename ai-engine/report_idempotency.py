@@ -20,6 +20,18 @@ def drive_query_quote(value: str) -> str:
     return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
+def abandon_attempt(drive, doc_id: str | None, owned_doc_id: str | None) -> bool:
+    """Delete only the processing copy created by this request.
+
+    Keeping the ownership token separate from the document ID makes cleanup
+    safe when a concurrent request discovers a canonical completed document.
+    """
+    if not doc_id or doc_id != owned_doc_id:
+        return False
+    drive.files().delete(fileId=doc_id, supportsAllDrives=True).execute()
+    return True
+
+
 def reconcile_attempt(drive, attempt_id: str, allow_processing: bool = False,
                       return_state: bool = False):
     """Return completed id, or remove stale processing copies.
