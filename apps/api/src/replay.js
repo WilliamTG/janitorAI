@@ -328,7 +328,7 @@ async function createBatch(pool, expectedPreviewId, selectedProjectIds = null) {
 
 async function getReplayProject(pool, projectId, { mediaBaseUrl } = {}) {
   const projectResult = await pool.query(
-    `SELECT p.id, p.data, p.updated_at, t.tester_name
+    `SELECT p.id, p.data, p.updated_at, p.tester_token, t.tester_name
        FROM projects p
        LEFT JOIN tester_tokens t ON t.token = p.tester_token
       WHERE p.id = $1
@@ -361,27 +361,9 @@ async function getReplayProject(pool, projectId, { mediaBaseUrl } = {}) {
         `SELECT id, kind, mime_type, original_name, size_bytes, created_at
            FROM media
           WHERE tester_token = $1 AND id = ANY($2)`,
-        [replayResult.rows[0]?.tester_token || null, remoteIds]
+        [row.tester_token, remoteIds]
       )
     : { rows: [] };
-  // The project lookup intentionally does not return tester_token. Use a
-  // tenant value from a second, narrow query only for media authorization.
-  // This value is never included in the response.
-  if (remoteIds.length && !replayResult.rows[0]?.tester_token) {
-    const owner = await pool.query(
-      "SELECT tester_token FROM projects WHERE id=$1 LIMIT 1",
-      [String(projectId)]
-    );
-    if (owner.rows.length) {
-      const authorizedMedia = await pool.query(
-        `SELECT id, kind, mime_type, original_name, size_bytes, created_at
-           FROM media
-          WHERE tester_token = $1 AND id = ANY($2)`,
-        [owner.rows[0].tester_token, remoteIds]
-      );
-      mediaResult.rows = authorizedMedia.rows;
-    }
-  }
 
   const mediaById = new Map(mediaResult.rows.map((media) => [String(media.id), media]));
   const base = typeof mediaBaseUrl === "string" ? mediaBaseUrl.replace(/\/$/, "") : "";
@@ -433,8 +415,12 @@ async function getBatch(pool, id) {
   if (!batch.rows.length) return null;
   const items = await pool.query(
     `SELECT i.id, i.source_project_id, i.copy_project_id, i.state, i.progress,
-            i.error, i.started_at, i.finished_at, t.tester_name
-       FROM replay_batch_items i LEFT JOIN tester_tokens t ON t.token=i.tester_token
+            i.error, i.started_at, i.finished_at, t.tester_name,
+            source_project.data->>'name' AS project_name
+       FROM replay_batch_items i
+       LEFT JOIN tester_tokens t ON t.token=i.tester_token
+       LEFT JOIN projects source_project
+         ON source_project.id=i.source_project_id AND source_project.tester_token=i.tester_token
       WHERE i.batch_id=$1 ORDER BY i.id`,
     [id]
   );
