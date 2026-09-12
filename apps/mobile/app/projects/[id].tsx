@@ -2223,6 +2223,28 @@ export default function ProjectDetailScreen() {
             <Caption muted>{nb.report.testProjectHint}</Caption>
           </GlassCard>
         ) : null}
+        {project?.hasSuccessfulDocument ? (
+          <View
+            accessibilityLabel={nb.projects.documentCreated}
+            style={{
+              alignSelf: 'flex-start',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: theme.spacing.xs,
+              paddingHorizontal: theme.spacing.sm,
+              paddingVertical: theme.spacing.xs,
+              borderRadius: theme.radii.pill,
+              backgroundColor: `${theme.colors.accent}1A`,
+              borderWidth: 1,
+              borderColor: theme.colors.accent,
+            }}
+          >
+            <Ionicons name="checkmark-circle" size={16} color={theme.colors.accent} />
+            <Caption style={{ color: theme.colors.accent, fontWeight: '700' }}>
+              {nb.projects.documentCreated}
+            </Caption>
+          </View>
+        ) : null}
         <PrimaryButton
           testID="generate-report"
           onPress={generateGoogleDocReport}

@@ -218,6 +218,10 @@ export type Project = {
   rooms?: Room[];
   /** URL of the generated Google Doc (persisted after successful generation). */
   reportUrl?: string;
+  /** Server-derived proof that at least one Google Doc was created successfully. */
+  hasSuccessfulDocument?: boolean;
+  /** Server-derived timestamp for the latest successful Google Doc generation. */
+  successfulDocumentCreatedAt?: string | null;
   /** Lifecycle status of the most recent report generation attempt. */
   reportStatus?: 'processing' | 'ready' | 'failed';
   /** Correlates recovery with the exact durable server-ledger attempt. */

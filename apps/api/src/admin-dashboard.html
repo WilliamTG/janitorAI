@@ -284,6 +284,29 @@
 
     .section-gap { margin-top: 1.5rem; }
 
+    /* ── Replay operations ── */
+    .replay-intro { color: var(--muted); font-size: 0.88rem; line-height: 1.55; max-width: 720px; }
+    .replay-toolbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+    .replay-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.75rem; margin:1.25rem 0; }
+    .replay-metric { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:.85rem 1rem; }
+    .replay-metric strong { display:block; font-size:1.35rem; color:var(--text); font-family:'Menlo','Consolas',monospace; }
+    .replay-metric span { color:var(--muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; }
+    .replay-callout { border-left:3px solid var(--warn); background:rgba(245,158,11,.09); color:#fcd34d; padding:.75rem 1rem; font-size:.82rem; line-height:1.5; margin:1rem 0; }
+    .replay-progress { height:8px; background:var(--surface2); border-radius:99px; overflow:hidden; margin:.75rem 0 1.25rem; }
+    .replay-progress > div { height:100%; background:var(--accent); transition:width .2s ease; }
+    .replay-status { display:flex; justify-content:space-between; gap:1rem; align-items:center; flex-wrap:wrap; }
+    .replay-actions { display:flex; gap:.5rem; flex-wrap:wrap; }
+    .badge-pending { background:rgba(148,163,184,.14); color:var(--muted); }
+    .badge-created,.badge-generated { background:rgba(34,197,94,.15); color:var(--success); }
+    .badge-skipped { background:rgba(245,158,11,.14); color:#fcd34d; }
+    .badge-failed { background:rgba(239,68,68,.14); color:var(--danger-h); }
+    .replay-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+    .replay-table th { text-align:left; color:var(--muted); font-weight:500; font-size:.76rem; padding:0 .5rem .6rem; border-bottom:1px solid var(--border); }
+    .replay-table td { padding:.65rem .5rem; border-bottom:1px solid var(--border); vertical-align:top; }
+    .replay-table tr:last-child td { border-bottom:none; }
+    .replay-table .reason { color:var(--muted); }
+    @media (max-width:600px) { .replay-summary { grid-template-columns:1fr; } .replay-table { min-width:560px; } .replay-scroll { overflow-x:auto; } }
+
     /* ── Mismatch warning banner ── */
     #mismatch-banner {
       display: none;
@@ -380,6 +403,7 @@
       <button class="tab-btn active" id="tab-tokens-btn" onclick="switchTab('tokens')">Tokens</button>
       <button class="tab-btn" id="tab-logs-btn" onclick="switchTab('logs')">Logs</button>
       <button class="tab-btn" id="tab-presentation-btn" onclick="switchTab('presentation')">Presentation</button>
+      <button class="tab-btn" id="tab-replay-btn" onclick="switchTab('replay')">Replay</button>
     </div>
 
     <!-- ══ TOKENS TAB ══ -->
@@ -405,6 +429,34 @@
         </div>
         <div id="tokenTableWrap">
           <div class="empty-state">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ REPLAY TAB ══ -->
+    <div class="tab-panel" id="tab-replay">
+      <div class="card">
+        <div class="replay-toolbar">
+          <div>
+            <div class="card-title" style="margin-bottom:.45rem;">AI report replay</div>
+            <p class="replay-intro">Safely re-run report generation for eligible tester projects. Preview the exact scope first; no tester credentials are shown here.</p>
+          </div>
+          <button class="btn-ghost" onclick="loadReplayPreview()">Refresh preview</button>
+        </div>
+        <div id="replayPreview">
+          <div class="empty-state">Preview scope will load here.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="replay-toolbar">
+          <div>
+            <div class="card-title" style="margin-bottom:.45rem;">Latest replay batch</div>
+            <p class="replay-intro">Progress refreshes automatically while a batch is active.</p>
+          </div>
+          <button class="btn-ghost" onclick="loadLatestReplay()">Refresh batch</button>
+        </div>
+        <div id="replayBatch">
+          <div class="empty-state">No replay batch loaded.</div>
         </div>
       </div>
     </div>
@@ -543,6 +595,10 @@
     document.getElementById('tab-' + name + '-btn').classList.add('active');
     document.getElementById('tab-' + name).classList.add('active');
     if (name === 'logs') loadLogs();
+    if (name === 'replay') {
+      loadReplayPreview();
+      loadLatestReplay();
+    }
   }
 
   // ── Admin API helpers ─────────────────────────────────────────────────────────
@@ -615,12 +671,211 @@
 
   // ── Status bar ────────────────────────────────────────────────────────────────
   let statusTimer = null;
+  let replayPollTimer = null;
+  let replayPreviewState = null;
   function showStatus(msg, type = 'info') {
     const el = document.getElementById('status');
     el.textContent = msg;
     el.className = type;
     if (statusTimer) clearTimeout(statusTimer);
     statusTimer = setTimeout(() => { el.className = ''; el.textContent = ''; }, 5000);
+  }
+
+  // ── AI report replay ─────────────────────────────────────────────────────────
+  function replayValue(obj, keys, fallback = 0) {
+    for (const key of keys) {
+      if (obj && obj[key] !== undefined && obj[key] !== null) return obj[key];
+    }
+    return fallback;
+  }
+
+  function replayStatus(batch) {
+    return String(replayValue(batch, ['status', 'state'], 'unknown')).toLowerCase();
+  }
+
+  function replayItems(batch) {
+    return Array.isArray(batch?.items) ? batch.items : [];
+  }
+
+  function replayCounts(batch) {
+    const items = replayItems(batch);
+    const supplied = batch?.counts || batch?.progress || {};
+    const count = (names, status) => {
+      const value = replayValue(supplied, names, null);
+      if (value !== null) return Number(value) || 0;
+      return items.filter(item => String(item.status || '').toLowerCase() === status).length;
+    };
+    return {
+      created: count(['created'], 'created'),
+      generated: count(['generated', 'completed', 'complete'], 'generated'),
+      skipped: count(['skipped'], 'skipped'),
+      failed: count(['failed', 'error'], 'failed'),
+      pending: count(['pending', 'remaining'], 'pending'),
+    };
+  }
+
+  function renderReplayPreview(data) {
+    replayPreviewState = data || {};
+    const eligible = replayValue(data, ['eligibleProjects', 'eligible_projects'], []);
+    const testers = replayValue(data, ['testerAccounts', 'tester_accounts'], []);
+    const skipped = replayValue(data, ['skipped'], []);
+    const projects = Array.isArray(eligible) ? eligible : [];
+    const skippedItems = Array.isArray(skipped) ? skipped : [];
+    const testerCount = Number(replayValue(data, ['testerAccountCount'], Array.isArray(testers) ? testers.length : testers || 0));
+    const wrap = document.getElementById('replayPreview');
+    if (!projects.length && !skippedItems.length) {
+      wrap.innerHTML = '<div class="empty-state">No eligible projects found for replay.</div>';
+      return;
+    }
+    const disabled = projects.length === 0 ? ' disabled' : '';
+    wrap.innerHTML = `
+      <div class="replay-summary">
+        <div class="replay-metric"><strong>${projects.length.toLocaleString()}</strong><span>Eligible projects</span></div>
+        <div class="replay-metric"><strong>${testerCount.toLocaleString()}</strong><span>Tester accounts</span></div>
+        <div class="replay-metric"><strong>${skippedItems.length.toLocaleString()}</strong><span>Skipped in preview</span></div>
+      </div>
+      <div class="replay-callout"><strong>Before you start:</strong> each eligible project creates a new Google Doc. This can trigger paid AI work and cannot be undone.</div>
+      <div class="replay-actions">
+        <button class="btn-primary" onclick="startReplayBatch()"${disabled}>Start replay for ${projects.length.toLocaleString()} project${projects.length === 1 ? '' : 's'}</button>
+      </div>
+      ${skippedItems.length ? `<div class="replay-scroll" style="margin-top:1.25rem"><table class="replay-table"><thead><tr><th>Skipped project</th><th>Reason</th></tr></thead><tbody>${skippedItems.map(replayItemRow).join('')}</tbody></table></div>` : ''}
+    `;
+  }
+
+  function replayItemRow(item) {
+    const name = item.projectName || item.project_name || item.name || item.projectId || item.project_id || 'Project';
+    const reason = item.reason || item.error || item.message || 'Not eligible';
+    const status = item.status ? `<span class="badge badge-${escHtml(String(item.status).toLowerCase())}">${escHtml(String(item.status))}</span>` : '';
+    return `<tr><td>${escHtml(name)} ${status}</td><td class="reason">${escHtml(reason)}</td></tr>`;
+  }
+
+  async function loadReplayPreview() {
+    const wrap = document.getElementById('replayPreview');
+    wrap.innerHTML = '<div class="empty-state">Loading replay preview…</div>';
+    try {
+      const res = await apiFetch('/api/admin/replay/preview');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
+      renderReplayPreview(data);
+    } catch (err) {
+      wrap.innerHTML = '<div class="empty-state">Unable to load replay preview. Use Refresh preview to try again.</div>';
+      showStatus('Failed to load replay preview: ' + err.message, 'error');
+    }
+  }
+
+  async function startReplayBatch() {
+    const projects = replayValue(replayPreviewState, ['eligibleProjects', 'eligible_projects'], []);
+    const count = Array.isArray(projects) ? projects.length : 0;
+    if (!count) return;
+    const confirmed = confirm(`Start AI replay for ${count} eligible project${count === 1 ? '' : 's'}?\n\nEach eligible project creates a new Google Doc. This may incur AI processing costs and cannot be undone.`);
+    if (!confirmed) return;
+    try {
+      const res = await apiFetch('/api/admin/replay/batches', {
+        method: 'POST',
+        body: JSON.stringify({ confirmed: true, previewId: replayPreviewState?.previewId }),
+      });
+      const data = await res.json();
+      if (res.status === 409) {
+        throw new Error('Replay preview is stale. Refresh the preview and confirm again.');
+      }
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
+      showStatus('Replay batch started. Progress will update automatically.', 'success');
+      renderReplayBatch(data);
+      beginReplayPolling(data.batch || data);
+    } catch (err) {
+      showStatus('Could not start replay: ' + err.message, 'error');
+    }
+  }
+
+  function renderReplayBatch(data) {
+    const batch = data?.batch ? { ...data.batch } : { ...(data || {}) };
+    if (data?.counts && !batch.counts) batch.counts = data.counts;
+    if (data?.progress && !batch.progress) batch.progress = data.progress;
+    if (data?.total != null && batch.total == null) batch.total = data.total;
+    const items = data?.items || batch.items || [];
+    if (items.length) batch.items = items;
+    const counts = replayCounts(batch);
+    const total = Math.max(
+      Number(replayValue(batch, ['total', 'total_items', 'project_count'], 0)),
+      items.length,
+    );
+    const cancelled = items.filter(item =>
+      ['cancelled', 'canceled'].includes(String(item.status || '').toLowerCase())
+    ).length;
+    const done = counts.generated + counts.skipped + counts.failed + cancelled;
+    const percent = total ? Math.min(100, Math.round(done / total * 100)) : 0;
+    const status = replayStatus(batch);
+    const active = ['pending','running','active','processing','in_progress'].includes(status);
+    const resumable = ['paused','failed','cancelled','canceled'].includes(status);
+    const cancellable = active;
+    const batchId = batch.id || batch.batch_id;
+    const actionButtons = batchId ? `
+      ${resumable ? `<button class="btn-primary" onclick="resumeReplay('${encodeURIComponent(batchId)}')">Resume replay</button>` : ''}
+      ${cancellable ? `<button class="btn-danger" onclick="cancelReplay('${encodeURIComponent(batchId)}')">Cancel batch</button>` : ''}` : '';
+    const rows = replayItems(batch).map(item => {
+      const itemStatus = String(item.status || 'pending').toLowerCase();
+      const label = itemStatus.replace(/_/g, ' ');
+      const name = item.projectName || item.project_name || item.name || item.projectId || item.project_id || 'Project';
+      const reason = item.reason || item.error || item.message || '—';
+      return `<tr><td>${escHtml(name)}</td><td><span class="badge badge-${escHtml(itemStatus)}">${escHtml(label)}</span></td><td class="reason">${escHtml(reason)}</td></tr>`;
+    }).join('');
+    document.getElementById('replayBatch').innerHTML = `
+      <div class="replay-status"><div><strong>Batch ${escHtml(String(batchId || '—'))}</strong><div style="color:var(--muted);font-size:.8rem;margin-top:.25rem;">Status: ${escHtml(status)}</div></div><div class="replay-actions">${actionButtons}</div></div>
+      <div class="replay-progress" aria-label="${percent}% complete"><div style="width:${percent}%"></div></div>
+      <div class="replay-summary">
+        <div class="replay-metric"><strong>${counts.created}</strong><span>Created</span></div>
+        <div class="replay-metric"><strong>${counts.generated}</strong><span>Generated</span></div>
+        <div class="replay-metric"><strong>${counts.skipped}</strong><span>Skipped</span></div>
+        <div class="replay-metric"><strong>${counts.failed}</strong><span>Failed</span></div>
+        <div class="replay-metric"><strong>${counts.pending}</strong><span>Pending</span></div>
+      </div>
+      ${rows ? `<div class="replay-scroll"><table class="replay-table"><thead><tr><th>Project</th><th>Status</th><th>Reason</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty-state">No replay items returned for this batch.</div>'}
+    `;
+  }
+
+  async function loadReplayBatch(id) {
+    try {
+      const res = await apiFetch(id ? `/api/admin/replay/batches/${encodeURIComponent(id)}` : '/api/admin/replay/batches/latest');
+      const data = await res.json();
+      if (res.status === 404) {
+        document.getElementById('replayBatch').innerHTML = '<div class="empty-state">No replay batches yet.</div>';
+        return;
+      }
+      if (!res.ok) throw new Error(data.error || 'Unknown error');
+      renderReplayBatch(data);
+      beginReplayPolling(data.batch || data);
+    } catch (err) {
+      document.getElementById('replayBatch').innerHTML = '<div class="empty-state">Unable to load replay batch. Use Refresh batch to try again.</div>';
+      showStatus('Failed to load replay batch: ' + err.message, 'error');
+    }
+  }
+
+  function loadLatestReplay() { return loadReplayBatch(); }
+
+  function beginReplayPolling(batch) {
+    if (replayPollTimer) clearTimeout(replayPollTimer);
+    if (!['pending','running','active','processing','in_progress'].includes(replayStatus(batch))) return;
+    replayPollTimer = setTimeout(async () => {
+      await loadReplayBatch(batch.id || batch.batch_id);
+    }, 2500);
+  }
+
+  async function resumeReplay(id) {
+    if (!confirm('Resume this replay batch? Pending eligible projects will be processed and each creates a new Google Doc.')) return;
+    try {
+      const res = await apiFetch(`/api/admin/replay/batches/${id}/resume`, { method:'POST', body: JSON.stringify({confirmed:true}) });
+      const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Unknown error');
+      renderReplayBatch(data); beginReplayPolling(data.batch || data); showStatus('Replay batch resumed.', 'success');
+    } catch (err) { showStatus('Could not resume replay: ' + err.message, 'error'); }
+  }
+
+  async function cancelReplay(id) {
+    if (!confirm('Cancel this replay batch? Pending projects will not be processed.')) return;
+    try {
+      const res = await apiFetch(`/api/admin/replay/batches/${id}/cancel`, { method:'POST', body: JSON.stringify({}) });
+      const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Unknown error');
+      renderReplayBatch(data); showStatus('Replay batch cancelled.', 'success');
+    } catch (err) { showStatus('Could not cancel replay: ' + err.message, 'error'); }
   }
 
   // ── Load & render token list ──────────────────────────────────────────────────
@@ -862,6 +1117,7 @@
           return res.json().then(data => {
             document.getElementById('overlay').classList.add('hidden');
             renderTokenList(data);
+            loadLatestReplay();
           });
         })
         .catch(() => { /* leave overlay visible */ });

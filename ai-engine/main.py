@@ -11,6 +11,12 @@ from google_api import connect_to_google_api_personal, upload_knowledge_base, sh
 from doc_engine import replace_text_in_doc, upload_and_insert_image, insert_photo_gallery
 from prompt import system_prompt, main_prompt, build_inspector_context
 from template_replacement import build_replacements
+import re
+from datetime import datetime, timezone
+from report_idempotency import (
+    validate_report_attempt_id as _pure_validate_report_attempt_id,
+    reconcile_attempt as _pure_reconcile_attempt,
+)
 
 TEMP_PHOTO_DIR = "./temp_photos"
 
@@ -27,6 +33,35 @@ class ReportPipelineError(Exception):
         super().__init__(message)
         self.token_usage = token_usage
         self.doc_id = doc_id
+
+
+class ReportAlreadyComplete(Exception):
+    """Raised when Drive already contains the finished document for an attempt."""
+
+    def __init__(self, doc_id):
+        super().__init__("A completed report already exists for this attempt")
+        self.doc_id = doc_id
+
+
+REPORT_ATTEMPT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+PROCESSING_RETRY_AFTER_SECONDS = 60 * 60
+
+
+def _validate_report_attempt_id(value: str) -> str:
+    return _pure_validate_report_attempt_id(value)
+
+
+def _drive_query_quote(value: str) -> str:
+    # The validator excludes quotes, but keep this defensive for future callers.
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _find_attempt_file(drive, attempt_id: str, allow_processing: bool = False,
+                       return_state: bool = False):
+    """Return an existing completed file, or remove an abandoned processing copy."""
+    return _pure_reconcile_attempt(
+        drive, attempt_id, allow_processing=allow_processing, return_state=return_state
+    )
 
 
 def _validate_media_url(url: str) -> None:
@@ -159,9 +194,44 @@ def _photo_manifest(photo_records: list) -> str:
     return "\n".join(lines)
 
 
-def create_report(video_path: str | None, master_id, output_folder, gemini_key, report_meta: dict | None = None, project: dict | None = None, tester_email: str | None = None):
+def create_report(video_path: str | None, master_id, output_folder, gemini_key, report_meta: dict | None = None, project: dict | None = None, tester_email: str | None = None, report_attempt_id: str | None = None):
     # 1. Init Connections
     docs, drive = connect_to_google_api_personal()
+    if report_attempt_id is not None:
+        report_attempt_id = _validate_report_attempt_id(report_attempt_id)
+        existing_doc_id = _find_attempt_file(drive, report_attempt_id)
+        if existing_doc_id:
+            raise ReportAlreadyComplete(existing_doc_id)
+    doc_id = None
+    if report_attempt_id:
+        copy_name = f"Rapport_Skade_{int(time.time())}"
+        new_doc = drive.files().copy(
+            fileId=master_id,
+            supportsAllDrives=True,
+            body={
+                "name": copy_name,
+                "parents": [output_folder],
+                "appProperties": {
+                    "report_attempt_id": report_attempt_id,
+                    "report_state": "processing",
+                    "processing_started_at": datetime.now(timezone.utc).isoformat(),
+                },
+            },
+        ).execute()
+        doc_id = new_doc["id"]
+        # Close the list-then-copy race. The oldest attempt file is canonical;
+        # a concurrent request must not proceed to Gemini with a second copy.
+        canonical = _find_attempt_file(
+            drive, report_attempt_id, allow_processing=True, return_state=True
+        )
+        if canonical and canonical["id"] != doc_id:
+            try:
+                drive.files().delete(fileId=doc_id, supportsAllDrives=True).execute()
+            except Exception:
+                pass
+            if canonical["state"] == "complete":
+                raise ReportAlreadyComplete(canonical["id"])
+            raise RuntimeError("Report attempt is already processing")
     genai_client = genai.Client(api_key=gemini_key)
 
     # 2. Gemini Analysis (multimodal). Video is useful evidence when present,
@@ -277,14 +347,16 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
     # (a) den halvferdige kopien slettes fra Drive (ellers ligger den igjen og
     # kan forveksles med en ekte rapport), og (b) token_usage følge unntaket
     # videre — analysen er fakturert selv om rapporten aldri ble ferdig.
-    doc_id = None
     try:
         # 3. Create Doc Copy
-        copy_name = f"Rapport_Skade_{int(time.time())}"
-        new_doc = drive.files().copy(fileId=master_id,
-                                     supportsAllDrives=True,
-                                     body={'name': copy_name, 'parents': [output_folder]}).execute()
-        doc_id = new_doc['id']
+        if doc_id is None:
+            copy_name = f"Rapport_Skade_{int(time.time())}"
+            new_doc = drive.files().copy(
+                fileId=master_id,
+                supportsAllDrives=True,
+                body={'name': copy_name, 'parents': [output_folder]},
+            ).execute()
+            doc_id = new_doc['id']
 
         # 4. Process Evidence Image (memory-optimized with aggressive cleanup)
         evidence_points = (analysis.evidence_points if analysis and analysis.evidence_points else [])
@@ -406,6 +478,17 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
             except Exception as e:
                 # Non-fatal: log and continue — report was still generated successfully
                 print(f"⚠️  Could not share doc with {tester_email}: {e}")
+        if report_attempt_id:
+            drive.files().update(
+                fileId=doc_id,
+                supportsAllDrives=True,
+                body={"appProperties": {
+                    "report_attempt_id": report_attempt_id,
+                    "report_state": "complete",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                }},
+                fields="id,appProperties",
+            ).execute()
     except Exception as exc:
         _cleanup_photo_files(photo_records)
         orphaned_doc_id = None
