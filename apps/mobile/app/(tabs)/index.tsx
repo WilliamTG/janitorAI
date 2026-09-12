@@ -967,6 +967,26 @@ export default function Index() {
                       </Caption>
                     </View>
                   ) : null}
+                  {item.hasSuccessfulDocument ? (
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                        borderRadius: theme.radii.pill,
+                        backgroundColor: `${theme.colors.accent}1A`,
+                        borderWidth: 1,
+                        borderColor: theme.colors.accent,
+                      }}
+                    >
+                      <Ionicons name="checkmark-circle" size={13} color={theme.colors.accent} />
+                      <Caption style={{ color: theme.colors.accent, fontWeight: '700' }}>
+                        {nb.projects.documentCreated}
+                      </Caption>
+                    </View>
+                  ) : null}
                 </View>
                 <Caption muted>{metaText}</Caption>
               </View>

@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
-from main import create_report, ReportPipelineError
+from main import create_report, ReportPipelineError, ReportAlreadyComplete
 from prompt import PROMPT_VERSION
 from google_api import connect_to_google_api_personal, download_knowledge_from_drive, export_doc_as_pdf, export_doc_as_docx
 
@@ -30,6 +30,7 @@ class ReportRequest(BaseModel):
     report_meta: dict = {}    # Per-project metadata for template replacements
     project: dict = {}        # Full project context: description, notes (text/transcription/photos)
     tester_email: str = ""    # Email address to share the finished doc with (optional)
+    report_attempt_id: Optional[str] = None
 
 TEMP_KNOWLEDGE_DIR = "./temp_knowledge"
 TEMP_VIDEO_DIR = "./videos"
@@ -226,6 +227,7 @@ def run_analysis(fastapi_req: Request, request: ReportRequest):
             report_meta=request.report_meta,
             project=request.project,
             tester_email=request.tester_email or None,
+            report_attempt_id=request.report_attempt_id,
         )
         report_url = f"https://docs.google.com/document/d/{doc_id}"
         # A5: den strukturerte analysen følger med som eget felt, slik at
@@ -252,6 +254,17 @@ def run_analysis(fastapi_req: Request, request: ReportRequest):
         if e.doc_id:
             payload["doc_id"] = e.doc_id
         return payload
+    except ReportAlreadyComplete as e:
+        # A retried API request must discover the original document rather than
+        # charging Gemini or creating a second Drive copy.
+        return {
+            "status": "success",
+            "url": f"https://docs.google.com/document/d/{e.doc_id}",
+            "analysis": None,
+            "token_usage": None,
+            "idempotent": True,
+            "prompt_version": PROMPT_VERSION,
+        }
     except Exception as e:
         print(f"❌ Error during analysis: {str(e)}")
         import traceback
