@@ -160,9 +160,12 @@ CREATE TABLE IF NOT EXISTS report_generations (
   id            BIGSERIAL   PRIMARY KEY,
   tester_token  VARCHAR,
   project_id    TEXT,
+  attempt_id    TEXT,
   doc_id        TEXT,
-  status        TEXT        NOT NULL DEFAULT 'success',  -- 'success' | 'error'
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  is_test_project BOOLEAN NOT NULL DEFAULT FALSE,
+  status        TEXT        NOT NULL DEFAULT 'processing', -- processing | success | error
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS report_generations_tenant_idx ON report_generations (tester_token, project_id, created_at DESC);
 
@@ -185,6 +188,74 @@ ALTER TABLE media           ADD COLUMN IF NOT EXISTS unreferenced_at TIMESTAMPTZ
 ALTER TABLE media           ADD COLUMN IF NOT EXISTS sha256          TEXT;
 ALTER TABLE tester_tokens   ADD COLUMN IF NOT EXISTS email           TEXT;
 ALTER TABLE user_actions    ADD COLUMN IF NOT EXISTS device_info    JSONB;
+ALTER TABLE report_generations ADD COLUMN IF NOT EXISTS is_test_project BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE report_generations ADD COLUMN IF NOT EXISTS attempt_id TEXT;
+ALTER TABLE report_generations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+CREATE UNIQUE INDEX IF NOT EXISTS report_generations_attempt_idx
+  ON report_generations (tester_token, project_id, attempt_id)
+  WHERE attempt_id IS NOT NULL;
+
+-- Replay batches are an admin-only, durable ledger.  Items are created up
+-- front, before dispatch, so a process restart cannot discover a different
+-- set of source projects or allocate a second copy/attempt id.
+CREATE TABLE IF NOT EXISTS replay_batches (
+  id            BIGSERIAL PRIMARY KEY,
+  status        TEXT NOT NULL DEFAULT 'queued',
+  requested_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  started_at    TIMESTAMPTZ,
+  finished_at   TIMESTAMPTZ,
+  cancelled_at  TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS replay_batch_items (
+  id                BIGSERIAL PRIMARY KEY,
+  batch_id          BIGINT NOT NULL REFERENCES replay_batches(id) ON DELETE CASCADE,
+  tester_token      VARCHAR NOT NULL,
+  source_project_id  TEXT NOT NULL,
+  copy_project_id    TEXT NOT NULL,
+  report_attempt_id  TEXT NOT NULL,
+  state             TEXT NOT NULL DEFAULT 'pending',
+  progress          INTEGER NOT NULL DEFAULT 0,
+  error             TEXT,
+  leased_at         TIMESTAMPTZ,
+  lease_until       TIMESTAMPTZ,
+  dispatched_at     TIMESTAMPTZ,
+  started_at        TIMESTAMPTZ,
+  finished_at       TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (batch_id, tester_token, source_project_id),
+  UNIQUE (batch_id, copy_project_id),
+  UNIQUE (batch_id, report_attempt_id)
+);
+-- Explicitly ordered additive migrations for deployments that may have
+-- received an early replay schema revision.
+ALTER TABLE replay_batches ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'queued';
+ALTER TABLE replay_batches ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE replay_batches ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+ALTER TABLE replay_batches ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ;
+ALTER TABLE replay_batches ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE replay_batches ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE replay_batches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS tester_token VARCHAR;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS source_project_id TEXT;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS copy_project_id TEXT;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS report_attempt_id TEXT;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS progress INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS error TEXT;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS leased_at TIMESTAMPTZ;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+CREATE INDEX IF NOT EXISTS replay_batch_items_claim_idx
+  ON replay_batch_items (batch_id, state, lease_until, id);
+CREATE INDEX IF NOT EXISTS replay_batch_items_source_idx
+  ON replay_batch_items (tester_token, source_project_id);
 `;
 
 // ── Default-token seed + data migration ──────────────────────────────────────

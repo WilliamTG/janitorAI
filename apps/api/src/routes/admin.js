@@ -5,6 +5,11 @@
 const express = require("express");
 const crypto = require("crypto");
 const { getPool, requireDb } = require("../db");
+const {
+  preview: replayPreview,
+  createBatch: createReplayBatch,
+  getBatch: getReplayBatch,
+} = require("../replay");
 
 const router = express.Router();
 
@@ -36,6 +41,152 @@ function requireAdminSecret(req, res, next) {
 
 router.use(requireAdminSecret);
 router.use(requireDb);
+
+// ── Replay batches ───────────────────────────────────────────────────────────
+// These endpoints intentionally expose tester names/masked labels only.  A
+// replay is an operational action, so confirmation is explicit and repeated
+// starts are idempotent while a batch is active.
+router.get("/replay/preview", async (req, res) => {
+  try {
+    res.json(await replayPreview(getPool()));
+  } catch (err) {
+    console.error("GET /api/admin/replay/preview error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/replay/batches", async (req, res) => {
+  if (!req.body || req.body.confirmed !== true) {
+    return res.status(400).json({ error: "confirmed:true is required" });
+  }
+  try {
+    if (typeof req.body.previewId !== "string" || !req.body.previewId) {
+      return res.status(400).json({ error: "previewId is required" });
+    }
+    const batch = await createReplayBatch(getPool(), req.body.previewId);
+    res.status(batch.existing ? 200 : 201).json({ batch });
+  } catch (err) {
+    if (err && err.code === "REPLAY_PREVIEW_STALE") {
+      return res.status(409).json({ error: err.message, code: err.code });
+    }
+    console.error("POST /api/admin/replay/batches error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.get("/replay/batches/latest", async (req, res) => {
+  try {
+    const result = await getPool().query(
+      "SELECT id FROM replay_batches ORDER BY id DESC LIMIT 1"
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "No replay batches" });
+    res.json({ batch: await getReplayBatch(getPool(), result.rows[0].id) });
+  } catch (err) {
+    console.error("GET latest replay batch error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.get("/replay/batches/:id", async (req, res) => {
+  try {
+    const batch = await getReplayBatch(getPool(), req.params.id);
+    if (!batch) return res.status(404).json({ error: "Replay batch not found" });
+    res.json({ batch });
+  } catch (err) {
+    console.error("GET replay batch error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/replay/batches/:id/resume", async (req, res) => {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const current = await client.query(
+      "SELECT status FROM replay_batches WHERE id=$1 FOR UPDATE",
+      [req.params.id]
+    );
+    if (!current.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Replay batch not found" });
+    }
+    if (current.rows[0].status === "cancelled" && req.body?.confirmed !== true) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "Cancelled batches require confirmed:true to resume undispatched items",
+        code: "REPLAY_RESUME_CONFIRMATION_REQUIRED",
+      });
+    }
+    const result = await client.query(
+      `UPDATE replay_batches
+          SET status='queued', updated_at=now(), finished_at=NULL, cancelled_at=NULL
+        WHERE id=$1 AND status <> 'completed'
+      RETURNING id, status`,
+      [req.params.id]
+    );
+    if (!result.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Completed replay batches cannot be resumed" });
+    }
+    // Cancelled rows were never dispatched. Failed/skipped rows are explicit
+    // admin retries. A running row is reclaimed only after its durable lease
+    // expires; an immediate cancel/resume must not duplicate live work.
+    await client.query(
+      `UPDATE replay_batch_items
+          SET state='pending', leased_at=NULL, lease_until=NULL, updated_at=now()
+        WHERE batch_id=$1
+          AND (
+            state IN ('failed','skipped','cancelled')
+            OR (state='running' AND lease_until < now())
+          )`,
+      [req.params.id]
+    );
+    await client.query("COMMIT");
+    res.json({ batch: await getReplayBatch(pool, req.params.id) });
+  } catch (err) {
+    try { await client.query("ROLLBACK"); } catch (_) {}
+    console.error("POST replay resume error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  } finally {
+    client.release();
+  }
+});
+
+router.post("/replay/batches/:id/cancel", async (req, res) => {
+  try {
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const batch = await client.query(
+        `UPDATE replay_batches
+            SET status='cancelled', cancelled_at=now(), finished_at=now(), updated_at=now()
+          WHERE id=$1 AND status NOT IN ('completed','cancelled')
+        RETURNING id`,
+        [req.params.id]
+      );
+      if (!batch.rows.length) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Replay batch not found or already terminal" });
+      }
+      await client.query(
+        `UPDATE replay_batch_items SET state='cancelled', finished_at=now(), updated_at=now()
+          WHERE batch_id=$1 AND state='pending'`,
+        [req.params.id]
+      );
+      await client.query("COMMIT");
+      res.json({ batch: await getReplayBatch(getPool(), req.params.id) });
+    } catch (err) {
+      try { await client.query("ROLLBACK"); } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("POST replay cancel error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 // ── POST /api/admin/tokens – provision a new tester token ────────────────────
 router.post("/tokens", async (req, res) => {
