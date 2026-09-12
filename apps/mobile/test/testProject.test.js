@@ -26,7 +26,10 @@ new Function("module", "exports", "require", compiled)(
   require
 );
 
-const { createTestProjectCopy } = moduleUnderTest.exports;
+const {
+  createTestProjectCopy,
+  hasPendingProjectMedia,
+} = moduleUnderTest.exports;
 
 const sourceProject = {
   id: "source-1",
@@ -42,12 +45,13 @@ const sourceProject = {
       photos: [
         {
           id: "photo-1",
-          uri: "",
+          uri: "file://source-photo.jpg",
           remoteId: "media-photo-1",
           caption: "Fuktskjold",
         },
       ],
       videoRemoteId: "media-video-1",
+      videoUri: "idb://note-1",
     },
   ],
   reportMeta: { caseNumber: "CASE-1" },
@@ -78,7 +82,9 @@ assert.strictEqual(copy.isTestProject, true);
 assert.strictEqual(copy.sourceProjectId, "source-1");
 assert.strictEqual(copy.updatedAt, "2026-09-12T10:00:00.000Z");
 assert.strictEqual(copy.notes[0].photos[0].remoteId, "media-photo-1");
+assert.strictEqual(copy.notes[0].photos[0].uri, "");
 assert.strictEqual(copy.notes[0].videoRemoteId, "media-video-1");
+assert.strictEqual(copy.notes[0].videoUri, undefined);
 assert.deepStrictEqual(copy.reportMeta, { caseNumber: "CASE-1" });
 
 for (const field of [
@@ -98,5 +104,21 @@ copy.notes[0].text = "Changed only in copy";
 copy.reportMeta.caseNumber = "CASE-2";
 assert.strictEqual(sourceProject.notes[0].text, "Fukt ved sluk");
 assert.strictEqual(sourceProject.reportMeta.caseNumber, "CASE-1");
+assert.strictEqual(sourceProject.notes[0].videoUri, "idb://note-1");
+assert.strictEqual(sourceProject.notes[0].photos[0].uri, "file://source-photo.jpg");
+
+const pendingSource = JSON.parse(JSON.stringify(sourceProject));
+delete pendingSource.notes[0].videoRemoteId;
+assert.strictEqual(hasPendingProjectMedia(pendingSource), true);
+assert.throws(
+  () =>
+    createTestProjectCopy(
+      pendingSource,
+      [pendingSource],
+      "unsafe-copy",
+      "2026-09-12T10:00:00.000Z"
+    ),
+  /device-local media/
+);
 
 console.log("testProject: all tests passed");

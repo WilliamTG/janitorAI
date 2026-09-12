@@ -25,7 +25,10 @@ import { fetchReportStatus, resolveStuckReport } from '@/src/sync/reportRecovery
 import { newId } from '@/src/lib/ids';
 import { CaseFile, NO_DATE_SET, Project, UNKNOWN_INSPECTOR } from '@/src/features/projects/types';
 import { formatMinutes, minutesToApproved } from '@/src/features/projects/metrics';
-import { createTestProjectCopy } from '@/src/features/projects/testProject';
+import {
+  createTestProjectCopy,
+  hasPendingProjectMedia,
+} from '@/src/features/projects/testProject';
 
 // Treff fra Kartverkets adresse-API, via /api/underlag/adresse.
 type AddressHit = {
@@ -53,6 +56,7 @@ import {
 import {
   deleteProjectRemote,
   pullAndMerge,
+  pushProject,
   schedulePush,
   syncNow,
   touchProject,
@@ -121,6 +125,7 @@ export default function Index() {
   // Projects
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [duplicatingProjectId, setDuplicatingProjectId] = useState<string | null>(null);
 
   // Filter & search (ephemeral — resets on navigation)
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
@@ -445,10 +450,35 @@ export default function Index() {
   };
 
   const duplicateAsTestProject = async (source: Project) => {
-    const testProject = createTestProjectCopy(source, projects, newId());
-    const saved = await saveProjectsToStorage([testProject, ...projects], testProject);
-    if (saved) {
-      toast.show({ message: nb.projects.testCopyCreated, variant: 'success' });
+    if (duplicatingProjectId) return;
+    setDuplicatingProjectId(source.id);
+    try {
+      // Finish source uploads first. pushProject persists successful remote IDs
+      // into local storage even when the later project PUT cannot complete.
+      await pushProject(source);
+      const refreshed = await loadProjects();
+      const durableSource = refreshed.find((project) => project.id === source.id);
+      if (!durableSource || hasPendingProjectMedia(durableSource)) {
+        toast.show({ message: nb.projects.testCopyNeedsUpload, variant: 'info' });
+        return;
+      }
+
+      const testProject = createTestProjectCopy(
+        durableSource,
+        refreshed,
+        newId(),
+      );
+      const saved = await saveProjectsToStorage(
+        [testProject, ...refreshed],
+        testProject,
+      );
+      if (saved) {
+        toast.show({ message: nb.projects.testCopyCreated, variant: 'success' });
+      }
+    } catch {
+      toast.show({ message: nb.projects.testCopyFailed, variant: 'error' });
+    } finally {
+      setDuplicatingProjectId(null);
     }
   };
 
@@ -962,6 +992,7 @@ export default function Index() {
                 testID={`duplicate-test-project-${item.id}`}
                 accessibilityRole="button"
                 accessibilityLabel={`${nb.projects.createTestCopy}: ${item.name}`}
+                disabled={duplicatingProjectId !== null}
                 onPress={(event) => {
                   event.stopPropagation();
                   void duplicateAsTestProject(item);
@@ -979,7 +1010,9 @@ export default function Index() {
               >
                 <Ionicons name="copy-outline" size={15} color={theme.colors.accent} />
                 <Caption style={{ color: theme.colors.accent, fontWeight: '600' }}>
-                  {nb.projects.createTestCopy}
+                  {duplicatingProjectId === item.id
+                    ? nb.projects.preparingTestCopy
+                    : nb.projects.createTestCopy}
                 </Caption>
               </TouchableOpacity>
             ) : null}

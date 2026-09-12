@@ -94,7 +94,11 @@ export const nb = {
     projectMenu: 'Prosjektmeny',
     testProject: 'Testprosjekt',
     createTestCopy: 'Lag testkopi',
+    preparingTestCopy: 'Forbereder testkopi …',
     testCopyCreated: 'Testprosjektet ble opprettet',
+    testCopyNeedsUpload:
+      'Testkopien kan lages når alle bilder og opptak er lastet opp. Prøv igjen når synkroniseringen er ferdig.',
+    testCopyFailed: 'Kunne ikke lage testkopien',
     timeToApproved: (duration: string) => `Befaring → godkjent rapport: ${duration}`,
   },
 

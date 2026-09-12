@@ -642,6 +642,13 @@ function applyRemoteIds(stored: Project, uploaded: Project): Project {
 export async function pushProject(project: Project): Promise<Project> {
   if (syncDisabled) return project;
 
+  // An explicit flush (for example before creating a test copy) supersedes a
+  // pending debounced push of an older snapshot.
+  const pendingTimer = pendingPushTimers.get(project.id);
+  if (pendingTimer) clearTimeout(pendingTimer);
+  pendingPushTimers.delete(project.id);
+  pendingProjects.delete(project.id);
+
   // Serialise all pushes for this project so the latestForPut re-read and the
   // PUT are never interleaved with a concurrent push that writes different
   // remote IDs.  Without this, two pushes running in parallel could each read
@@ -650,7 +657,8 @@ export async function pushProject(project: Project): Promise<Project> {
     setSyncState('syncing');
 
     try {
-      const { project: withMedia, changed, failedCount, lostCount, idbUrisToCleanup } = await uploadPendingMedia(project);
+      const freshestProject = (await getProject(project.id)) ?? project;
+      const { project: withMedia, changed, failedCount, lostCount, idbUrisToCleanup } = await uploadPendingMedia(freshestProject);
       let toPush = withMedia;
 
       // Varsle om medier som er varig tapt lokalt (app lukket før synk) —
