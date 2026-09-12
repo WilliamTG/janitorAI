@@ -99,7 +99,8 @@ function buildReportPayload(project, mediaById) {
   // hvilke felter takstpersonen faglig korrigerte fra AI-utkastet — et
   // tillitssignal, ikke en svakhet.
   const CONTENT_FIELDS = [
-    "area", "source", "cause", "description", "extentDescription", "repairsDescription",
+    "area", "source", "sourceCategory", "cause", "acuteOrGradual", "description",
+    "extentDescription", "repairsDescription",
   ];
   const draftContent = (project.reportDraft && project.reportDraft.content) || null;
   const finalContent = (project.reportFinal && project.reportFinal.content) || draftContent;
@@ -356,4 +357,7 @@ router.get("/:id/media/:mediaId", requireViewToken, async (req, res) => {
   }
 });
 
+// Expose the pure payload builder to the unit tests without adding a route or
+// changing the public HTTP surface.
+router.buildReportPayload = buildReportPayload;
 module.exports = router;

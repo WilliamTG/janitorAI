@@ -464,6 +464,13 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
         replacements.update({
             "{{damage.cause.area}}": analysis.area,
             "{{damage.cause.source}}": analysis.source,
+            # New structured classifications. Keep both the canonical
+            # damage.cause.* names and short aliases so older master templates
+            # can adopt the fields without changing the API response shape.
+            "{{damage.cause.source_category}}": getattr(analysis.source_category, "value", analysis.source_category),
+            "{{damage.cause.acute_or_gradual}}": getattr(analysis.acute_or_gradual, "value", analysis.acute_or_gradual),
+            "{{damage.source_category}}": getattr(analysis.source_category, "value", analysis.source_category),
+            "{{damage.acute_or_gradual}}": getattr(analysis.acute_or_gradual, "value", analysis.acute_or_gradual),
             "{{damage.cause.cause}}": analysis.cause,
             "{{damage.cause.description}}": analysis.description,
             # Checkbox logic
