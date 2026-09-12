@@ -223,6 +223,7 @@ CREATE TABLE IF NOT EXISTS replay_batch_items (
   dispatched_at     TIMESTAMPTZ,
   started_at        TIMESTAMPTZ,
   finished_at       TIMESTAMPTZ,
+  omitted_lost_attachments INTEGER NOT NULL DEFAULT 0,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (batch_id, tester_token, source_project_id),
@@ -251,6 +252,7 @@ ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPT
 ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
 ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ;
 ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS copy_deleted_at TIMESTAMPTZ;
+ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS omitted_lost_attachments INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE replay_batch_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 CREATE INDEX IF NOT EXISTS replay_batch_items_claim_idx

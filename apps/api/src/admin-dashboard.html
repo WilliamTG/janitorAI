@@ -765,6 +765,20 @@
       failed: count(['failed', 'error'], 'failed'),
        deleted: count(['deleted'], 'deleted'),
       pending: count(['pending', 'remaining'], 'pending'),
+      omittedLostAttachments: (() => {
+        const value = replayValue(
+          supplied,
+          ['omittedLostAttachments', 'omitted_lost_attachments', 'lostAttachments'],
+          null
+        );
+        if (value !== null) return Number(value) || 0;
+        return items.reduce(
+          (sum, item) => sum + Number(
+            item.omittedLostAttachments || item.omitted_lost_attachments || 0
+          ),
+          0
+        );
+      })(),
     };
   }
 
@@ -913,6 +927,19 @@
     const media = Array.isArray(payload.media) ? payload.media : [];
     const notes = Array.isArray(project.notes) ? project.notes : [];
     const rooms = Array.isArray(project.rooms) ? project.rooms : [];
+    const omittedLostAttachments = Number(
+      payload.replayOmissions?.lostAttachments ||
+      relation?.omittedLostAttachments ||
+      0
+    ) || 0;
+    const omissionText = payload.role === 'replay-copy'
+      ? 'were intentionally omitted from this replay copy'
+      : relation
+        ? 'were intentionally omitted from the replay copy'
+        : 'will be intentionally omitted if this project is replayed';
+    const omissionHtml = omittedLostAttachments > 0
+      ? `<div class="replay-warning"><strong>Evidence omitted:</strong> ${omittedLostAttachments.toLocaleString()} explicitly lost attachment${omittedLostAttachments === 1 ? '' : 's'} ${omissionText}.</div>`
+      : '';
      const relationState = String(relation?.state || '').toLowerCase();
      const deletable = payload.role === 'replay-copy' &&
        relation &&
@@ -992,6 +1019,7 @@
       <div style="margin-top:1rem;"><strong>Rooms</strong><div class="replay-evidence" style="margin-top:.5rem;">${roomHtml}</div></div>
       <div style="margin-top:1rem;"><strong>Notes and transcriptions</strong>${notesHtml}</div>
       <div style="margin-top:1rem;"><strong>Durable media</strong>${mediaHtml}${missingHtml}</div>
+       ${omissionHtml}
       ${reportMetaHtml}
       ${project.reportError ? `<div class="replay-warning"><strong>Report error:</strong> ${escHtml(project.reportError)}</div>` : ''}
       <details style="margin-top:1rem;">
@@ -1107,6 +1135,10 @@
     const actionButtons = batchId ? `
       ${resumable ? `<button class="btn-primary" onclick="resumeReplay('${encodeURIComponent(batchId)}')">Resume replay</button>` : ''}
       ${cancellable ? `<button class="btn-danger" onclick="cancelReplay('${encodeURIComponent(batchId)}')">Cancel batch</button>` : ''}` : '';
+     const omittedLostAttachments = counts.omittedLostAttachments;
+     const omissionWarning = omittedLostAttachments > 0
+       ? `<div class="replay-warning"><strong>Evidence omitted from replay:</strong> ${omittedLostAttachments.toLocaleString()} explicitly lost attachment${omittedLostAttachments === 1 ? '' : 's'} were intentionally left out of the replay copies. Unknown local URIs and unowned media remain skipped as errors.</div>`
+       : '';
     const rows = replayItems(batch).map(item => {
       const itemStatus = String(item.status || 'pending').toLowerCase();
       const label = itemStatus.replace(/_/g, ' ');
@@ -1145,7 +1177,9 @@
          <div class="replay-metric"><strong>${counts.failed}</strong><span>Failed</span></div>
          <div class="replay-metric"><strong>${counts.deleted}</strong><span>Deleted</span></div>
         <div class="replay-metric"><strong>${counts.pending}</strong><span>Pending</span></div>
+         <div class="replay-metric"><strong>${omittedLostAttachments}</strong><span>Lost attachments omitted</span></div>
       </div>
+       ${omissionWarning}
        ${rows ? `<div class="replay-scroll"><table class="replay-table"><thead><tr><th>Project</th><th>Status</th><th>Reason</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty-state">No replay items returned for this batch.</div>'}
     `;
   }
