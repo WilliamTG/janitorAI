@@ -42,6 +42,39 @@ function isLocalUri(value) {
     (LOCAL_URI.test(value.trim()) || value.startsWith("/") || value.startsWith("~"));
 }
 
+function hasDurableMediaId(value) {
+  return Object.entries(value || {}).some(([entryKey, entryValue]) =>
+    (entryKey.toLowerCase() === "remoteid" || entryKey.toLowerCase().endsWith("remoteid")) &&
+    entryValue != null && String(entryValue).trim()
+  );
+}
+
+function isKnownLostEvidence(value) {
+  if (!value || typeof value !== "object" || value.lost !== true || hasDurableMediaId(value)) {
+    return false;
+  }
+  return Object.entries(value).some(([entryKey, entryValue]) =>
+    (entryKey.toLowerCase() === "uri" || entryKey.toLowerCase().endsWith("uri")) &&
+    typeof entryValue === "string" && entryValue.trim()
+  );
+}
+
+function countKnownLostAttachments(value, key = "") {
+  if (Array.isArray(value)) {
+    const collection = String(key || "").toLowerCase();
+    return value.reduce((count, entry) =>
+      count +
+      (collection === "photos" && isKnownLostEvidence(entry) ? 1 : 0) +
+      countKnownLostAttachments(entry, key), 0);
+  }
+  if (!value || typeof value !== "object") return 0;
+  return Object.entries(value).reduce(
+    (count, [childKey, childValue]) =>
+      count + countKnownLostAttachments(childValue, childKey),
+    0
+  );
+}
+
 function clearReportFields(project) {
   const result = { ...project };
   for (const key of [
@@ -60,9 +93,20 @@ function cloneProjectData(source, { copyProjectId, batchId, ownedMediaIds, sourc
   const owned = new Set([...ownedMediaIds].map(String));
   const copied = clearReportFields(JSON.parse(JSON.stringify(source || {})));
   const errors = [];
+  let omittedLostAttachments = 0;
 
   function visit(value, key, parent) {
-    if (Array.isArray(value)) return value.map((entry) => visit(entry, key, parent));
+    if (Array.isArray(value)) {
+      const collection = String(key || "").toLowerCase();
+      const entries = collection === "photos"
+        ? value.filter((entry) => {
+          const isLost = isKnownLostEvidence(entry);
+          if (isLost) omittedLostAttachments += 1;
+          return !isLost;
+        })
+        : value;
+      return entries.map((entry) => visit(entry, key, parent));
+    }
     if (!value || typeof value !== "object") {
       if (typeof value === "string" && isLocalUri(value) &&
           /(?:uri|url|audio|video|photo|description|media)/i.test(key || "")) {
@@ -71,10 +115,7 @@ function cloneProjectData(source, { copyProjectId, batchId, ownedMediaIds, sourc
       return value;
     }
     const output = {};
-    const hasDurableMediaId = Object.entries(value).some(([entryKey, entryValue]) =>
-      (entryKey.toLowerCase() === "remoteid" || entryKey.toLowerCase().endsWith("remoteid")) &&
-      entryValue != null && String(entryValue).trim()
-    );
+    const objectHasDurableMediaId = hasDurableMediaId(value);
     for (const [childKey, childValue] of Object.entries(value)) {
       const lower = childKey.toLowerCase();
       if (["report", "reporturl", "reportstatus", "reporterror", "reportapproval",
@@ -91,7 +132,7 @@ function cloneProjectData(source, { copyProjectId, batchId, ownedMediaIds, sourc
       if (lower === "uri" || lower.endsWith("uri") || lower === "url") {
         // Remote media IDs are the durable representation.  URLs are never
         // copied, except ordinary non-evidence metadata URLs.
-        if (hasDurableMediaId &&
+        if (objectHasDurableMediaId &&
             (lower === "uri" || lower.endsWith("uri") ||
              /(?:audio|video|photo|description|media)/i.test(lower))) {
           continue;
@@ -122,6 +163,12 @@ function cloneProjectData(source, { copyProjectId, batchId, ownedMediaIds, sourc
   result.replayBatchId = String(batchId);
   // A copy should not inherit the source's local-first sync timestamp.
   result.updatedAt = new Date().toISOString();
+  // Keep replay bookkeeping available to the worker without including it in
+  // the project JSON sent to the report generator.
+  Object.defineProperty(result, "__replayOmissions", {
+    value: { lostAttachments: omittedLostAttachments },
+    enumerable: false,
+  });
   return result;
 }
 
@@ -341,6 +388,7 @@ async function getReplayProject(pool, projectId, { mediaBaseUrl } = {}) {
   const replayResult = await pool.query(
     `SELECT i.batch_id, i.source_project_id, i.copy_project_id, i.state,
             i.progress, i.error, i.started_at, i.finished_at, i.copy_deleted_at,
+            i.omitted_lost_attachments,
             b.status AS batch_status,
             sp.data AS source_data,
             cp.data AS copy_data
@@ -388,6 +436,7 @@ async function getReplayProject(pool, projectId, { mediaBaseUrl } = {}) {
     startedAt: item.started_at,
     finishedAt: item.finished_at,
     batchStatus: item.batch_status,
+    omittedLostAttachments: Math.max(0, Number(item.omitted_lost_attachments) || 0),
     sourceProjectName: item.source_data?.name || null,
     copyProjectName: item.copy_data?.name || null,
   }));
@@ -396,6 +445,9 @@ async function getReplayProject(pool, projectId, { mediaBaseUrl } = {}) {
     ? String(projectId) === String(relation.copyProjectId) ? "replay-copy" : "source"
     : "source";
   const missingMediaIds = remoteIds.filter((id) => !mediaById.has(String(id)));
+  const omittedLostAttachments = relation
+    ? relation.omittedLostAttachments
+    : countKnownLostAttachments(row.data);
 
   return {
     projectId: String(row.id),
@@ -407,6 +459,9 @@ async function getReplayProject(pool, projectId, { mediaBaseUrl } = {}) {
     media,
     missingMediaIds,
     replay: relation,
+    replayOmissions: omittedLostAttachments > 0
+      ? { lostAttachments: omittedLostAttachments }
+      : null,
     replayHistory: replayItems,
   };
 }
@@ -535,7 +590,8 @@ async function getBatch(pool, id) {
   if (!batch.rows.length) return null;
   const items = await pool.query(
     `SELECT i.id, i.source_project_id, i.copy_project_id, i.state, i.progress,
-            i.error, i.started_at, i.finished_at, i.copy_deleted_at, t.tester_name,
+            i.error, i.started_at, i.finished_at, i.copy_deleted_at,
+            i.omitted_lost_attachments, t.tester_name,
             source_project.data->>'name' AS project_name
        FROM replay_batch_items i
        LEFT JOIN tester_tokens t ON t.token=i.tester_token
@@ -546,15 +602,21 @@ async function getBatch(pool, id) {
   );
   const mappedItems = items.rows.map((item) => ({
     ...item, tester: maskedTesterLabel(item), tester_token: undefined,
+    omittedLostAttachments: Math.max(0, Number(item.omitted_lost_attachments) || 0),
   }));
   const summary = mappedItems.reduce((acc, item) => {
     acc[item.state] = (acc[item.state] || 0) + 1;
     return acc;
   }, {});
+  const omittedLostAttachments = mappedItems.reduce(
+    (count, item) => count + item.omittedLostAttachments,
+    0
+  );
   return {
     ...batch.rows[0],
     total: mappedItems.length,
     summary,
+    omittedLostAttachments,
     counts: {
       created: mappedItems.filter((item) => Number(item.progress) >= 25).length,
        generated: mappedItems.filter(
@@ -564,6 +626,7 @@ async function getBatch(pool, id) {
       skipped: summary.skipped || 0,
       failed: summary.failed || 0,
       pending: (summary.pending || 0) + (summary.running || 0),
+      omittedLostAttachments,
     },
     items: mappedItems.map((item) => ({
       ...item,
@@ -581,6 +644,7 @@ module.exports = {
   strictGoogleDocUrl,
   scopeDigest,
   projectEvidenceSummary,
+  countKnownLostAttachments,
   normalizeSelectedProjectIds,
   cloneProjectData,
   discoverEligible,

@@ -5,6 +5,7 @@ const {
   cloneProjectData,
   normalizeSelectedProjectIds,
   getReplayProject,
+  getBatch,
   deleteReplayProject,
 } = require("../src/replay");
 const { processItem } = require("../src/replayWorker");
@@ -175,6 +176,7 @@ test("replay project inspection returns tenant-safe signed media without tester 
             error: null,
             started_at: null,
             finished_at: null,
+            omitted_lost_attachments: 2,
             batch_status: "queued",
             source_data: { name: "Original inspection" },
             copy_data: { name: "Copied inspection" },
@@ -205,6 +207,58 @@ test("replay project inspection returns tenant-safe signed media without tester 
   assert.equal(result.media[0].url.startsWith("https://api.example.test/api/media/photo-1?"), true);
   assert.equal(JSON.stringify(result).includes("secret-tenant-token"), false);
   assert.equal(result.replay.sourceProjectId, "source-1");
+  assert.equal(result.replay.omittedLostAttachments, 2);
+  assert.deepEqual(result.replayOmissions, { lostAttachments: 2 });
+});
+
+test("replay batch results aggregate omitted lost attachments", async () => {
+  const pool = {
+    async query(sql) {
+      if (sql.startsWith("SELECT * FROM replay_batches")) {
+        return { rows: [{ id: 7, status: "completed" }] };
+      }
+      if (sql.includes("FROM replay_batch_items i")) {
+        return {
+          rows: [
+            {
+              id: 1,
+              source_project_id: "source-1",
+              copy_project_id: "copy-1",
+              state: "succeeded",
+              progress: 100,
+              error: null,
+              finished_at: null,
+              copy_deleted_at: null,
+              omitted_lost_attachments: 2,
+              tester_name: "Inspector",
+              project_name: "Inspection",
+            },
+            {
+              id: 2,
+              source_project_id: "source-2",
+              copy_project_id: "copy-2",
+              state: "skipped",
+              progress: 0,
+              error: "media is not owned by tester",
+              finished_at: null,
+              copy_deleted_at: null,
+              omitted_lost_attachments: 0,
+              tester_name: "Inspector",
+              project_name: "Other inspection",
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+  };
+
+  const result = await getBatch(pool, 7);
+
+  assert.equal(result.omittedLostAttachments, 2);
+  assert.equal(result.counts.omittedLostAttachments, 2);
+  assert.equal(result.items[0].omittedLostAttachments, 2);
+  assert.equal(result.items[1].omittedLostAttachments, 0);
 });
 
 test("replay copy deletion removes only a terminal copy and retains audit history", async () => {
@@ -397,6 +451,42 @@ test("clone rejects missing and cross-tenant media instead of dropping evidence"
   });
 });
 
+test("clone omits only explicitly lost photos without durable media", () => {
+  const source = {
+    id: "source",
+    notes: [{
+      photos: [
+        { uri: "idb://lost-photo", lost: true, caption: "Unavailable original" },
+        { uri: "file:///durable-photo", remoteId: "media-1", caption: "Durable photo" },
+      ],
+    }],
+  };
+  const before = JSON.stringify(source);
+  const copy = cloneProjectData(source, {
+    copyProjectId: "copy",
+    sourceProjectId: "source",
+    batchId: 1,
+    ownedMediaIds: ["media-1"],
+  });
+
+  assert.equal(JSON.stringify(source), before);
+  assert.deepEqual(copy.notes[0].photos, [{
+    remoteId: "media-1",
+    caption: "Durable photo",
+  }]);
+  assert.deepEqual(copy.__replayOmissions, { lostAttachments: 1 });
+  assert.equal(JSON.stringify(copy).includes("__replayOmissions"), false);
+});
+
+test("clone still rejects a lost photo with an unowned durable media ID", () => {
+  assert.throws(() => cloneProjectData({
+    id: "source",
+    notes: [{ photos: [{ uri: "file:///lost", lost: true, remoteId: "foreign-media" }] }],
+  }, { copyProjectId: "copy", batchId: 1, ownedMediaIds: [] }), {
+    code: "REPLAY_UNREPRESENTABLE_EVIDENCE",
+  });
+});
+
 function fakePool(source, mediaIds = []) {
   const calls = [];
   return {
@@ -422,4 +512,70 @@ test("worker isolates a failed item and records a durable failure", async () => 
   assert.ok(finish);
   assert.equal(finish.params[1], "failed");
   assert.match(finish.params[3], /engine unavailable/);
+});
+
+test("worker processes durable evidence when a known-lost photo is present", async () => {
+  const pool = fakePool({
+    id: "source",
+    notes: [{
+      photos: [
+        { uri: "idb://lost-photo", lost: true, caption: "Unavailable original" },
+        { uri: "file:///durable-photo", remoteId: "media-1", caption: "Durable photo" },
+      ],
+    }],
+  }, ["media-1"]);
+  const item = {
+    id: 2, batch_id: 5, source_project_id: "source", copy_project_id: "copy",
+    report_attempt_id: "attempt", tester_token: "tenant-a",
+  };
+  let generatedFor = null;
+
+  await processItem(pool, item, async (request) => {
+    generatedFor = request;
+  });
+
+  assert.deepEqual(generatedFor, {
+    testerToken: "tenant-a",
+    projectId: "copy",
+    attemptId: "attempt",
+  });
+  const insert = pool.calls.find((call) => call.sql.startsWith("INSERT INTO projects"));
+  assert.ok(insert);
+  const copied = JSON.parse(insert.params[1]);
+  assert.deepEqual(copied.notes[0].photos, [{
+    remoteId: "media-1",
+    caption: "Durable photo",
+  }]);
+  const omissionUpdate = pool.calls.find((call) =>
+    call.sql.includes("omitted_lost_attachments")
+  );
+  assert.deepEqual(omissionUpdate.params, [2, 1]);
+  const finish = pool.calls.find((call) => call.sql.includes("SET state=$2"));
+  assert.equal(finish.params[1], "succeeded");
+});
+
+test("worker keeps mixed lost and unowned evidence as a skipped error", async () => {
+  const pool = fakePool({
+    id: "source",
+    notes: [{
+      photos: [
+        { uri: "idb://lost-photo", lost: true },
+        { uri: "file:///foreign-photo", lost: true, remoteId: "foreign-media" },
+      ],
+    }],
+  });
+  const item = {
+    id: 3, batch_id: 6, source_project_id: "source", copy_project_id: "copy",
+    report_attempt_id: "attempt", tester_token: "tenant-a",
+  };
+
+  await processItem(pool, item, async () => {});
+
+  const finish = pool.calls.find((call) => call.sql.includes("SET state=$2"));
+  assert.equal(finish.params[1], "skipped");
+  assert.match(finish.params[3], /not owned by tester/);
+  assert.equal(
+    pool.calls.some((call) => call.sql.includes("omitted_lost_attachments")),
+    false
+  );
 });

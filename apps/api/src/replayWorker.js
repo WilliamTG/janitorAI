@@ -120,8 +120,10 @@ async function processItem(pool, item, generateReport) {
       [item.copy_project_id, JSON.stringify(copied), item.tester_token]
     );
     await pool.query(
-      "UPDATE replay_batch_items SET progress=25, updated_at=now() WHERE id=$1",
-      [item.id]
+      `UPDATE replay_batch_items
+          SET omitted_lost_attachments=$2, progress=25, updated_at=now()
+        WHERE id=$1`,
+      [item.id, Number(copied.__replayOmissions?.lostAttachments) || 0]
     );
     const batch = await pool.query(
       "SELECT status FROM replay_batches WHERE id=$1",
