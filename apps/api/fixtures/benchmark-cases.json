@@ -1,0 +1,62 @@
+{
+  "_readme": [
+    "Fasit (reference data) for Labs benchmark scoring. Ground truth lives here in",
+    "git rather than in the database so every change to it is reviewable in a diff —",
+    "silently editing a fasit would invalidate every score recorded before the edit.",
+    "",
+    "Loaded into the benchmark_cases table on boot (apps/api/src/labs/cases.js).",
+    "The table is a read cache; this file is the source of truth.",
+    "",
+    "provisional=true means the fasit was derived from repo documentation rather",
+    "than transcribed from the practitioner's own report. Scores against a",
+    "provisional case are directional, not authoritative."
+  ],
+  "cases": [
+    {
+      "case_id": "midtgjerdinga",
+      "label": "Midtgjerdinga — eier-hypotese avkreftet av funn",
+      "project_id": null,
+      "provisional": true,
+      "source_note": "Bootstrapped from docs/valideringscaser.md case 02 (\"Midtgjerdinga-tvillingen\") and the 25 Aug 2026 entry in docs/pilotlogg-ocab.md. NOT transcribed from Sigurd's own report — replace with the real extraction and set provisional=false.",
+      "reference": {
+        "expected_source_category": "NEDBØR",
+        "expected_acute_or_gradual": "GRADVIS",
+        "root_cause_keywords": [
+          "grunnmursplast",
+          "kapillæroppsug",
+          "såle",
+          "nedbør"
+        ],
+        "root_cause_keywords_min": 2,
+        "excluded_causes": [
+          {
+            "category": "TRYKKSATT_RØR",
+            "reason": "Rørene til utekranen ble trykksatt og testet i åpen og lukket posisjon uten drypp, og bunnsvillen målte tørt. Avkreftende funn er harde bevis.",
+            "assertion_terms": [
+              "rørlekkasje",
+              "lekkasje fra rør",
+              "lekkasje fra røret",
+              "utekran"
+            ]
+          }
+        ],
+        "reported_hypothesis_terms": [
+          "eier",
+          "antar",
+          "rapportert",
+          "oppgir",
+          "mener"
+        ],
+        "accepted_byggforsk": ["711.401", "700.117"],
+        "empty_reference_acceptable": true,
+        "expected_is_habitable": true,
+        "key_evidence": [
+          "Grunnmursplast ubeskyttet på toppen — nedbør renner ned bak den",
+          "Trefiberplater mot stua måler fuktig kun i bunn",
+          "Flasset tapet nederst på veggen",
+          "Bunnsvill måler tørt (avkrefter rørlekkasje)"
+        ]
+      }
+    }
+  ]
+}
