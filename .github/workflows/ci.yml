@@ -33,6 +33,19 @@ jobs:
       - name: E2E — per-tester rate limiting
         working-directory: apps/api
         run: bash test/e2e-rate-limit.sh
+      - name: E2E — Labs (skjema, fasit-innlasting, admin-gate)
+        working-directory: apps/api
+        run: bash test/e2e-labs.sh
+      - name: Enhetstester (node:test)
+        working-directory: apps/api
+        run: node --test test/*.test.js
+      - name: Enhetstester (ai-engine, kun stdlib)
+        run: >-
+          python3 -m unittest
+          ai-engine/test_prompt_blocks.py
+          ai-engine/test_prompt_signals.py
+          ai-engine/test_idempotency.py
+          ai-engine/test_byggforsk_index.py
       - name: npm audit (fail på høy+)
         working-directory: apps/api
         run: npm audit --omit=dev --audit-level=high
