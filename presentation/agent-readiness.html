@@ -1,0 +1,1265 @@
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Feil vert, riktig arbeid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
+<style>
+  /* ── Merkevarepaletten er hentet fra apps/mobile/src/ui/theme.tsx ──
+     teal #23545C, kobber #9F5A2C, kjølig-nøytral skifer. Denne siden bruker
+     samme tokenstruktur som de øvrige sidene i presentation/. */
+  :root {
+    --paper: #FFFFFF;
+    --surface: #F1F3F3;
+    --sunk: #E7EBEB;
+    --ink: #1B262B;
+    --muted: #566670;
+    --faint: #7C8B94;
+    --border: #D6DDDE;
+    --accent: #23545C;
+    --accent-fill: #23545C;
+    --accent-pale: #E3EDEE;
+    --copper: #9F5A2C;
+    --copper-pale: #F6EBE2;
+    --danger: #A6453A;
+    --danger-pale: #F7E7E5;
+    --ok: #2E7D4F;
+    --ok-pale: #E4F0E9;
+    --shadow: 0 1px 2px rgba(27, 38, 43, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #171F23;
+      --surface: #11181B;
+      --sunk: #1D262B;
+      --ink: #E4EAEC;
+      --muted: #9AA8AE;
+      --faint: #7D8B92;
+      --border: #2B363B;
+      --accent: #8FC2CB;
+      --accent-fill: #23545C;
+      --accent-pale: #16292E;
+      --copper: #C98B5A;
+      --copper-pale: #2A1E14;
+      --danger: #D3766B;
+      --danger-pale: #2C1A18;
+      --ok: #5FA97D;
+      --ok-pale: #16241C;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #171F23;
+    --surface: #11181B;
+    --sunk: #1D262B;
+    --ink: #E4EAEC;
+    --muted: #9AA8AE;
+    --faint: #7D8B92;
+    --border: #2B363B;
+    --accent: #8FC2CB;
+    --accent-fill: #23545C;
+    --accent-pale: #16292E;
+    --copper: #C98B5A;
+    --copper-pale: #2A1E14;
+    --danger: #D3766B;
+    --danger-pale: #2C1A18;
+    --ok: #5FA97D;
+    --ok-pale: #16241C;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 44px 22px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 60px;
+  }
+
+  /* ── Topptekst ── */
+  header { display: flex; flex-direction: column; gap: 16px; }
+  .brand-row { display: flex; align-items: center; gap: 10px; }
+  .brand-sq { width: 20px; height: 20px; background: var(--accent-fill); flex: none; }
+  .brand-name { font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }
+  .eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.13em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  h1 {
+    margin: 0; font-size: clamp(28px, 4.4vw, 38px); font-weight: 700;
+    line-height: 1.15; letter-spacing: -0.02em; text-wrap: balance; max-width: 20ch;
+  }
+  .lede { margin: 0; max-width: 66ch; color: var(--muted); font-size: 16.5px; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+    font-size: 12px; color: var(--faint);
+    border-top: 1px solid var(--border); padding-top: 14px;
+  }
+  .meta-row b { color: var(--muted); font-weight: 600; }
+
+  /* ── Innholdsfortegnelse ── */
+  nav.toc {
+    background: var(--paper); border: 1px solid var(--border);
+    padding: 16px 18px; display: flex; flex-wrap: wrap; gap: 6px 8px;
+  }
+  nav.toc a {
+    font-size: 12.5px; color: var(--muted); text-decoration: none;
+    padding: 4px 10px; border: 1px solid var(--border); border-radius: 2px;
+    background: var(--surface); white-space: nowrap;
+  }
+  nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); border-color: var(--accent); }
+
+  /* ── Seksjoner ── */
+  section { display: flex; flex-direction: column; gap: 20px; scroll-margin-top: 20px; }
+  .sec-head { display: flex; flex-direction: column; gap: 7px; }
+  h2 {
+    margin: 0; font-size: 22px; font-weight: 700; line-height: 1.25;
+    letter-spacing: -0.01em; text-wrap: balance;
+  }
+  h3 {
+    margin: 0; font-size: 15.5px; font-weight: 700; line-height: 1.35;
+  }
+  .sec-sub { margin: 0; color: var(--muted); font-size: 14.5px; max-width: 68ch; }
+  p { margin: 0; max-width: 70ch; }
+  .body-text { color: var(--muted); font-size: 14.5px; }
+  .body-text strong { color: var(--ink); font-weight: 600; }
+  a { color: var(--accent); }
+
+  /* ── Kort ── */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(238px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--paper); border: 1px solid var(--border);
+    padding: 15px 16px 16px; display: flex; flex-direction: column; gap: 8px;
+    box-shadow: var(--shadow);
+  }
+  .card h3 { font-size: 14.5px; }
+  .card p { font-size: 13.5px; color: var(--muted); margin: 0; }
+  .card p strong { color: var(--ink); font-weight: 600; }
+  .card.crit { border-left: 3px solid var(--danger); }
+  .card.warn { border-left: 3px solid var(--copper); }
+  .card.good { border-left: 3px solid var(--ok); }
+  .card.info { border-left: 3px solid var(--accent-fill); }
+
+  .stat { font-size: 27px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .stat.c-accent { color: var(--accent); }
+  .stat.c-danger { color: var(--danger); }
+  .stat.c-copper { color: var(--copper); }
+  .stat.c-ok { color: var(--ok); }
+  .stat-label { font-size: 12px; color: var(--faint); }
+
+  /* ── Merker ── */
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+    padding: 3px 8px; border: 1px solid var(--border); color: var(--muted);
+    background: var(--surface); border-radius: 2px; white-space: nowrap;
+  }
+  .pill.krit { color: var(--danger); border-color: var(--danger); background: var(--danger-pale); }
+  .pill.hoy { color: var(--copper); border-color: var(--copper); background: var(--copper-pale); }
+  .pill.med { color: var(--accent); border-color: var(--accent); background: var(--accent-pale); }
+  .pill.nei { color: var(--faint); }
+  .pill.ok { color: var(--ok); border-color: var(--ok); background: var(--ok-pale); }
+  .pillrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+  /* ── Bevisblokk (rå HTTP / kode) ── */
+  .evidence {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12.5px; line-height: 1.65;
+    background: var(--sunk); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent-fill);
+    padding: 13px 15px; overflow-x: auto; white-space: pre;
+    color: var(--ink);
+  }
+  .evidence.bad { border-left-color: var(--danger); }
+  .evidence .c { color: var(--faint); }
+  .evidence .g { color: var(--ok); font-weight: 600; }
+  .evidence .r { color: var(--danger); font-weight: 600; }
+  code {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.885em; background: var(--sunk); padding: 1px 5px;
+    border: 1px solid var(--border); border-radius: 2px; white-space: nowrap;
+  }
+  .evidence code { background: none; border: none; padding: 0; }
+
+  /* ── Vert-mot-vert ── */
+  .versus { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .host {
+    background: var(--paper); border: 1px solid var(--border); padding: 16px 17px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .host.is-wrong { border-top: 3px solid var(--danger); }
+  .host.is-right { border-top: 3px solid var(--ok); }
+  .host-url {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px;
+    font-weight: 600; word-break: break-all;
+  }
+  .host-role { font-size: 12px; color: var(--faint); }
+  .checklist { display: flex; flex-direction: column; gap: 5px; }
+  .check {
+    display: flex; gap: 9px; align-items: baseline;
+    font-size: 13px; font-variant-numeric: tabular-nums;
+  }
+  .check .code {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-weight: 600; min-width: 40px; flex: none;
+  }
+  .check .code.ok { color: var(--ok); }
+  .check .code.bad { color: var(--danger); }
+  .check .what { color: var(--muted); }
+
+  /* ── Tabeller ── */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); background: var(--paper); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 560px; }
+  th, td { text-align: left; padding: 10px 13px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+    color: var(--faint); background: var(--sunk); white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td strong { font-weight: 600; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ── Signalrutenett ── */
+  .signals { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 12px; }
+  .signal {
+    background: var(--paper); border: 1px solid var(--border); padding: 13px 14px;
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .signal-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .signal h3 { font-size: 13.5px; }
+  .signal p { font-size: 12.5px; color: var(--muted); margin: 0; }
+  .signal.do { border-left: 3px solid var(--ok); }
+  .signal.no { border-left: 3px solid var(--border); background: var(--surface); }
+
+  /* ── Fase ── */
+  .phase {
+    background: var(--paper); border: 1px solid var(--border);
+    border-top: 3px solid var(--accent-fill);
+    padding: 17px 18px 18px; display: flex; flex-direction: column; gap: 13px;
+  }
+  .phase-head { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; }
+  .phase-num {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .phase h3 { font-size: 17px; }
+  .phase-gate {
+    font-size: 12.5px; color: var(--copper); background: var(--copper-pale);
+    border: 1px solid var(--copper); padding: 7px 11px;
+  }
+  .steps { display: flex; flex-direction: column; gap: 11px; }
+  .step {
+    display: flex; flex-direction: column; gap: 5px;
+    border-top: 1px dashed var(--border); padding-top: 11px;
+  }
+  .step:first-child { border-top: none; padding-top: 0; }
+  .step-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .step-id {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 11.5px; font-weight: 600; color: var(--accent);
+  }
+  .step-title { font-size: 14px; font-weight: 600; }
+  .step p { font-size: 13px; color: var(--muted); margin: 0; }
+  .step p strong { color: var(--ink); font-weight: 600; }
+
+  /* ── Utheving ── */
+  .callout {
+    display: flex; gap: 13px; background: var(--paper);
+    border: 1px solid var(--border); padding: 15px 17px;
+  }
+  .callout .bar { width: 3px; align-self: stretch; flex: none; background: var(--copper); }
+  .callout.crit .bar { background: var(--danger); }
+  .callout.ok .bar { background: var(--ok); }
+  .callout .cbody { display: flex; flex-direction: column; gap: 7px; }
+  .callout p { font-size: 14px; margin: 0; }
+  .callout strong { font-weight: 700; }
+
+  ul.plain { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; }
+  ul.plain li { font-size: 13.5px; color: var(--muted); padding-left: 15px; position: relative; }
+  ul.plain li::before {
+    content: ""; position: absolute; left: 0; top: 8px;
+    width: 5px; height: 5px; background: var(--accent);
+  }
+  ul.plain li b { color: var(--ink); font-weight: 600; }
+
+  footer {
+    border-top: 1px solid var(--border); padding-top: 18px;
+    font-size: 12.5px; color: var(--faint);
+    display: flex; flex-direction: column; gap: 7px;
+  }
+
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+  @media (max-width: 560px) {
+    .page { padding: 32px 16px 64px; gap: 46px; }
+    body { font-size: 14.5px; }
+  }
+</style>
+
+<div class="page">
+
+  <header>
+    <div class="brand-row">
+      <div class="brand-sq" aria-hidden="true"></div>
+      <span class="brand-name">DocrAI</span>
+    </div>
+    <span class="eyebrow">Gjennomgang · agent-lesbarhet, sikkerhet og produkt</span>
+    <h1>Feil vert, riktig arbeid</h1>
+    <p class="lede">
+      Skanneren ga docrai.io <strong>0 av 9</strong> på agent-lesbarhet og <strong>C / 62</strong> på
+      innhold. Men robots.txt, sitemap, sikkerhetsheadere, meta-beskrivelser, Open Graph og JSON-LD
+      finnes <strong>allerede ferdig skrevet</strong> i <code>apps/api/src</code>. De er usynlige fordi
+      merkevaredomenet peker på feil Render-tjeneste. Dette er ikke først og fremst en
+      innholdsoppgave — det er en <strong>rutingfeil</strong>, og under den ligger tre funn som er
+      alvorligere enn hele skannerapporten.
+    </p>
+    <div class="meta-row">
+      <span><b>Verifisert live</b> 30. august 2026</span>
+      <span><b>Grunnlag</b> sju kartlegginger av kodebasen, hver etterprøvd av to adversarielle lenser</span>
+      <span><b>Status</b> beslutningsunderlag — ingen kode er endret</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Innhold">
+    <a href="#rotarsak">Rotårsaken</a>
+    <a href="#allerede">Det som allerede finnes</a>
+    <a href="#alvorligst">De tre alvorligste funnene</a>
+    <a href="#signaler">De 9 signalene</a>
+    <a href="#dag0">Dag 0</a>
+    <a href="#faser">Fase 0–3</a>
+    <a href="#produkt">Selve løsningen</a>
+    <a href="#nei">Valgt bort</a>
+    <a href="#risiko">Risiko</a>
+    <a href="#maling">Måling</a>
+  </nav>
+
+  <!-- ══════════════ ROTÅRSAK ══════════════ -->
+  <section id="rotarsak">
+    <div class="sec-head">
+      <span class="eyebrow">Rotårsaken</span>
+      <h2>Domenet peker på en statisk Expo-eksport, ikke på Express-appen</h2>
+      <p class="sec-sub">
+        Alle ni nullpunktene og de fleste SEO-funnene har samme forklaring. To Render-tjenester
+        eksisterer; merkevaredomenet står på den som ikke har innholdet.
+      </p>
+    </div>
+
+    <div class="versus">
+      <div class="host is-wrong">
+        <div>
+          <div class="host-url">docrai.io</div>
+          <div class="host-role">Render <em>static site</em> — kun <code>apps/mobile/dist</code></div>
+        </div>
+        <div class="checklist">
+          <div class="check"><span class="code bad">404</span><span class="what">/robots.txt</span></div>
+          <div class="check"><span class="code bad">404</span><span class="what">/sitemap.xml</span></div>
+          <div class="check"><span class="code bad">404</span><span class="what">/om — og alle salgssidene</span></div>
+          <div class="check"><span class="code bad">—</span><span class="what">ingen X-Frame-Options</span></div>
+          <div class="check"><span class="code bad">—</span><span class="what">ingen Referrer-Policy</span></div>
+          <div class="check"><span class="code bad">—</span><span class="what">ingen HSTS</span></div>
+          <div class="check"><span class="code bad">txt</span><span class="what">404 er «Not Found» i ren tekst</span></div>
+        </div>
+      </div>
+      <div class="host is-right">
+        <div>
+          <div class="host-url">janitorai-backend.onrender.com</div>
+          <div class="host-role">Render <em>web service</em> — Express, har alt innholdet</div>
+        </div>
+        <div class="checklist">
+          <div class="check"><span class="code ok">200</span><span class="what">/robots.txt, med Sitemap-linje</span></div>
+          <div class="check"><span class="code ok">200</span><span class="what">/sitemap.xml</span></div>
+          <div class="check"><span class="code ok">200</span><span class="what">/om /demo /faq /personvern /vilkar /kontakt</span></div>
+          <div class="check"><span class="code ok">✓</span><span class="what">X-Frame-Options: SAMEORIGIN</span></div>
+          <div class="check"><span class="code ok">✓</span><span class="what">Referrer-Policy: strict-origin…</span></div>
+          <div class="check"><span class="code ok">✓</span><span class="what">X-Content-Type-Options: nosniff</span></div>
+          <div class="check"><span class="code ok">✓</span><span class="what">merkevare-404 (<code>404-page.html</code>)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="evidence bad"><span class="c"># Målt 30.08.2026 — samme sti, to verter</span>
+$ curl -s -o /dev/null -w '%{http_code}' https://docrai.io/om
+<span class="r">404</span>
+$ curl -s -o /dev/null -w '%{http_code}' https://janitorai-backend.onrender.com/om
+<span class="g">200</span>
+
+<span class="c"># Og roten på docrai.io er ikke en landingsside i det hele tatt:</span>
+&lt;html lang="en"&gt;&lt;head&gt;&lt;title data-rh="true"&gt;&lt;/title&gt;
+<span class="c"># 33 338 byte HTML · 199 byte synlig tekst (0,6 %) · null h1–h6</span>
+<span class="c"># Innholdet er tilgangskode-skjermen fra app/(tabs)/index.tsx</span></div>
+
+    <div class="callout crit">
+      <div class="bar" aria-hidden="true"></div>
+      <div class="cbody">
+        <p><strong>Merkevarens søketreff er i praksis en innloggingsboks for et internt verktøy.</strong></p>
+        <p class="body-text">
+          Expo Router sin <code>output: "static"</code> virker og forhåndsrendrer per rute — den
+          forhåndsrendrer bare feil flate. Samtidig svarer <code>robots.txt</code> på backend med
+          <code>Sitemap: https://janitorai-backend.onrender.com/sitemap.xml</code>, fordi
+          <code>PUBLIC_BASE_URL</code> aldri er satt. Merkevaredomenet er ikke kanonisk noe sted.
+        </p>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card info">
+        <div class="stat c-accent">2</div>
+        <div class="stat-label">Render-tjenester, én DNS-oppføring på feil sted</div>
+      </div>
+      <div class="card info">
+        <div class="stat c-accent">7</div>
+        <div class="stat-label">ferdige salgssider utilgjengelige på merkevaredomenet</div>
+      </div>
+      <div class="card warn">
+        <div class="stat c-copper">0,6 %</div>
+        <div class="stat-label">synlig tekst på forsiden — skanneren målte 1 %</div>
+      </div>
+      <div class="card crit">
+        <div class="stat c-danger">0</div>
+        <div class="stat-label">overskrifter (h1–h6) i det crawlerne faktisk får se</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ ALLEREDE BYGGET ══════════════ -->
+  <section id="allerede">
+    <div class="sec-head">
+      <span class="eyebrow">Reframing</span>
+      <h2>Skanneren målte skallet, ikke arbeidet</h2>
+      <p class="sec-sub">
+        «Title mangler», «meta description mangler», «ingen structured data», «ingen Open Graph»,
+        «lang=en» — alle fem gjelder Expo-skallet. Sidene Express serverer, har det motsatte.
+      </p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Skannerens funn</th>
+            <th scope="col">Faktisk tilstand i <code>apps/api/src</code></th>
+            <th scope="col">Gjenstår</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Title mangler</strong></td>
+            <td>Alle sju sidene har egen, beskrivende title på norsk</td>
+            <td>Ingenting</td>
+          </tr>
+          <tr>
+            <td><strong>Meta description mangler</strong></td>
+            <td>Alle sju har den, skrevet for målgruppen</td>
+            <td>To er for lange: <code>/om</code> 192 tegn, <code>/demo</code> 171</td>
+          </tr>
+          <tr>
+            <td><strong>Canonical mangler</strong></td>
+            <td>Finnes, og absolutiseres server-side i <code>absolutizeSeo()</code></td>
+            <td>Peker på onrender-verten til <code>PUBLIC_BASE_URL</code> settes</td>
+          </tr>
+          <tr>
+            <td><strong>Ingen Open Graph</strong></td>
+            <td>og:title, og:description, og:image, og:type, og:locale <code>nb_NO</code></td>
+            <td>Ingenting</td>
+          </tr>
+          <tr>
+            <td><strong>Ingen structured data</strong></td>
+            <td>JSON-LD på fem sider: SoftwareApplication, Organization, FAQPage, BreadcrumbList, ContactPage, Offer</td>
+            <td><code>/kundereisen</code> mangler JSON-LD helt</td>
+          </tr>
+          <tr>
+            <td><strong>Ingen overskrifter</strong></td>
+            <td><code>om-page.html</code> har h1 + fem h2</td>
+            <td><code>kundereisen.html</code> har 15 h4 og null h1–h3</td>
+          </tr>
+          <tr>
+            <td><strong>lang="en"</strong></td>
+            <td>Salgssidene er <code>lang="nb"</code>; <code>app.json</code> setter òg <code>web.lang: "nb"</code></td>
+            <td>Expo-eksporten respekterer den ikke — rettes i post-eksport-skriptet</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout ok">
+      <div class="bar" aria-hidden="true"></div>
+      <div class="cbody">
+        <p><strong>Konsekvens for prioritering:</strong> ikke skriv nytt innhold. Flytt domenet, sett
+        én miljøvariabel, og lag én rot-rute. Da lukkes fem av skannerens sju høyprioriterte funn
+        uten at én setning tekst skrives om.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ ALVORLIGST ══════════════ -->
+  <section id="alvorligst">
+    <div class="sec-head">
+      <span class="eyebrow">Viktigere enn skannerapporten</span>
+      <h2>Tre funn som ikke står i rapporten i det hele tatt</h2>
+      <p class="sec-sub">
+        Gjennomgangen av kodebasen fant tre ting som veier tyngre enn samtlige ni signaler. Alle tre
+        kan rettes uten å røre DNS.
+      </p>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="phase-num">Funn 1</span>
+        <h3>HTML-injeksjon via <code>Host</code>-headeren</h3>
+        <span class="pill krit">Kritisk</span>
+        <span class="pill">Innsats S</span>
+      </div>
+      <p class="body-text">
+        <code>publicBase(req)</code> i <code>index.js:153</code> bygger base-URL fra
+        <code>req.get("host")</code> når <code>PUBLIC_BASE_URL</code> mangler, og
+        <code>absolutizeSeo()</code> syr verdien <strong>rått</strong> inn i <code>content="…"</code>
+        og <code>href="…"</code>. Reprodusert lokalt av to uavhengige lenser:
+      </p>
+      <div class="evidence bad">$ curl -H 'Host: evil.example"&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;x y="' \
+       http://127.0.0.1:3999/om
+
+<span class="c"># Svaret inneholder:</span>
+&lt;link rel="canonical" href="http://evil.example"&gt;<span class="r">&lt;script&gt;alert(1)&lt;/script&gt;</span>&lt;x y="/om" /&gt;</div>
+      <p class="body-text">
+        Samme <code>Host</code> forgiftet <code>&lt;loc&gt;</code> i sitemapet og
+        <code>Sitemap:</code>-linja i robots.txt. Utnyttbarheten dempes i dag av at Render ruter på
+        Host — men den blir vesentlig verre i det salgssidene får delt CDN-caching, og verst i en
+        maskinlesbar fil som <code>llms.txt</code>, der hvem som helst kunne fått
+        <em>DocrAIs egne filer</em> til å utpeke et fremmed domene som kanonisk kilde.
+      </p>
+      <p class="body-text">
+        <strong>Fiks:</strong> én delt <code>apps/api/src/publicBase.js</code> med vertsallowliste som
+        returnerer en kanonisk streng fra oppslaget (aldri <code>req.get("host")</code> gjenbrukt
+        etter en sjekk), pluss escaping <em>ved hver sink</em> — attributt-escape i
+        <code>absolutizeSeo</code>, XML-escape i <code>&lt;loc&gt;</code>, strip av <code>\r\n</code> i
+        robots. Kodebasen har allerede riktig refleks: <code>BOOKING_URL</code> escapes på
+        <code>index.js:232</code>. Erstatter tre duplikater av samme uttrykk.
+      </p>
+      <p class="body-text">
+        <strong>Regresjonstest</strong> i ny <code>apps/api/test/e2e-headere.sh</code> — ikke i
+        <code>e2e-share.sh</code>, som krever ekte Postgres. Host-sjekken trenger ingen database.
+        Legg fila inn i <code>.github/workflows/ci.yml</code>, ellers kjøres den aldri igjen.
+      </p>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="phase-num">Funn 2</span>
+        <h3>Fem publiserte påstander koden motsier</h3>
+        <span class="pill krit">Kritisk</span>
+        <span class="pill">Innsats M · ingen kode</span>
+      </div>
+      <p class="body-text">
+        Dette er ikke SEO. Det er det en forsikringskjøper finner først — og DocrAI selger nettopp
+        etterprøvbarhet.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Sted</th>
+              <th scope="col">Står i dag</th>
+              <th scope="col">Koden sier</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="num"><code>personvern:94</code><br /><code>vilkar §6</code></td>
+              <td>«sletting i appen sletter også på serveren»</td>
+              <td><code>routes/projects.js</code> sletter <code>projects</code> + <code>media</code>, men lar <code>shares</code> og <code>report_generations</code> ligge — og rører <strong>aldri</strong> Google-dokumentet</td>
+            </tr>
+            <tr>
+              <td class="num"><code>personvern:93</code></td>
+              <td>«besøksstatistikk ryddes løpende»</td>
+              <td>Ingen slettejobb finnes for <code>sidevisninger</code> — tabellen vokser monotont</td>
+            </tr>
+            <tr>
+              <td class="num"><code>personvern:55</code></td>
+              <td>«vi lagrer aldri IP-adressen din»</td>
+              <td>Korrekt i dag, men <strong>blir usant i det salgstrafikken treffer vår egen Express</strong> ved omleggingen</td>
+            </tr>
+            <tr>
+              <td class="num"><code>personvern:78</code></td>
+              <td>feillogger inneholder «aldri befaringsinnhold»</td>
+              <td><code>error_logs.stack_trace</code> kan inneholde filnavn og filstier</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="body-text">
+        <strong>Den dyreste:</strong> <code>ai-engine/google_api.py:13</code> bygger Docs og Drive med
+        <strong>personlige</strong> bruker-OAuth-credentials og full <code>auth/drive</code>-scope.
+        <code>main.py:281</code> kopierer rapporten inn i den kontoen, bevisbilder fra folks hjem
+        lastes opp dit, og <code>main.py:402</code> deler dokumentet på e-post.
+        <code>drive.files().delete</code> finnes <strong>kun i feilbanen</strong>. Rapportkopien med
+        kundenavn, adresse og bevisbilde blir liggende for alltid.
+      </p>
+      <p class="body-text">
+        Rett teksten nå og bygg slettekaskaden etterpå (P2). Men <strong>ikke publiser
+        kontoadressen</strong> — GDPR art. 13 krever behandlingsansvarliges identitet, ikke
+        lagringskontoens e-post, og å navngi en konto med full Drive-tilgang til alle pilotrapporter
+        er å gi bort et phishing-mål. Underleverandørtabellen skal ha <strong>fem</strong> rader, ikke
+        én: Render, Cloudflare, Gemini API, <strong>Gemini Files API</strong> (video og foto lastes
+        opp dit — raden en forsikringskjøper spør om først) og Google Drive/Docs. Skriv «ikke signert»
+        der det stemmer.
+      </p>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="phase-num">Funn 3</span>
+        <h3>Tillitskjeden lever i klientdata og prosessminne</h3>
+        <span class="pill hoy">Høy</span>
+        <span class="pill">Forutsetning for pilot nr. 2</span>
+      </div>
+      <p class="body-text">
+        Godkjenningsporten er DocrAIs viktigste løfte. I dag er den svakere enn den ser ut:
+      </p>
+      <ul class="plain">
+        <li><b>Stempelet settes med enhetens klokke</b> i den klientstyrte JSONB-bloben — ikke som en serverhendelse.</li>
+        <li><b>Delingslenken serverer levende prosjektdata</b>, ikke et frosset bilde av det som faktisk ble godkjent.</li>
+        <li><b>Rapport-låsen er en <code>Map</code> i RAM</b> (<code>index.js:584</code>) og forsvinner ved hver deploy — dobbeltfakturering og foreldreløse Drive-dokumenter.</li>
+        <li><b>Felt-diffen, «pilotens viktigste kvalitetsdata», er aldri aggregert</b> til et tall.</li>
+        <li><b>Beviskjeden hviler på en Render-disk</b> som dokumentasjonen selv beskriver som valgfri. Uten disk forsvinner foto, lyd og video ved hver deploy — mens <code>media</code>-radene består.</li>
+      </ul>
+      <p class="body-text">
+        Ingen av disse krever nye fagfunksjoner. Alle fem herder noe som allerede er bygget — se
+        <a href="#produkt">Selve løsningen</a>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══════════════ SIGNALER ══════════════ -->
+  <section id="signaler">
+    <div class="sec-head">
+      <span class="eyebrow">De ni signalene</span>
+      <h2>Måltallet er 4 av 9 — som en beslutning, ikke en ambisjon</h2>
+      <p class="sec-sub">
+        Fem signaler velges bort med begrunnelse. Tre av dem ville annonsert inngangsdører til et
+        system med PIN-beskyttede skaderapporter og bilder av private hjem.
+      </p>
+    </div>
+
+    <div class="signals">
+      <div class="signal do">
+        <div class="signal-top"><h3>robots.txt</h3><span class="pill ok">Fiks</span></div>
+        <p>Finnes ferdig i <code>routes/publikum.js</code>, gjennomtenkt med Disallow på <code>/api/</code>, <code>/share/</code> og interne pitch-sider. Blir 200 idet domenet flyttes.</p>
+      </div>
+      <div class="signal do">
+        <div class="signal-top"><h3>XML-sitemap</h3><span class="pill ok">Fiks</span></div>
+        <p>Ruta finnes. Ett grep: én delt <code>OFFENTLIGE_STIER</code>-konstant med oppstartsvakt, så «hva er offentlig» ikke lever i tre lister som allerede har drevet fra hverandre.</p>
+      </div>
+      <div class="signal do">
+        <div class="signal-top"><h3>Content-Signals</h3><span class="pill ok">Fiks</span></div>
+        <p>Én linje: <code>search=yes, ai-input=yes, ai-train=yes</code>. Se begrunnelsen under — den gikk mot personvernlensen.</p>
+      </div>
+      <div class="signal do">
+        <div class="signal-top"><h3>Link-header (RFC 8288)</h3><span class="pill ok">Fiks</span></div>
+        <p>Én <code>res.append("Link", …)</code> med rel=canonical, kun på salgssidenes ruter — aldri globalt, som ville annonsert den på <code>/api/media</code>. Ærlig merket internt: en skanner-hake, ikke SEO-verdi.</p>
+      </div>
+      <div class="signal no">
+        <div class="signal-top"><h3>MCP Server Card</h3><span class="pill nei">Nei, permanent</span></div>
+        <p>Det finnes ingen MCP-server. Et kort uten server bak er en løgn — enhver agent som følger det får 401. Å bygge serveren er verre: hele tenant-isolasjonen hviler på at <code>req.testerToken</code> settes av <em>serveren</em>.</p>
+      </div>
+      <div class="signal no">
+        <div class="signal-top"><h3>API-katalog (RFC 9727)</h3><span class="pill nei">Nei, permanent</span></div>
+        <p>Det finnes ikke noe offentlig API. En katalog ville publisert en kuratert kartlegging av <code>/api/share</code>, <code>/api/media</code> og <code>/api/admin</code> — rekognoseringshjelp uten én mottaker. Negativ verdi, ikke null.</p>
+      </div>
+      <div class="signal no">
+        <div class="signal-top"><h3>OAuth-discovery (RFC 8414)</h3><span class="pill nei">Nei, permanent</span></div>
+        <p>Ingen autorisasjonsserver å beskrive. Fiktiv OAuth-oppdagelse er direkte utnyttbart til «logg inn med DocrAI»-phishing.</p>
+      </div>
+      <div class="signal no">
+        <div class="signal-top"><h3>Markdown-forhandling</h3><span class="pill nei">Forkastet</span></div>
+        <p>Ville publisert en <strong>tapsbelagt annenutgave av juridisk tekst</strong> på stabil URL — en personvernerklæring man må kunne bevise innholdet av. <code>/llms.txt</code> dekker behovet.</p>
+      </div>
+      <div class="signal no">
+        <div class="signal-top"><h3>Navngitte crawler-grupper</h3><span class="pill nei">Ute</span></div>
+        <p>Dagens <code>*</code>-gruppe gjelder allerede GPTBot, ClaudeBot og PerplexityBot. En navngitt gruppe <strong>arver ikke</strong> fra <code>*</code> — én glemt <code>Disallow: /share/</code> åpner de PIN-beskyttede stiene for akkurat den crawleren. Null gevinst, reell nedside.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <div class="bar" aria-hidden="true"></div>
+      <div class="cbody">
+        <p><strong>Beslutningen der to lenser var uenige: <code>ai-train=yes</code>.</strong></p>
+        <p class="body-text">
+          Personvernlensen argumenterte for <code>ai-train=no</code> fordi det er det ene signalet med
+          rettsvirkning — en maskinlesbar reservasjon av tekst- og datautvinningsretten. Juridisk
+          riktig, strategisk feil her. En reservasjon beskytter tekst du helst ikke vil ha inn i en
+          modell. DocrAIs problem er ikke innholdstyveri, det er <strong>ukjenthet</strong>.
+          Salgssidene <em>er</em> en annonse. At en modell vet «DocrAI = norsk skaderapport-AI,
+          takstpersonen godkjenner» er gratis distribusjon til takstpersonen som spør en chatbot om
+          norske verktøy. Der reservasjon faktisk betyr noe — SINTEF-materialet — publiseres uansett
+          ingenting. <em>Lovhenvisningen skal ikke stå i robots.txt; en påstand om norsk rett hører
+          ikke i en offentlig fil uten advokatsjekk.</em>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ DAG 0 ══════════════ -->
+  <section id="dag0">
+    <div class="sec-head">
+      <span class="eyebrow">Dag 0</span>
+      <h2>Åtte ting som kan gjøres i dag, uten å røre DNS</h2>
+      <p class="sec-sub">
+        Korteste vei til reell risikoreduksjon. Ingen av disse har avhengigheter.
+      </p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th scope="col">#</th><th scope="col">Tiltak</th><th scope="col">Innsats</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="num">1</td><td><code>publicBase</code> fail-closed + escaping ved sink; sett <code>PUBLIC_BASE_URL</code> til <strong>onrender-verten</strong> (ikke docrai.io ennå)</td><td class="num">S</td></tr>
+          <tr><td class="num">2</td><td><code>analysis is None</code>-vakt i <code>ai-engine/main.py</code> — pilotbrukeren ser denne feilen i dag</td><td class="num">XS</td></tr>
+          <tr><td class="num">3</td><td>Rett de fem publiserte usannhetene i <code>/personvern</code> og <code>/vilkar</code></td><td class="num">S</td></tr>
+          <tr><td class="num">4</td><td><code>X-Robots-Tag: noindex</code> som <em>header</em> på <code>/share/</code>, media og admin; <code>no-store</code> på delt rapport</td><td class="num">S</td></tr>
+          <tr><td class="num">5</td><td>Gate de interne presentasjonssidene og <code>/admin-dashboard</code> — <em>før</em> de flyttes til merkevaredomenet</td><td class="num">S</td></tr>
+          <tr><td class="num">6</td><td>Sett <code>MEDIA_URL_SECRET</code> i Render — uten den dør signaturene ved hver omstart</td><td class="num">XS</td></tr>
+          <tr><td class="num">7</td><td>To oppslag, ingen kode: <strong>er <code>/var/data</code>-disken montert?</strong> og <strong>hva løser <code>req.ip</code> til bak kanten?</strong></td><td class="num">XS</td></tr>
+          <tr><td class="num">8</td><td>Kjør valideringsbatteriet mot dagens prompt, og skriv ned definisjonen av en falsk positiv</td><td class="num">S</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout crit">
+      <div class="bar" aria-hidden="true"></div>
+      <div class="cbody">
+        <p><strong>Punkt 8 er det største hullet i hele gjennomgangen.</strong></p>
+        <p class="body-text">
+          <code>docs/valideringscaser.md</code> har 11 caser og en 50-poengs rubrikk.
+          <code>ai-engine/prompt.py</code> står på <code>PROMPT_VERSION = "2026-08-27.1"</code> — en
+          prompt som ble endret <em>etter</em> pilotfunnet der modellen adopterte eierens hypotese som
+          årsak, mens fasit fra åpnet vegg var kapillæroppsug. Ingenting tyder på at batteriet er
+          kjørt mot den nye prompten. Det er null kode, og det er den eneste måten å vite om funnet
+          faktisk er rettet.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ FASER ══════════════ -->
+  <section id="faser">
+    <div class="sec-head">
+      <span class="eyebrow">Rekkefølge</span>
+      <h2>Fase 0 til 3 — rekkefølgen er hele saken</h2>
+      <p class="sec-sub">
+        Tre avhengigheter styrer alt annet: <strong>ruting før signaler</strong>,
+        <strong>gating før eksponering</strong>, <strong>sannhet før synlighet</strong>.
+      </p>
+    </div>
+
+    <div class="callout crit">
+      <div class="bar" aria-hidden="true"></div>
+      <div class="cbody">
+        <p><strong>Setter du <code>PUBLIC_BASE_URL=https://docrai.io</code> før DNS er lagt om, bytter
+        du «feil kanonisk domene» mot «kanonisk domene som 404-er» — strengt verre.</strong> Da
+        avindekserer Google det lille som finnes. Alt i Fase 2 er verdiløst før Fase 0 er ferdig.</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="phase-num">Fase 0</span>
+        <h3>Rotårsak — domenet og rutingen</h3>
+        <span class="pill krit">Kritisk</span>
+      </div>
+      <div class="phase-gate">
+        <strong>Forkrav som må være grønne før cutover:</strong> <code>publicBase</code> fail-closed ·
+        interne flater gatet · spin-down fjernet og disken bekreftet montert · personvernteksten rettet ·
+        melding sendt til Ocab-testerne om at snarveier og tilgangskode må fornyes.
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-head"><span class="step-id">F0.1</span><span class="step-title">To-tjeneste-cutover, ikke én</span><span class="pill">Innsats M</span></div>
+          <p><strong>Apex + www → Express</strong> (salgssider, robots, sitemap, headere, merkevare-404).
+          <strong>Webappen → <code>app.docrai.io</code></strong> på dagens static site.</p>
+          <p>En naiv «pek DNS på backend» ville tatt webappen av lufta samtidig som den fikset
+          salgssidene: Express-tjenesten har <strong>ingen <code>apps/mobile/dist</code></strong> —
+          Render bygger den med <code>npm install</code> og rot <code>apps/api</code>. Verifisert:
+          <code>GET /</code> på backend gir merkevare-404, ikke appen.</p>
+          <p><strong>Erkjent kostnad:</strong> <code>app.docrai.io</code> er ny origin, så
+          tester-tokenet i <code>localStorage</code> forsvinner og koden må tastes inn på nytt. Med
+          <code>/app</code>-prefiks hadde tokenet overlevd, men prisen var full re-eksport,
+          byggomlegging og et nedetidsvindu. Ved dagens skala er det feil bytte.</p>
+        </div>
+        <div class="step">
+          <div class="step-head"><span class="step-id">F0.2</span><span class="step-title">Flipp <code>PUBLIC_BASE_URL</code> i selve cutover-vinduet</span><span class="pill">Innsats S</span></div>
+          <p>Leses tre steder i dag — <code>publicBase()</code>, sitemap-ruta og
+          <code>robotsHandler</code> — som alle erstattes av den delte modulen. Ingen skråstrek til
+          slutt. Variabelen mangler i både <code>DEPLOYMENT.md</code> og <code>RENDER_SETUP.md</code>.</p>
+        </div>
+        <div class="step">
+          <div class="step-head"><span class="step-id">F0.3</span><span class="step-title">Gi Express en rot-rute</span><span class="pill">Innsats S</span></div>
+          <p>Det finnes <strong>ingen <code>app.get("/")</code></strong> i dag. Serveres ikke
+          salgssiden på <code>/</code>, bytter omleggingen bare én 404-side mot en annen. Samme fil som
+          <code>/om</code>, ingen duplikat — en kopiert <code>forside-page.html</code> ville garantert
+          drifte fra originalen.</p>
+        </div>
+        <div class="step">
+          <div class="step-head"><span class="step-id">F0.4</span><span class="step-title">Herd static-siten og rett byggkommandoen</span><span class="pill">Innsats M</span></div>
+          <p>Render Headers-regler gir appflaten <code>nosniff</code>,
+          <code>X-Frame-Options</code>, <code>Referrer-Policy</code> og
+          <code>X-Robots-Tag: noindex</code>. Rewrite-regel for dyplenker — de fikses <em>ikke</em> av
+          DNS i to-tjeneste-modellen.</p>
+          <p><strong>Og rett <code>CLAUDE.md</code>:</strong> den dokumenterte byggkommandoen er dobbelt
+          feil. <code>API_BASE_URL=''</code> er en verifisert no-op (tom streng avvises i
+          <code>config/api.ts</code> → hardkodet onrender-fallback), og <code>npx expo export</code>
+          hopper over <code>scripts/post-web-export.js</code>, altså favicon og title. Neste økt følger
+          instruksen og reproduserer feilen.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="phase-num">Fase 1</span>
+        <h3>Trygghet</h3>
+        <span class="pill hoy">Høy</span>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-head"><span class="step-title">HSTS i trapp — og et bevisst nei til preload</span></div>
+          <p>Trapp opp <code>max-age</code>. <strong>Ikke preload:</strong> irreversibelt i praksis, og
+          det binder ethvert framtidig <code>ocab.docrai.io</code> eller
+          <code>status.docrai.io</code> — for gevinsten av én ukryptert forespørsel ved aller første
+          besøk. Selskapsnavnet er ikke engang vedtatt. <code>includeSubDomains</code> utsettes til
+          subdomeneplanen er kjent.</p>
+        </div>
+        <div class="step">
+          <div class="step-head"><span class="step-title">CSP er nærmere enn kommentaren i koden tror</span></div>
+          <p>Koden begrunner fraværet med inline-script. Målt: <code>404-page.html</code> har
+          <strong>null</strong> skript, seks salgssider har <strong>én</strong> inline-linje hver (samme
+          beacon-kall), og bare <code>admin-dashboard.html</code> med 13 <code>on*=</code>-handlere er
+          en ekte blokker. Flytt tre snutter ut, så får åtte av ti sider
+          <code>script-src 'self'</code>.</p>
+        </div>
+        <div class="step">
+          <div class="step-head"><span class="step-title"><code>/.well-known/security.txt</code> — og en 401 som skal være 404</span></div>
+          <p>I dag svarer <code>/.well-known/security.txt</code> <strong>401</strong> fra
+          token-vakten, ikke 404, fordi HTML-fallbacken bare slipper gjennom
+          <code>Accept: text/html</code>. <code>Expires</code> er påkrevd i RFC 9116 og skal genereres
+          dynamisk — en utløpt security.txt er verre enn ingen.</p>
+        </div>
+        <div class="step">
+          <div class="step-head"><span class="step-title">Den ekte kostnadsrisikoen er ikke Gemini</span></div>
+          <p>En faktakorreksjon: <code>/demo</code> kaller aldri Gemini — <code>demoHandler</code>
+          treffer bare Geonorge, MET og Kartverket. Risikoen ved agent-trafikk er å bli
+          <strong>utestengt fra offentlige datakilder</strong> via de to åpne proxyene
+          <code>/api/flis</code> og <code>/api/demo/underlag</code>. Det er et omdømmetap mot
+          etatene, ikke en regning.</p>
+        </div>
+        <div class="step">
+          <div class="step-head"><span class="step-title">Prompt injection: merk proveniens, ikke rens teksten</span></div>
+          <p>Skrevet vedtak: <strong>aldri</strong> regex- eller nøkkelordfiltrering på
+          transkripsjonen. Det virker ikke, gir falsk trygghet, og ville stille redigert en
+          takstpersons bevismateriale — som undergraver hele løftet om en etterprøvbar rapport.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head">
+        <span class="phase-num">Fase 2</span>
+        <h3>Funnbarhet</h3>
+        <span class="pill med">Medium</span>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-head"><span class="step-title"><code>/llms.txt</code> med en «korrekt gjengivelse»-blokk</span></div>
+          <p>Kjernen er ikke lenkelista, det er hva en modell <em>ikke</em> skal påstå: at AI-en
+          godkjenner rapporten, at DocrAI er en estimatmotor, eller et kundetall — DocrAI har ingen
+          offentlige kundetall, logoer, anmeldelser eller casestudier, og en modell som oppgir dem har
+          hallusinert. To bevisste utelatelser: ingen e-postadresse (en maskinlesbar fil er ren
+          scraping-invitasjon), og ingen linje om at <code>/share/</code> inneholder PIN-beskyttede
+          kundedata — den etiketten er gratis rekognosering uten å beskytte noe.</p>
+        </div>
+        <div class="step">
+          <div class="step-head"><span class="step-title">To ekte teksthull — og en levende måle-bug</span></div>
+          <p><code>kundereisen.html</code> har 15 <code>h4</code> og null h1–h3: ett h1, fasene som
+          h2, resten som h3 — en flat heving av alle 15 gir samme problem i ny drakt. Kort
+          <code>/om</code> og <code>/demo</code> ned under 155 tegn.</p>
+          <p><strong>Måle-bug:</strong> <code>kontakt-page.html</code> sender allerede en beacon med
+          <code>sti: '/kontakt'</code>, men <code>TELLBARE_STIER</code> mangler både
+          <code>/kontakt</code> og <code>/kundereisen</code> — serveren kaster den stille med 204.
+          Klientkoden finnes, serveren dropper den.</p>
+        </div>
+        <div class="step">
+          <div class="step-head"><span class="step-title">Én fagside, betinget — ikke fem</span></div>
+          <p>Den reelle go-to-market-muligheten: DocrAI sitter på egenprodusert fagtekst om
+          vannskadeårsaker som ingen konkurrent har publisert offentlig. Men test billig først med tre
+          FAQ-oppføringer før du bygger dyrt med fem sider — og publiser aldri uten navngitt
+          fagkontroll. Kjøperen er sertifisert fagperson, og en LLM sprer en feil fagpåstand videre.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ PRODUKT ══════════════ -->
+  <section id="produkt">
+    <div class="sec-head">
+      <span class="eyebrow">Fase 3</span>
+      <h2>Selve løsningen — ti tiltak som herder det som alt er bygget</h2>
+      <p class="sec-sub">
+        Ingen av disse er nye fagfunksjoner. Nei-lista holder: ikke tegneverktøy, ikke
+        forsikringsskinne, ikke estimatmotor.
+      </p>
+    </div>
+
+    <div class="cards">
+      <div class="card crit">
+        <div class="pillrow"><span class="step-id">P1</span><span class="pill krit">Gjør i dag</span></div>
+        <h3>Vakt mot tom analyse</h3>
+        <p>Én sjekk i <code>ai-engine/main.py</code> før dokumentkopien lages. I dag får pilotbrukeren
+        en uforståelig <code>AttributeError</code> — <em>etter</em> at kjøringen er betalt.</p>
+      </div>
+      <div class="card crit">
+        <div class="pillrow"><span class="step-id">P5</span><span class="pill krit">Kritisk</span></div>
+        <h3>Godkjenning som serverhendelse</h3>
+        <p>Append-only <code>report_approvals</code> med <strong>serverens</strong> klokke. Delingen
+        bygges fra den raden, ikke fra levende <code>projects.data</code> — så mottakeren ser det som
+        faktisk ble godkjent. Lukker det største hullet mellom «vi har godkjenningsport» og «rapporten
+        holder».</p>
+      </div>
+      <div class="card crit">
+        <div class="pillrow"><span class="step-id">P3</span><span class="pill hoy">Høy</span></div>
+        <h3>Rapport-låsen i Postgres</h3>
+        <p>Erstatt <code>Map</code>-en i prosessminnet med en <code>status='running'</code>-rad og en
+        unik partiell indeks. Lukker dobbeltfakturering og foreldreløse Drive-dokumenter ved deploy.</p>
+      </div>
+      <div class="card warn">
+        <div class="pillrow"><span class="step-id">P2</span><span class="pill hoy">Høy</span></div>
+        <h3>Slettekaskaden</h3>
+        <p><code>shares</code> og <code>report_generations</code> med i DELETE-transaksjonen, pluss et
+        slette-endepunkt på AI-motoren. Gjør den rettede personvernteksten til den sterkere
+        formuleringen. Bruk papirkurv, ikke hard delete — malen og fagmappa ligger i samme Drive.</p>
+      </div>
+      <div class="card warn">
+        <div class="pillrow"><span class="step-id">P6</span><span class="pill hoy">Høy</span></div>
+        <h3>Bevislageret må være holdbart</h3>
+        <p>Sentinel-fil som avslører at disken ikke er montert, <code>mediaMissing</code>-teller for
+        rader uten fil, og et videotak basert på målinger — 500 MB per video mot en anbefalt disk på
+        1 GB går ikke opp.</p>
+      </div>
+      <div class="card warn">
+        <div class="pillrow"><span class="step-id">P9</span><span class="pill hoy">Høy · XS</span></div>
+        <h3>Stille overdeling i delt rapport</h3>
+        <p><code>share.js:78</code> setter <code>text = note.transcription || note.text</code>. Har
+        takstpersonen skrevet om et notat for å luke ut noe, sendes råtranskripsjonen
+        <strong>likevel</strong> til forsikringsselskapet — med tredjeparts tale fra huseier og andre
+        til stede.</p>
+      </div>
+      <div class="card info">
+        <div class="pillrow"><span class="step-id">P8</span><span class="pill med">Medium</span></div>
+        <h3>Token-rotasjon, ikke skjemamigrering</h3>
+        <p>Et lekket tester-token kan i dag ikke roteres. Åtte UPDATE-er i én transaksjon løser det.
+        <code>tester_id</code>-migreringen (L) utsettes til pilotforetak nummer to. Tabellista må
+        <em>avledes</em> fra kolonner som heter <code>tester_token</code> — en glemt tabell etterlater
+        data uten vei inn.</p>
+      </div>
+      <div class="card info">
+        <div class="pillrow"><span class="step-id">P10</span><span class="pill hoy">Høy</span></div>
+        <h3>Kvalitetsmåling — det billige nå</h3>
+        <p>Logg <code>prompt_version</code> med hver kjøring og tell hvor ofte sitatporten forkaster en
+        Byggforsk-referanse. Forkastes 80 %, er «Byggforsk-henvisninger» i salgspitchen en påstand uten
+        dekning — <em>samme feilklasse</em> som de fem usannhetene, bare flyttet til produktet. Utsett
+        dashbordet: n≈5.</p>
+      </div>
+    </div>
+
+    <div class="callout crit">
+      <div class="bar" aria-hidden="true"></div>
+      <div class="cbody">
+        <p><strong>To pilotfunn som ennå ikke har et tiltak.</strong></p>
+        <p class="body-text">
+          <strong>Usynkroniserte bilder:</strong> serveren <em>vet</em> allerede at bilder mangler —
+          <code>enrichedPhotos</code>-løkka dropper ikke-eide eller ikke-synkede id-er
+          <strong>stille</strong>, og rapporten genereres uten dem. En preflight i
+          <code>/report/google-doc</code> som gir 409 med antallet <em>før</em> motorkallet betaler seg
+          i første sak. <br />
+          <strong>Gemini-fakturering:</strong> den ene verifiserte produksjonsnedetiden i pilotloggen
+          var en tømt dagskvote på fri-nivå — transkripsjon <em>og</em> bildebeskrivelse nede for alle
+          testere. Et kostnadstak ville ikke hindret den. Det er det billigste tiltaket i hele
+          gjennomgangen og det eneste utløst av en faktisk hendelse.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ VALGT BORT ══════════════ -->
+  <section id="nei">
+    <div class="sec-head">
+      <span class="eyebrow">Disiplin</span>
+      <h2>Vurdert og valgt bort — med gjenåpningskriterium</h2>
+      <p class="sec-sub">
+        Et nei uten betingelse blir tatt opp igjen om tre måneder av noen som ikke husker hvorfor.
+      </p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th scope="col">Forslag</th><th scope="col">Hvorfor ute</th><th scope="col">Gjenåpnes når</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>RSS/Atom-feed</strong></td>
+            <td>En feed med fem statiske oppføringer som aldri endres er et <em>aktivt negativt</em> signal — den sier «dette nettstedet ble forlatt»</td>
+            <td>Fagbiblioteket har levert tre måneder på rad</td>
+          </tr>
+          <tr>
+            <td><strong>hreflang</strong></td>
+            <td>Krever to språkversjoner som peker gjensidig. Alle offentlige flater er bokmål; pitch-decket er noindex. Kjøperen er norsk takstperson</td>
+            <td>Det finnes en faktisk engelsk salgsside — da på begge sider samtidig</td>
+          </tr>
+          <tr>
+            <td><strong><code>lastmod</code> i sitemap</strong></td>
+            <td>Sju URL-er gir ikke noe crawl-budsjett-problem. <code>mtime</code> på Render = deploy-tid, altså «alle sider endret i dag» ved hver deploy. En løgnaktig lastmod er verre enn ingen</td>
+            <td>Sitemapet passerer ~50 URL-er</td>
+          </tr>
+          <tr>
+            <td><strong>HSTS preload</strong></td>
+            <td>Irreversibelt i praksis; binder alle framtidige subdomener. Gevinsten er én forespørsel ved første besøk</td>
+            <td>Aldri, uten eierbeslutning etter at navn og subdomeneplan er endelige</td>
+          </tr>
+          <tr>
+            <td><strong>Heve globalt rate-tak til 1200</strong></td>
+            <td><em>Den eneste rene sikkerhetssvekkelsen i materialet.</em> Firedobler gjettebudsjettet mot admin-hemmeligheten og tester-tokens</td>
+            <td>Aldri — erstattet av eksakt allowlist-skip</td>
+          </tr>
+          <tr>
+            <td><strong>Retry på rapportgenerering</strong></td>
+            <td>Operasjonen er fakturert og ikke-idempotent. En retry lager et nytt dokument og en ny regning</td>
+            <td>Aldri</td>
+          </tr>
+          <tr>
+            <td><strong>Egen <code>/ai-policy</code>-side</strong></td>
+            <td>Ville vært den åttende offentlige siden for et produkt med null pilotbrukere. Substansen legges der leserne alt er: to seksjoner i <code>/personvern</code>, tre Q&amp;A i <code>/faq</code>, og <code>llms.txt</code></td>
+            <td>Aldri som egen side</td>
+          </tr>
+          <tr>
+            <td><strong>Eksport-ZIP av egen sak</strong></td>
+            <td>Ny forsyningskjede, og en nedlastings-GET kan ikke sette token-header — så tokenet havner i <code>?token=</code>, nøyaktig den resten dere har besluttet å fjerne</td>
+            <td>Et pilotforetak ber om det — da med kortlevd signert URL</td>
+          </tr>
+          <tr>
+            <td><strong><code>Disallow: /app</code></strong></td>
+            <td><code>Disallow</code> og <code>noindex</code> <strong>opphever hverandre</strong>: en disallowed sti hentes ikke, så crawleren ser aldri noindex-taggen</td>
+            <td>Aldri i denne kombinasjonen</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="body-text">
+      <strong>Én korreksjon den andre veien.</strong> Mistanken om at <code>/debug</code> lekker
+      API-base-URL og tokenstatus er <em>feil</em>: skjermen er gatet på <code>__DEV__</code>, som er
+      usann i en <code>expo export</code>, og kortslutter før noe konfig rendres. Det er et støyfunn,
+      ikke et sikkerhetsfunn — og skal ikke inn i sikkerhetsrevisjonen. Å behandle det som et funn er
+      nøyaktig den falske positiven playbooken ber dere definere på forhånd.
+    </p>
+  </section>
+
+  <!-- ══════════════ RISIKO ══════════════ -->
+  <section id="risiko">
+    <div class="sec-head">
+      <span class="eyebrow">Risikoregister</span>
+      <h2>Hva som kan gå galt under omleggingen</h2>
+      <p class="sec-sub">DNS ligger hos one.com, ikke Cloudflare — det er ingen instant purge.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th scope="col">Risiko</th><th scope="col">Forebygging</th><th scope="col">Rullback</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>TLS-sertifikatfeil</strong> i vinduet mellom DNS-flytting og utstedelse</td>
+            <td>Flytt <code>www</code> alene først og verifiser; flytt apex først når www er grønn. Sertifikatfeil er verre for en besøkende enn 404</td>
+            <td>A-record tilbake; med TTL 300 s er domenet tilbake på under 10 min</td>
+          </tr>
+          <tr>
+            <td><strong>Dødt domene i timevis</strong> fordi TTL ikke ble senket først</td>
+            <td>TTL til 300 s minst 24 timer før cutover</td>
+            <td>Ingen rask vei — derfor er dette forebygging, ikke rullback</td>
+          </tr>
+          <tr>
+            <td><strong>Render nekter samme domene på to tjenester</strong></td>
+            <td>Nedetiden starter når domenet fjernes fra static-siten, ikke ved DNS-endringen. Planlegg vinduet derfra, med begge dashbord åpne</td>
+            <td>Legg domenet tilbake på static-siten</td>
+          </tr>
+          <tr>
+            <td><strong>Pilottester mister inngangen</strong> — bokmerker og PWA-snarveier slutter å virke</td>
+            <td>Melding til Ocab før cutover. <em>Sjekk først at testeren ikke har usynket befaringsmateriale i nettleseren</em> — det er den eneste reelle datatapsrisikoen i Fase 0</td>
+            <td>Tokenet tastes inn på nytt; serverdata er urørt</td>
+          </tr>
+          <tr>
+            <td><strong>Aktive delingslenker brytes.</strong> Appen har alt sendt ut <code>onrender.com/share/…</code>-lenker</td>
+            <td>Den verten <strong>må forbli aktiv og aldri 301-es</strong> — ellers rydder noen bort «det gamle domenet» og bryter en aktiv beviskjede hos et forsikringsselskap</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><strong><code>req.ip</code> kollapser til edge-IP</strong> → alle deler én rate-limit-bøtte</td>
+            <td>Mål empirisk før noen ny limiter monteres; juster <code>trust proxy</code> til faktisk hoppantall</td>
+            <td>Sett <code>trust proxy</code> tilbake</td>
+          </tr>
+          <tr>
+            <td><strong>Utestet backup-restore</strong></td>
+            <td>Kjør én restore-øvelse — én ettermiddag — før Fase 3 starter. Dette er en større datatapsrisiko enn nesten alt annet på lista</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════ MÅLING ══════════════ -->
+  <section id="maling">
+    <div class="sec-head">
+      <span class="eyebrow">Måling</span>
+      <h2>Hvordan vi vet at det virket — og hva en falsk positiv er</h2>
+      <p class="sec-sub">Definert før lansering, slik playbooken krever.</p>
+    </div>
+
+    <div class="evidence"><span class="c"># Fase 0 måles med curl, ikke med skanner</span>
+curl -s -o /dev/null -w '%{http_code}' https://docrai.io/om          <span class="c">→</span> <span class="g">200</span>
+curl -s https://docrai.io/robots.txt | tail -1                       <span class="c">→</span> <span class="g">Sitemap: https://docrai.io/sitemap.xml</span>
+curl -sI https://docrai.io/ | grep -i x-frame-options                <span class="c">→</span> <span class="g">SAMEORIGIN</span>
+curl -s https://docrai.io/ | grep -c '&lt;h1'                           <span class="c">→</span> <span class="g">≥ 1</span>
+curl -sI https://app.docrai.io/ | grep -i 'nosniff\|x-robots-tag'    <span class="c">→</span> <span class="g">begge</span>
+<span class="c"># p95 på /om etter 20 min stillhet</span>                                    <span class="c">→</span> <span class="g">&lt; 1,5 s</span></div>
+
+    <div class="cards">
+      <div class="card crit">
+        <h3>Falsk positiv, Fase 0</h3>
+        <p>At skanneren gir grønt mens <code>app.docrai.io</code> er nede eller dyplenker 404-er.
+        <strong>Mål begge verter, alltid.</strong></p>
+      </div>
+      <div class="card crit">
+        <h3>Falsk positiv, Fase 1</h3>
+        <p>At env-variabelen regnes som fiksen. Fiksen er allowlist <strong>og</strong> escaping. Og
+        at <code>noindex</code> behandles som tilgangskontroll — det er PIN og view-token som verner
+        delte rapporter.</p>
+      </div>
+      <div class="card crit">
+        <h3>Falsk positiv, Fase 2</h3>
+        <p>«Agenttreff dobles på 30 dager» uten at nye rader i <code>pilot_interesse</code> eller
+        besøk på <code>/kontakt</code> endrer seg. <strong>En stigende GPTBot-kurve er ikke et
+        resultat.</strong> Å bli lest av en crawler er ikke å bli anbefalt til en takstperson.</p>
+      </div>
+      <div class="card crit">
+        <h3>Falsk positiv, Fase 3</h3>
+        <p>En diffbasert «94 % treffprosent» i en pitch. Diffen måler hva takstpersonen
+        <strong>rettet</strong>, ikke hva som var <strong>riktig</strong>. Og en rettelsesrate som
+        stiger mens kontrolltiden faller er ikke en bedre modell — det er
+        <strong>rubber-stamping</strong>. Rapporter alltid begge sammen.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <div class="bar" aria-hidden="true"></div>
+      <div class="cbody">
+        <p><strong>Den eneste målingen som teller i Fase 2: sitatpanelet.</strong></p>
+        <p class="body-text">
+          Ti kjøpsspørsmål × fire modeller, månedlig, med tre kolonner: <em>nevnt</em> /
+          <em>sitert med lenke</em> / <em>korrekt gjengitt</em>. Baseline kjøres <strong>før</strong>
+          llms.txt. Feil gjengivelse er verre enn ingen nevnelse: sier en modell at AI-en godkjenner
+          rapporten, eller oppgir et kundetall, har «korrekt gjengivelse»-blokken feilet — det er en
+          rød måler, ikke en nøytral. Og <code>agenttreff</code> bygger på user-agent, som er trivielt
+          å forfalske: en indikator, aldri et regnskap i en investorpitch.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ SLUTTORD ══════════════ -->
+  <section id="sluttord">
+    <div class="sec-head">
+      <span class="eyebrow">Sluttord</span>
+      <h2>Hva som ikke er verdt å gjøre</h2>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <h3>Ikke jag 9 av 9</h3>
+        <p>Skanneren måler API-oppdagbarhet; DocrAI selger taushetsplikt. En dokumentert
+        <strong>4 av 9 med begrunnelse</strong> er et sterkere svar i en anbudssamtale enn 9 av 9 der
+        tre av signalene annonserer inngangsdører til PIN-beskyttede skaderapporter.</p>
+      </div>
+      <div class="card">
+        <h3>Ikke bygg for et publikum som ikke finnes</h3>
+        <p>Markedet er 1 500–2 000 norske takstpersoner som nås 1:1. Markdown-forhandling, RSS,
+        hreflang og navngitte crawler-grupper løser problemer ingen har målt, for et publikum ingen
+        har talt.</p>
+      </div>
+      <div class="card">
+        <h3>Ikke bygg robusthet uten last</h3>
+        <p>Playbookens kjente feilmodus i ny forkledning — farligere enn den vanlige fordi den alltid
+        er forsvarlig i abstrakt form. Hvert enkeltargument holder; summen gjør det ikke. Neste
+        flaskehals er ikke kode, det er pilotrekruttering.</p>
+      </div>
+      <div class="card">
+        <h3>Ikke rør invariantene og domenet samtidig</h3>
+        <p>Tenant-isolasjonen, godkjenningsporten og de signerte medie-URL-ene overlevde denne
+        gjennomgangen <strong>uten et eneste brudd</strong>. Det som kan ødelegge dem er ikke angrep,
+        men å gjøre to store ting i samme vindu og ikke vite hva som brakk.</p>
+      </div>
+    </div>
+
+    <div class="callout ok">
+      <div class="bar" aria-hidden="true"></div>
+      <div class="cbody">
+        <p><strong>Regelen som bør inn i <code>CLAUDE.md</code>: ingen setning publiseres før den kan
+        belegges.</strong></p>
+        <p class="body-text">
+          Halvparten av det som gikk galt i dette materialet er at én sann setning skulle erstattes av
+          en annen som ikke var det: «databehandler» uten avtale, «sletting fjerner alt» uten
+          slettekaskade, «vi trener ikke på kundedata» uten å ha sjekket faktureringsnivå.
+        </p>
+        <p class="body-text">
+          <strong>Og målt i timer per krone:</strong> de tre billigste tiltakene i hele planen — tre
+          linjer i <code>main.py</code>, fem rettede setninger i <code>/personvern</code> og
+          <code>/vilkar</code>, og én <code>publicBase</code>-funksjon — lukker henholdsvis en
+          feilmelding en pilotbruker ser i dag, fem publiserte usannheter en forsikringskjøper vil
+          finne, og den eneste verifiserte, aktivt utnyttbare defekten i systemet. Gjør dem i dag, før
+          DNS røres.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      <strong>Metode.</strong> Sju parallelle kartlegginger av kodebasen (plattform, agentsignaler,
+      statisk HTML, sikkerhet, personvern, funnbarhet, produkt), hver etterprøvd av to adversarielle
+      lenser — én sikkerhets- og personvernrevisor, én teknisk lead med nei-lista. Deretter syntese og
+      en fullstendighetskritikk som rettet fem faktafeil og tre motsigelser i planen. Alle HTTP-koder,
+      filreferanser og linjenumre er verifisert mot kjørende tjeneste eller kode 30. august 2026.
+    </p>
+    <p>
+      <strong>Verifiser selv før du handler:</strong> om <code>/var/data</code>-disken er montert,
+      hva <code>req.ip</code> løser til bak kanten, og hva static-tjenestens byggkommando og publish
+      directory faktisk er i Render — ingen av delene finnes i repoet i dag.
+    </p>
+  </footer>
+
+</div>

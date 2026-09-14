@@ -2,9 +2,9 @@
 // All queries are strictly scoped to req.testerToken so testers are isolated.
 
 const express = require("express");
-const fs = require("fs");
 const { getPool, requireDb } = require("../db");
 const { reconcileAfterUpsert } = require("../mediaCleanup");
+const { strictGoogleDocUrl } = require("../replay");
 
 const router = express.Router();
 
@@ -27,7 +27,20 @@ router.get("/", async (req, res) => {
 
     const [projectsResult, deletedResult] = await Promise.all([
       pool.query(
-        "SELECT data, updated_at FROM projects WHERE tester_token = $1 ORDER BY updated_at DESC",
+        `SELECT p.data, p.updated_at,
+                rg.doc_id AS successful_doc_id,
+                rg.created_at AS successful_document_created_at
+           FROM projects p
+           LEFT JOIN LATERAL (
+             SELECT doc_id, created_at
+               FROM report_generations
+              WHERE tester_token = p.tester_token AND project_id = p.id
+                AND status = 'success' AND doc_id IS NOT NULL
+              ORDER BY created_at DESC
+              LIMIT 1
+           ) rg ON TRUE
+          WHERE p.tester_token = $1
+          ORDER BY p.updated_at DESC`,
         [token]
       ),
       pool.query(
@@ -38,7 +51,7 @@ router.get("/", async (req, res) => {
 
     res.json({
       projects: projectsResult.rows.map((row) => ({
-        ...row.data,
+        ...withDocumentTag(row.data, row),
         updatedAt: toIsoOrNow(row.data.updatedAt || row.updated_at),
       })),
       deleted: deletedResult.rows.map((row) => ({
@@ -57,13 +70,24 @@ router.get("/:id", async (req, res) => {
   try {
     const pool = getPool();
     const result = await pool.query(
-      "SELECT data FROM projects WHERE id = $1 AND tester_token = $2",
+      `SELECT p.data, p.updated_at, rg.doc_id AS successful_doc_id,
+              rg.created_at AS successful_document_created_at
+         FROM projects p
+         LEFT JOIN LATERAL (
+           SELECT doc_id, created_at
+             FROM report_generations
+            WHERE tester_token = p.tester_token AND project_id = p.id
+              AND status = 'success' AND doc_id IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT 1
+         ) rg ON TRUE
+        WHERE p.id = $1 AND p.tester_token = $2`,
       [String(req.params.id), req.testerToken]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Not found" });
     }
-    res.json({ project: result.rows[0].data });
+    res.json({ project: withDocumentTag(result.rows[0].data, result.rows[0]) });
   } catch (err) {
     console.error("GET /api/projects/:id error:", sanitizeError(err));
     res.status(500).json({ error: "Server error" });
@@ -138,32 +162,28 @@ router.put("/:id", async (req, res) => {
 // ── Delete project (tombstoned, scoped) ──────────────────────────────────────
 // Én transaksjon rundt de tre skrivingene: et krasj midt i sekvensen kunne
 // ellers gi sletting UTEN tombstone — og prosjektet gjenoppstår fra en annen
-// enhets kopi ved neste synk. Fil-sletting skjer etter COMMIT (kan ikke rulles
-// tilbake); en krasj der etterlater kun filer som katalogskannen i
-// mediaCleanup rydder senere.
+// enhets kopi ved neste synk. Medier markeres som urefererte i samme transaksjon
+// og slettes først etter cleanup-fristen, med en ny referansesjekk.
 router.delete("/:id", async (req, res) => {
   const id = String(req.params.id);
   const token = req.testerToken;
   const pool = getPool();
 
-  let mediaRows = [];
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
-    // Collect media paths before deleting rows (scoped to this tester).
-    const media = await client.query(
-      "SELECT file_path FROM media WHERE project_id = $1 AND tester_token = $2",
-      [id, token]
-    );
-    mediaRows = media.rows;
 
     await client.query(
       "DELETE FROM projects WHERE id = $1 AND tester_token = $2",
       [id, token]
     );
+    // Never unlink here: a local-first test copy may reference these IDs before
+    // its debounced PUT reaches the server. The grace-period sweep rechecks all
+    // live project JSON atomically before it removes a row and file.
     await client.query(
-      "DELETE FROM media WHERE project_id = $1 AND tester_token = $2",
+      `UPDATE media
+       SET unreferenced_at = now()
+       WHERE project_id = $1 AND tester_token = $2`,
       [id, token]
     );
     // S14: behold eierens tester_token ved konflikt — en annen tester skal
@@ -191,12 +211,24 @@ router.delete("/:id", async (req, res) => {
     client.release();
   }
 
-  for (const row of mediaRows) {
-    fs.unlink(row.file_path, () => {});
-  }
-
   reconcileAfterUpsert();
   res.json({ deleted: true });
 });
 
 module.exports = router;
+
+// Response-only derived values.  They intentionally overwrite any client
+// supplied flags: a stale/mobile-crafted hasSuccessfulDocument must never
+// become an authorization or UI truth.
+function withDocumentTag(data, row) {
+  const project = { ...(data || {}) };
+  const ledgerDocument = Boolean(row.successful_doc_id);
+  const legacyDocument = strictGoogleDocUrl(project.reportUrl);
+  project.hasSuccessfulDocument = ledgerDocument || legacyDocument;
+  project.successfulDocumentCreatedAt = ledgerDocument
+    ? new Date(row.successful_document_created_at).toISOString()
+    : legacyDocument
+      ? (row.updated_at ? new Date(row.updated_at).toISOString() : null)
+      : null;
+  return project;
+}

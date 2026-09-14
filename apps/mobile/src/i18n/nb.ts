@@ -92,6 +92,14 @@ export const nb = {
     nameFromAddressHint: 'Tips: bruk adressen som prosjektnavn',
     useAddress: 'Bruk adressen',
     projectMenu: 'Prosjektmeny',
+    testProject: 'Testprosjekt',
+    createTestCopy: 'Lag testkopi',
+    preparingTestCopy: 'Forbereder testkopi …',
+    testCopyCreated: 'Testprosjektet ble opprettet',
+    testCopyNeedsUpload:
+      'Testkopien kan lages når alle bilder og opptak er lastet opp. Prøv igjen når synkroniseringen er ferdig.',
+    testCopyFailed: 'Kunne ikke lage testkopien',
+    documentCreated: 'Dokument opprettet',
     timeToApproved: (duration: string) => `Befaring → godkjent rapport: ${duration}`,
   },
 
@@ -132,7 +140,11 @@ export const nb = {
 
   report: {
     generate: 'Lag rapport',
+    generateTest: 'Lag testrapport',
+    regenerateTest: 'Kjør rapport på nytt',
     generating: 'Lager rapport …',
+    testProjectHint:
+      'Dette prosjektet kan brukes om igjen. Hver kjøring lager et nytt Google-dokument, mens tidligere forsøk beholdes i rapporthistorikken.',
     generatingSteps: [
       'Samler befaringens dokumentasjon',
       'Vurderer observasjoner',

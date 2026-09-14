@@ -5,13 +5,19 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const fs = require("fs");
+const { randomUUID } = require("crypto");
 const requireTesterToken = require("./middleware/requireTesterToken");
 const { generalLimiter, heavyLimiter } = require("./middleware/rateLimiters");
 const requestLogger = require("./middleware/requestLogger");
 
 const { getPool, isDbEnabled } = require("./db");
-const { signedMediaUrl } = require("./mediaSign");
 const { extractGeminiUsage, recordCost } = require("./costTracking");
+const {
+  generateReport: generateReportService,
+  inFlight: reportGenerationsInFlight,
+  REPORT_INFLIGHT_TTL_MS,
+} = require("./reportService");
+const { startReplayWorker } = require("./replayWorker");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -205,6 +211,7 @@ app.get("/underlag-demo", (req, res) => sendPresentationPage(req, res, "underlag
 app.get("/totalbilde", (req, res) => sendPresentationPage(req, res, "totalbilde.html"));
 app.get("/ui-total", (req, res) => sendPresentationPage(req, res, "ui-total.html"));
 app.get("/fargealternativer", (req, res) => sendPresentationPage(req, res, "fargealternativer.html"));
+app.get("/agent-readiness", (req, res) => sendPresentationPage(req, res, "agent-readiness.html"));
 
 // ---------- SHARE PAGE (public HTML shell; data endpoints gate on PIN) ------
 // Registered before the static/SPA fallback so /share/:id is never swallowed
@@ -569,256 +576,39 @@ app.post("/describe-image", heavyLimiter, upload.single("file"), async (req, res
   }
 });
 
-// ---------- GOOGLE DOC REPORT (AI ENGINE PROXY) ----------
-// Rapportgenerering er dyr (Gemini-fakturert) og IKKE idempotent: en retry
-// lager nytt dokument og ny regning. Derfor (a) én kjøring om gangen per
-// prosjekt/tester, (b) proxy-timeout som rommer motorens verstefall på lange
-// befaringsvideoer (tidligere 2 min mot motorens 10+ — retry-fella), og
-// (c) en server-side hovedbok (report_generations) så doc_id aldri kun
-// finnes i klientens hender.
-const REPORT_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
-const REPORT_INFLIGHT_TTL_MS = 15 * 60 * 1000;
-// Signerte medie-URL-er til motoren må overleve hele kjøringen: med standard-
-// TTL (15 min) kunne foto utløpe midt i en lang analyse og droppes stille.
-const REPORT_MEDIA_URL_TTL_MS = 60 * 60 * 1000;
-const reportGenerationsInFlight = new Map(); // key -> startedAt (epoch ms)
-
-function recordReportGeneration({ testerToken, projectId, docId, status }) {
-  if (!isDbEnabled()) return;
-  getPool()
-    .query(
-      `INSERT INTO report_generations (tester_token, project_id, doc_id, status)
-       VALUES ($1, $2, $3, $4)`,
-      [testerToken || null, projectId || null, docId || null, status]
-    )
-    .catch((err) =>
-      console.error("report_generations insert error:", sanitizeError(err))
-    );
-}
+const REPORT_ATTEMPT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 app.post("/report/google-doc", heavyLimiter, async (req, res) => {
-  const aiEngineUrl = process.env.AI_ENGINE_URL;
-  if (!aiEngineUrl) {
-    return res.status(503).json({ error: "AI engine not configured" });
-  }
-
-  const { report_meta, video_filename, project, project_id } = req.body;
-  const projectId = project_id ? String(project_id) : null;
-  // Nøkkelen navnromsdeles på tester-token: project_id er klientoppgitt og
-  // eierskapsuverifisert, så uten navnrom kunne tester B blokkere tester A
-  // sin generering (409-DoS) ved å sende A sin prosjekt-id.
-  const inflightKey = `${req.testerToken}:${projectId || ""}`;
-
-  const existing = reportGenerationsInFlight.get(inflightKey);
-  if (existing && Date.now() - existing.startedAt < REPORT_INFLIGHT_TTL_MS) {
-    return res.status(409).json({
-      error: "Report generation already in progress for this project",
-      code: "REPORT_IN_PROGRESS",
-    });
-  }
-  // Egen entry-referanse (ikke bare timestamp): etter en TTL-overtakelse skal
-  // den GAMLE kjøringens finally ikke slette den NYE kjøringens vakt.
-  const inflightEntry = { startedAt: Date.now() };
-  reportGenerationsInFlight.set(inflightKey, inflightEntry);
-  let engineCallStarted = false;
-
+  // HTTP and replay share this tenant-authoritative service, including the
+  // in-flight guard, ledger lifecycle, and media ownership checks.
+  const body = req.body || {};
   try {
-    // Use the token already validated and set by the requireTesterToken middleware.
-    // Reading the raw header again would miss Authorization: Bearer tokens.
-    const token = req.testerToken;
-
-    // Video is optional. When supplied, verify that it belongs to this tester
-    // before allowing the AI engine to fetch it.
-    if (video_filename && video_filename !== "demo" && isDbEnabled()) {
-      const pool = getPool();
-      const ownsVideo = await pool.query(
-        "SELECT 1 FROM media WHERE id = $1 AND tester_token = $2",
-        [String(video_filename), token]
-      );
-      if (ownsVideo.rows.length === 0) {
-        return res.status(404).json({ status: "error", message: "Video not found for this tester." });
-      }
-    }
-
-    // When supplied, build a short-lived URL the AI engine can use to download
-    // the video directly from this API server's media storage. A report may
-    // instead be generated from notes, transcriptions, photos, and metadata.
-    const apiBaseUrl =
-      process.env.API_BASE_URL ||
-      `${req.protocol}://${req.get("host")}`;
-    const videoUrl =
-      video_filename && video_filename !== "demo"
-        ? signedMediaUrl(apiBaseUrl, video_filename, REPORT_MEDIA_URL_TTL_MS)
-        : null;
-
-    // Resolve photo URIs to absolute URLs and strip empty fields so the AI
-    // engine receives a clean, self-contained context object.
-    // A1: romnavnet følger notatet — rommet er konteksten som skiller
-    // «fukt ved sluk på badet» fra «fukt i boden», og styrer hvilket
-    // Byggforsk-delsett som er relevant.
-    const roomsById = new Map(
-      (Array.isArray(project?.rooms) ? project.rooms : [])
-        .filter((r) => r && r.id && r.name)
-        .map((r) => [String(r.id), String(r.name)])
-    );
-
-    // S3/S10: bare foto denne testeren faktisk eier skal signeres og sendes til
-    // AI-motoren. Videoen eierskapssjekkes over; her verifiseres alle foto-
-    // remoteId-er i én spørring, og ikke-eide utelates (kan ellers omgå tenant-
-    // skopingen fordi signert media-GET slår opp på id alene).
-    const requestedPhotoIds = [
-      ...new Set(
-        (Array.isArray(project?.notes) ? project.notes : [])
-          .flatMap((n) => (Array.isArray(n.photos) ? n.photos : []))
-          .map((p) => (p && p.remoteId ? String(p.remoteId) : null))
-          .filter(Boolean)
-      ),
-    ];
-    let ownedPhotoIds = new Set();
-    if (isDbEnabled() && requestedPhotoIds.length > 0) {
-      const owned = await getPool().query(
-        "SELECT id FROM media WHERE id = ANY($1) AND tester_token = $2",
-        [requestedPhotoIds, token]
-      );
-      ownedPhotoIds = new Set(owned.rows.map((r) => String(r.id)));
-    }
-
-    const enrichedNotes = (Array.isArray(project?.notes) ? project.notes : [])
-      .map((note) => {
-        const enrichedPhotos = (Array.isArray(note.photos) ? note.photos : [])
-          .filter((p) => p && (p.uri || p.remoteId))
-          .map((p) => {
-            // Signer bare eide foto; lokale uri-er (ikke synket ennå) sendes som
-            // de er; ikke-eide remoteId-er droppes.
-            let uri;
-            if (p.remoteId) {
-              if (!ownedPhotoIds.has(String(p.remoteId))) return null;
-              uri = signedMediaUrl(apiBaseUrl, p.remoteId, REPORT_MEDIA_URL_TTL_MS);
-            } else {
-              uri = String(p.uri);
-            }
-            return {
-              uri,
-              ...(p.caption ? { caption: p.caption } : {}),
-            };
-          })
-          .filter(Boolean);
-
-        const enriched = {};
-        if (note.text) enriched.text = note.text;
-        if (note.transcription) enriched.transcription = note.transcription;
-        if (note.roomId && roomsById.has(String(note.roomId))) {
-          enriched.room = roomsById.get(String(note.roomId));
-        }
-        if (enrichedPhotos.length > 0) enriched.photos = enrichedPhotos;
-        return enriched;
-      })
-      .filter((n) => Object.keys(n).length > 0);
-
-    const projectContext = {};
-    if (project?.name) projectContext.name = project.name;
-    if (project?.inspectionDate) projectContext.inspectionDate = project.inspectionDate;
-    if (project?.inspector) projectContext.inspector = project.inspector;
-    if (project?.projectDescriptionText) projectContext.projectDescriptionText = project.projectDescriptionText;
-    if (project?.projectDescriptionTranscription) projectContext.projectDescriptionTranscription = project.projectDescriptionTranscription;
-    if (enrichedNotes.length > 0) projectContext.notes = enrichedNotes;
-
-    // Use the dedicated service-to-service secret for the AI engine call.
-    // This is separate from the user's tester token (which is validated against
-    // the DB) — the AI engine authenticates against its own TESTER_TOKEN env var,
-    // so the backend needs AI_ENGINE_TOKEN set to that same value.
-    const aiToken = process.env.AI_ENGINE_TOKEN || "";
-    const startedAt = Date.now();
-    engineCallStarted = true;
-    const response = await fetchWithTimeout(
-      `${aiEngineUrl}/api/report`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tester-token": aiToken,
-          ...(req.requestId ? { "X-Request-Id": req.requestId } : {}),
-        },
-        body: JSON.stringify({
-          ...(videoUrl ? { video_url: videoUrl } : {}),
-          report_meta: report_meta || {},
-          project: projectContext,
-          tester_email: req.testerEmail || "",
-        }),
-      },
-      REPORT_PROXY_TIMEOUT_MS
-    );
-
-    const data = await response.json();
-    if (!response.ok) {
-      console.error("AI engine /api/report error:", { status: response.status });
-      return res.status(502).json({ error: "AI engine error" });
-    }
-
-    // COGS: AI-motoren returnerer token_usage fra Gemini-analysen (den store
-    // kostnadsdriveren) — også ved pipelinefeil ETTER analysen, som ellers var
-    // fakturert men usynlig i kostnadsmålingen. Fire-and-forget.
-    const failed = data && data.status === "error";
-    const tu = data && data.token_usage;
-    if (tu) {
-      recordCost({
-        testerToken: req.testerToken,
-        operation: failed ? "report_failed" : "report",
-        model: tu.model || "gemini-2.5-flash",
-        usage: {
-          input: tu.input_tokens || 0,
-          output: tu.output_tokens || 0,
-          total: tu.total_tokens || (tu.input_tokens || 0) + (tu.output_tokens || 0),
-        },
-        durationMs: Date.now() - startedAt,
-      }).catch(() => {});
-    }
-
-    if (failed) {
-      // Motoren svarer 200 med {status:'error'} — uten denne loggen passerte
-      // pipelinefeil backend helt sporløst (kun klientens logError så dem).
-      console.error("AI engine reported pipeline error:", {
-        requestId: req.requestId || null,
-        projectId,
-        message: data.message ? String(data.message).slice(0, 300) : null,
-        orphanedDocId: data.doc_id || null,
-      });
-      recordReportGeneration({
-        testerToken: req.testerToken,
-        projectId,
-        docId: data.doc_id || null,
-        status: "error",
-      });
-    } else {
-      const docMatch = String(data.url || "").match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
-      recordReportGeneration({
-        testerToken: req.testerToken,
-        projectId,
-        docId: docMatch ? docMatch[1] : null,
-        status: "success",
-      });
-    }
-
-    res.json(data);
+    const result = await generateReportService({
+      testerToken: req.testerToken,
+      projectId: body.project_id ? String(body.project_id) : null,
+      attemptId: REPORT_ATTEMPT_ID_RE.test(body.report_attempt_id || "")
+        ? body.report_attempt_id : randomUUID(),
+      isTestProjectHint: body.is_test_project === true,
+      reportMeta: body.report_meta || {},
+      videoFilename: body.video_filename || null,
+      projectOverride: body.project,
+      apiBaseUrl: process.env.API_BASE_URL || `${req.protocol}://${req.get("host")}`,
+      requestId: req.requestId || null,
+    });
+    return res.json(result);
   } catch (err) {
-    console.error("Backend /report/google-doc error:", sanitizeError(err));
-    // Hovedbok også ved timeout/nettverksfeil ETTER at motorkallet startet:
-    // motoren kan ha fullført (og fakturert) selv om svaret gikk tapt —
-    // raden gjør forsøket avstembart mot Drive-mappen.
-    if (engineCallStarted) {
-      recordReportGeneration({
-        testerToken: req.testerToken,
-        projectId,
-        docId: null,
-        status: "error",
-      });
+    if (err && ["TEST_PROJECT_NOT_SYNCED", "REPORT_ATTEMPT_EXISTS", "REPORT_IN_PROGRESS"].includes(err.code)) {
+      return res.status(409).json({ error: err.message, code: err.code });
     }
-    res.status(500).json({ error: "Server error" });
-  } finally {
-    if (reportGenerationsInFlight.get(inflightKey) === inflightEntry) {
-      reportGenerationsInFlight.delete(inflightKey);
-    }
+    if (err && err.code === "PROJECT_NOT_FOUND") return res.status(404).json({ error: err.message });
+    if (err && err.code === "MEDIA_NOT_OWNED") return res.status(404).json({ status: "error", message: err.message });
+    if (err && err.code === "AI_ENGINE_ERROR") return res.status(502).json({ error: "AI engine error" });
+    if (err && err.code === "AI_ENGINE_NOT_CONFIGURED") return res.status(503).json({ error: err.message });
+    if (err && err.code === "PERSISTENCE_NOT_CONFIGURED") return res.status(503).json({ error: err.message });
+    console.error("Backend /report/google-doc service error:", sanitizeError(err));
+    return res.status(500).json({ error: "Server error" });
   }
+
 });
 
 // ---------- REPORT STATUS (hovedbok-lesing) ----------
@@ -831,23 +621,40 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
 // én instans (in-flight-vakten har samme forutsetning).
 app.get("/report/status/:projectId", async (req, res) => {
   const projectId = String(req.params.projectId);
+  const attemptId =
+    typeof req.query.attempt_id === "string" && req.query.attempt_id
+      ? req.query.attempt_id
+      : null;
   const entry = reportGenerationsInFlight.get(`${req.testerToken}:${projectId}`);
   const inFlight = Boolean(
-    entry && Date.now() - entry.startedAt < REPORT_INFLIGHT_TTL_MS
+    entry &&
+      (!attemptId || entry.attemptId === attemptId) &&
+      Date.now() - entry.startedAt < REPORT_INFLIGHT_TTL_MS
   );
 
   if (!isDbEnabled()) return res.json({ inFlight, latest: null });
   try {
-    const row = await getPool().query(
-      `SELECT doc_id, status, created_at FROM report_generations
-       WHERE tester_token = $1 AND project_id = $2
-       ORDER BY created_at DESC LIMIT 1`,
-      [req.testerToken, projectId]
-    );
+    const row = attemptId
+      ? await getPool().query(
+          `SELECT attempt_id, doc_id, status, is_test_project, created_at
+           FROM report_generations
+           WHERE tester_token = $1 AND project_id = $2 AND attempt_id = $3
+           LIMIT 1`,
+          [req.testerToken, projectId, attemptId]
+        )
+      : await getPool().query(
+          `SELECT attempt_id, doc_id, status, is_test_project, created_at
+           FROM report_generations
+           WHERE tester_token = $1 AND project_id = $2
+           ORDER BY created_at DESC LIMIT 1`,
+          [req.testerToken, projectId]
+        );
     const latest = row.rows[0]
       ? {
           status: row.rows[0].status,
           createdAt: row.rows[0].created_at,
+          isTestProject: Boolean(row.rows[0].is_test_project),
+          attemptId: row.rows[0].attempt_id || null,
           url: row.rows[0].doc_id
             ? `https://docs.google.com/document/d/${row.rows[0].doc_id}/edit`
             : null,
@@ -975,13 +782,37 @@ const { startMediaSweepScheduler } = require("./mediaCleanup");
 startMediaSweepScheduler();
 
 // ---------- START SERVER ----------
-app.listen(PORT, () => {
+let stopReplayWorker = () => {};
+const httpServer = app.listen(PORT, () => {
   console.log(`Backend listening on port ${PORT}`);
   // Opprett skjemaet ved oppstart (idempotent) i stedet for kun lazy via
   // requireDb, så alle tabeller — inkl. cost_events — finnes umiddelbart.
   if (isDbEnabled()) {
     require("./db")
       .initDb()
+      .then(() => {
+        stopReplayWorker = startReplayWorker({
+          pool: getPool(),
+          generateReport: ({ testerToken, projectId, attemptId }) =>
+            generateReportService({
+              testerToken,
+              projectId,
+              attemptId,
+              isTestProjectHint: true,
+              resumeExistingAttempt: true,
+              apiBaseUrl: process.env.API_BASE_URL || `http://127.0.0.1:${PORT}`,
+            }),
+        });
+      })
       .catch((err) => console.error("initDb at boot failed:", err && err.message));
   }
 });
+
+function shutdown(signal) {
+  console.log(`Backend shutting down (${signal})`);
+  stopReplayWorker();
+  httpServer.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 10000).unref();
+}
+process.once("SIGTERM", () => shutdown("SIGTERM"));
+process.once("SIGINT", () => shutdown("SIGINT"));
