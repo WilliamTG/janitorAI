@@ -9,7 +9,14 @@ from google import genai
 from models import DamageAnalysis
 from google_api import connect_to_google_api_personal, upload_knowledge_base, share_doc_with_email
 from doc_engine import replace_text_in_doc, upload_and_insert_image, insert_photo_gallery
-from prompt import system_prompt, main_prompt, build_inspector_context
+from prompt import (
+    PROMPT_VERSION,
+    build_inspector_context,
+    main_prompt,
+    resolve_enabled,
+    resolve_prompt,
+    system_prompt,
+)
 from template_replacement import build_replacements
 import re
 from datetime import datetime, timezone
@@ -112,7 +119,7 @@ def _upload_inspector_photos(genai_client, project: dict) -> list:
     Returns a list of records {'file': gemini_file, 'path': local_tmp_path,
     'room': str, 'caption': str} in capture order. The local copies are KEPT
     (needed later for the report's evidence image and photo gallery) — the
-    caller is responsible for calling _cleanup_photo_files() when done.
+    caller is responsible for calling cleanup_photo_files() when done.
     """
     records = []
     notes = project.get("notes") or []
@@ -171,7 +178,7 @@ def _upload_inspector_photos(genai_client, project: dict) -> list:
     return records
 
 
-def _cleanup_photo_files(photo_records: list) -> None:
+def cleanup_photo_files(photo_records: list) -> None:
     """Deletes the local temp copies kept by _upload_inspector_photos."""
     for rec in photo_records:
         try:
@@ -197,6 +204,160 @@ def _photo_manifest(photo_records: list) -> str:
             parts.append(f"— {rec['caption']}")
         lines.append(" ".join(parts))
     return "\n".join(lines)
+
+
+GEMINI_MODEL = "gemini-3.8-flash"
+
+
+def prepare_gemini_media(genai_client, video_path: str | None, project: dict | None):
+    """
+    Laster opp video og befaringsfoto til Gemini og returnerer
+    (video_file, photo_records). Kaller aldri Docs/Drive, så både
+    create_report() og den dokumentfrie Labs-veien kan bruke den.
+
+    Ved unntak er det kallerens ansvar å rydde: photo_records kan være delvis
+    fylt, og de lokale kopiene må gjennom cleanup_photo_files().
+    """
+    video_file = None
+    photo_records = []
+
+    # 2. Gemini Analysis (multimodal). Video is useful evidence when present,
+    # but reports must also work from notes, transcriptions, photos, and metadata.
+    if video_path:
+        print("🤖 Gemini is analyzing available video evidence...")
+        video_file = genai_client.files.upload(file=video_path)
+        # Denial-of-Wallet-vern: bind ventingen på videoprosessering (ellers kan en
+        # fil som henger i PROCESSING holde en fakturerbar jobb åpen i det uendelige).
+        video_deadline = time.monotonic() + 300  # maks 5 min
+        while video_file.state.name == "PROCESSING":
+            if time.monotonic() > video_deadline:
+                raise TimeoutError("Gemini video-prosessering tok for lang tid (>5 min)")
+            time.sleep(2)
+            video_file = genai_client.files.get(name=video_file.name)
+        if video_file.state.name == "FAILED":
+            raise RuntimeError("Gemini klarte ikke å prosessere videoen")
+
+    # Upload inspector photos (if any) so Gemini can analyse them with every
+    # other available inspection source. Local copies are cleaned up by the caller.
+    if project:
+        photo_records = _upload_inspector_photos(genai_client, project)
+        if photo_records:
+            print(f"📸 {len(photo_records)} inspector photo(s) ready for Gemini")
+
+    return video_file, photo_records
+
+
+def analyze_damage(
+    genai_client,
+    project: dict | None,
+    report_meta: dict | None,
+    video_file=None,
+    photo_records: list | None = None,
+    enabled=None,
+):
+    """
+    Selve analysen: kunnskapsbase → kontekst → Gemini → sitatport. Rører
+    verken Docs eller Drive-kopiering, slik at den kan kjøres dokumentfritt fra
+    Labs (/api/analyze) med et vilkårlig sett promptblokker — og fra
+    create_report() med produksjonsstandarden, der `enabled=None`.
+
+    `enabled` er blokk-id-er fra prompt.BLOCKS. Returnerer
+    (analysis, token_usage, prompt_meta), der prompt_meta beskriver nøyaktig
+    den prompten som faktisk ble sendt (sha256 over system + oppdrag + kontekst).
+    """
+    photo_records = photo_records or []
+    active = resolve_enabled(enabled)
+    photo_files = [rec["file"] for rec in photo_records]
+
+    # Kunnskapsbasen er en egen blokk: den krever Drive-lesetilgang og er den
+    # eneste delen av analysen som gjør det. Av = raskere/billigere, men ikke
+    # lenger sammenlignbart med produksjon.
+    knowledge_files = []
+    if "kunnskapsbase_pdf" in active:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        knowledge_path = os.path.join(current_dir, "temp_knowledge")
+
+        if not os.path.exists(knowledge_path):
+            knowledge_path = os.path.join(current_dir, "knowlegde")
+
+        print(f"📚 Opplasting av kunnskapsbase fra: {knowledge_path}")
+        knowledge_files = upload_knowledge_base(genai_client, knowledge_path)
+
+    # Build contents from every available source. No evidence type has an
+    # automatic priority; Gemini reconciles the supplied material.
+    # report_meta (building year, inspection date) feeds the deterministic
+    # case-signal block computed in build_case_signals() — see
+    # docs/ARCHITECTURE_WATER_DAMAGE_TREE.md §3.6/steg 0.
+    # resolve_prompt() komponerer én gang, så sha256-en i prompt_meta beskriver
+    # nøyaktig den teksten som sendes — ikke en rekonstruksjon.
+    resolved = resolve_prompt(active, project or {}, report_meta or {})
+    context_parts = [resolved["context"]] if resolved["context"] else []
+    if "foto_manifest" in active:
+        manifest = _photo_manifest(photo_records)
+        if manifest:
+            context_parts.append(manifest)
+
+    contents = (
+        ([video_file] if video_file else [])
+        + photo_files
+        + knowledge_files
+        + context_parts
+        + [resolved["mission"]]
+    )
+
+    print("🧠 Sending content to Gemini for analysis...")
+    gemini_response = genai_client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=contents,
+        config={"response_mime_type": "application/json",
+                "response_schema": DamageAnalysis,
+                "system_instruction": resolved["system"],
+                "temperature": 0.0,    # Setter kreativiteten til null
+                "top_p": 0.1,         # Velger kun de mest sannsynlige ordene
+                "top_k": 1,           # Velger kun det aller beste ordet for hvert steg
+                "seed": 42,
+                # Denial-of-Wallet-vern: hard timeout (ms) på selve analysekallet —
+                # den største og tidligere ubundne kostnadsdriveren.
+                "http_options": {"timeout": 120000}}
+    )
+    analysis = gemini_response.parsed
+
+    # Sitatport: «Byggforsk-henvisninger vises kun med verifisert punktnummer».
+    # Alt modellen siterer valideres mot metadata-indeksen; uverifiserte
+    # referanser forkastes fremfor å nå rapporten (anti-hallusinering).
+    from byggforsk_index import valider_referanse
+    if analysis and analysis.evidence_points:
+        for punkt in analysis.evidence_points:
+            original = punkt.technical_reference
+            verifisert = valider_referanse(original)
+            if original and not verifisert:
+                print(f"⚠️  Forkastet uverifisert Byggforsk-referanse: {original!r}")
+            punkt.technical_reference = verifisert
+
+    # COGS: fang tokenforbruk fra rå-responsen før den forkastes, så backend kan
+    # måle faktisk kostnad per rapport (docs/prising-bruksbasert.md).
+    token_usage = None
+    usage = getattr(gemini_response, "usage_metadata", None)
+    if usage is not None:
+        token_usage = {
+            "model": GEMINI_MODEL,
+            "input_tokens": getattr(usage, "prompt_token_count", None),
+            "output_tokens": getattr(usage, "candidates_token_count", None),
+            "total_tokens": getattr(usage, "total_token_count", None),
+        }
+
+    prompt_meta = {
+        "prompt_version": resolved["prompt_version"],
+        "blocks_enabled": resolved["blocks_enabled"],
+        "sha256": resolved["sha256"],
+        "model": GEMINI_MODEL,
+        "system": resolved["system"],
+        "mission": resolved["mission"],
+        "context": resolved["context"],
+    }
+
+    del contents, knowledge_files, photo_files
+    return analysis, token_usage, prompt_meta
 
 
 def create_report(video_path: str | None, master_id, output_folder, gemini_key, report_meta: dict | None = None, project: dict | None = None, tester_email: str | None = None, report_attempt_id: str | None = None):
@@ -245,122 +406,38 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
     photo_records = []
     try:
         genai_client = genai.Client(api_key=gemini_key)
-
-        # 2. Gemini Analysis (multimodal). Video is useful evidence when present,
-        # but reports must also work from notes, transcriptions, photos, and metadata.
-        if video_path:
-            print("🤖 Gemini is analyzing available video evidence...")
-            video_file = genai_client.files.upload(file=video_path)
-            # Denial-of-Wallet-vern: bind ventingen på videoprosessering (ellers kan en
-            # fil som henger i PROCESSING holde en fakturerbar jobb åpen i det uendelige).
-            video_deadline = time.monotonic() + 300  # maks 5 min
-            while video_file.state.name == "PROCESSING":
-                if time.monotonic() > video_deadline:
-                    raise TimeoutError("Gemini video-prosessering tok for lang tid (>5 min)")
-                time.sleep(2)
-                video_file = genai_client.files.get(name=video_file.name)
-            if video_file.state.name == "FAILED":
-                raise RuntimeError("Gemini klarte ikke å prosessere videoen")
-
-        # Upload inspector photos (if any) so Gemini can analyse them with every
-        # other available inspection source. Local copies are cleaned up below.
-        if project:
-            photo_records = _upload_inspector_photos(genai_client, project)
-            if photo_records:
-                print(f"📸 {len(photo_records)} inspector photo(s) ready for Gemini")
+        video_file, photo_records = prepare_gemini_media(genai_client, video_path, project)
     except Exception:
-        _cleanup_photo_files(photo_records)
+        cleanup_photo_files(photo_records)
         if doc_id:
             _abandon_attempt(drive, doc_id, doc_id)
         raise
-    photo_files = [rec["file"] for rec in photo_records]
 
     # Feiler noe i analysefasen (kunnskapsopplasting, Gemini-kallet,
     # valideringen), skal de lokale fotokopiene ikke bli liggende igjen i
     # temp-katalogen — unntaket propagerer ellers uendret som før.
     try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        knowledge_path = os.path.join(current_dir, "temp_knowledge")
-
-        if not os.path.exists(knowledge_path):
-            knowledge_path = os.path.join(current_dir, "knowlegde")
-
-        print(f"📚 Opplasting av kunnskapsbase fra: {knowledge_path}")
-        knowledge_files = upload_knowledge_base(genai_client, knowledge_path)
-
-        # Build contents from every available source. No evidence type has an
-        # automatic priority; Gemini reconciles the supplied material.
-        # report_meta (building year, inspection date) feeds the deterministic
-        # case-signal block computed in build_case_signals() — see
-        # docs/ARCHITECTURE_WATER_DAMAGE_TREE.md §3.6/steg 0.
-        context_text = build_inspector_context(project or {}, report_meta)
-        context_parts = [context_text] if context_text else []
-        manifest = _photo_manifest(photo_records)
-        if manifest:
-            context_parts.append(manifest)
-
-        contents = (
-            ([video_file] if video_file else [])
-            + photo_files
-            + knowledge_files
-            + context_parts
-            + [main_prompt()]
+        analysis, token_usage, _prompt_meta = analyze_damage(
+            genai_client,
+            project,
+            report_meta,
+            video_file=video_file,
+            photo_records=photo_records,
         )
-
-        print("🧠 Sending content to Gemini for analysis...")
-        gemini_response = genai_client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=contents,
-            config={"response_mime_type": "application/json",
-                    "response_schema": DamageAnalysis,
-                    "system_instruction": system_prompt(),
-                    "temperature": 0.0,    # Setter kreativiteten til null
-                    "top_p": 0.1,         # Velger kun de mest sannsynlige ordene
-                    "top_k": 1,           # Velger kun det aller beste ordet for hvert steg
-                    "seed": 42,
-                    # Denial-of-Wallet-vern: hard timeout (ms) på selve analysekallet —
-                    # den største og tidligere ubundne kostnadsdriveren.
-                    "http_options": {"timeout": 120000}}
-        )
-        analysis = gemini_response.parsed
-
-        # Sitatport: «Byggforsk-henvisninger vises kun med verifisert punktnummer».
-        # Alt modellen siterer valideres mot metadata-indeksen; uverifiserte
-        # referanser forkastes fremfor å nå rapporten (anti-hallusinering).
-        from byggforsk_index import valider_referanse
-        if analysis and analysis.evidence_points:
-            for punkt in analysis.evidence_points:
-                original = punkt.technical_reference
-                verifisert = valider_referanse(original)
-                if original and not verifisert:
-                    print(f"⚠️  Forkastet uverifisert Byggforsk-referanse: {original!r}")
-                punkt.technical_reference = verifisert
     except Exception:
-        _cleanup_photo_files(photo_records)
+        cleanup_photo_files(photo_records)
         if doc_id:
             _abandon_attempt(drive, doc_id, doc_id)
         raise
 
     try:
-        # COGS: fang tokenforbruk fra rå-responsen før den forkastes, så backend kan
-        # måle faktisk kostnad per rapport (docs/prising-bruksbasert.md).
-        token_usage = None
-        usage = getattr(gemini_response, "usage_metadata", None)
-        if usage is not None:
-            token_usage = {
-                "model": "gemini-3.8-flash",
-                "input_tokens": getattr(usage, "prompt_token_count", None),
-                "output_tokens": getattr(usage, "candidates_token_count", None),
-                "total_tokens": getattr(usage, "total_token_count", None),
-            }
-
-        # Free memory after analysis - contents list can be large.
+        # Free memory after analysis — the contents list can be large.
         # photo_records beholdes: de lokale kopiene brukes til bevisbilde/galleri.
-        del contents, knowledge_files, video_file, photo_files
+        del video_file
         gc.collect()
         print("🧹 Cleared analysis objects from memory")
     except Exception:
-        _cleanup_photo_files(photo_records)
+        cleanup_photo_files(photo_records)
         if doc_id:
             _abandon_attempt(drive, doc_id, doc_id)
         raise
@@ -498,7 +575,7 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
             except Exception as exc:
                 print(f"⚠️  Kunne ikke sette inn bildegalleri: {exc}")
 
-        _cleanup_photo_files(photo_records)
+        cleanup_photo_files(photo_records)
 
         # 6. Share the document with the tester's email (if provided)
         if tester_email and tester_email.strip():
@@ -519,7 +596,7 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
                 fields="id,appProperties",
             ).execute()
     except Exception as exc:
-        _cleanup_photo_files(photo_records)
+        cleanup_photo_files(photo_records)
         orphaned_doc_id = None
         if doc_id:
             try:
