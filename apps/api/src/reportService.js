@@ -324,6 +324,7 @@ module.exports = {
   REPORT_MEDIA_URL_TTL_MS,
   canResumeExistingAttempt,
   collectRemoteIds,
+  projectContext,
   selectReportSnapshot,
   selectVideoId,
 };

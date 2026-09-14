@@ -803,6 +803,17 @@ const httpServer = app.listen(PORT, () => {
               apiBaseUrl: process.env.API_BASE_URL || `http://127.0.0.1:${PORT}`,
             }),
         });
+
+        // Reference data for Labs scoring lives in a committed fixture; the
+        // table is a read cache, so refresh it from the file every boot. A
+        // broken fixture must not take the API down — Labs scoring degrades,
+        // nothing else does.
+        require("./labs/cases")
+          .loadBenchmarkCases(getPool())
+          .then((count) => console.log(`📐 Benchmark-fasit lastet: ${count} case(r)`))
+          .catch((err) =>
+            console.error("loadBenchmarkCases at boot failed:", err && err.message)
+          );
       })
       .catch((err) => console.error("initDb at boot failed:", err && err.message));
   }
