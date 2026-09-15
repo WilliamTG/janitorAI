@@ -259,6 +259,56 @@ CREATE INDEX IF NOT EXISTS replay_batch_items_claim_idx
   ON replay_batch_items (batch_id, state, lease_until, id);
 CREATE INDEX IF NOT EXISTS replay_batch_items_source_idx
   ON replay_batch_items (tester_token, source_project_id);
+
+-- Labs: prompt-iteration ledger.  Deliberately separate from
+-- report_generations — a Labs run creates no Google Doc, never writes
+-- reportDraft/reportFinal, and must not be mistakable for a real report.
+CREATE TABLE IF NOT EXISTS ai_test_runs (
+  id              BIGSERIAL PRIMARY KEY,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  project_id      TEXT NOT NULL,
+  tester_token    VARCHAR NOT NULL,
+  case_id         TEXT,
+  variant_id      TEXT,
+  variant_label   TEXT,
+  blocks_enabled  JSONB,
+  prompt_version  TEXT,
+  prompt_sha256   TEXT,
+  model           TEXT,
+  analysis        JSONB,
+  token_usage     JSONB,
+  duration_ms     INTEGER,
+  score_total     INTEGER,
+  score_max       INTEGER,
+  score_detail    JSONB,
+  manual_override JSONB,
+  status          TEXT NOT NULL DEFAULT 'ok',
+  error           TEXT,
+  note            TEXT
+);
+CREATE INDEX IF NOT EXISTS ai_test_runs_case_idx
+  ON ai_test_runs (case_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ai_test_runs_variant_idx
+  ON ai_test_runs (variant_id, created_at DESC);
+
+-- Reference data ("fasit") for benchmark scoring.  Loaded from the committed
+-- fixture on boot so ground truth stays reviewable in git; the table is a
+-- read cache, never the source of truth.
+CREATE TABLE IF NOT EXISTS benchmark_cases (
+  case_id       TEXT PRIMARY KEY,
+  label         TEXT,
+  project_id    TEXT,
+  provisional   BOOLEAN NOT NULL DEFAULT TRUE,
+  reference     JSONB NOT NULL,
+  source_note   TEXT,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  source        TEXT NOT NULL DEFAULT 'fixture'
+);
+-- 'fixture' rows are owned by apps/api/fixtures/benchmark-cases.json and are
+-- overwritten on every boot; 'manual' rows are uploaded through the admin
+-- dashboard and boot-loading never touches them. A case_id can only ever be
+-- one or the other, so the two sources can never silently clobber each other.
+ALTER TABLE benchmark_cases ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'fixture';
 `;
 
 // ── Default-token seed + data migration ──────────────────────────────────────

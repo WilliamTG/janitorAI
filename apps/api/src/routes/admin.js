@@ -13,6 +13,8 @@ const {
   deleteReplayProject,
 } = require("../replay");
 const { reconcileAfterUpsert } = require("../mediaCleanup");
+const { listBenchmarkCases, upsertManualCase, deleteManualCase } = require("../labs/cases");
+const { runLabsAnalysis, listRuns, getRun, overrideScore } = require("../labs/runner");
 
 const router = express.Router();
 
@@ -385,6 +387,203 @@ router.get("/logs", async (req, res) => {
   } catch (err) {
     console.error("GET /api/admin/logs error:", sanitizeError(err));
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── Labs: prompt iteration ───────────────────────────────────────────────────
+// Doc-free test runs against stored cases, scored against committed reference
+// data. Shares this router's admin-secret guard. None of these endpoints touch
+// report_generations, projects.data or Google Docs — a Labs run is an
+// experiment, never a report.
+
+function labsStatus(err) {
+  return err && Number.isInteger(err.status) ? err.status : 500;
+}
+
+router.get("/labs/blocks", async (req, res) => {
+  const aiUrl = process.env.AI_ENGINE_URL;
+  if (!aiUrl) {
+    return res.status(503).json({ error: "AI engine is not configured" });
+  }
+  try {
+    const response = await fetch(`${aiUrl}/api/prompt/blocks`, {
+      headers: { "x-tester-token": process.env.AI_ENGINE_TOKEN || "" },
+    });
+    if (!response.ok) {
+      return res.status(502).json({ error: `AI engine returned ${response.status}` });
+    }
+    res.json(await response.json());
+  } catch (err) {
+    console.error("GET /api/admin/labs/blocks error:", sanitizeError(err));
+    res.status(502).json({ error: "Could not reach AI engine" });
+  }
+});
+
+router.get("/labs/cases", async (req, res) => {
+  try {
+    const pool = getPool();
+    const cases = await listBenchmarkCases(pool);
+    // Replay copies are as valid a test subject as their source, so both are
+    // offered; tester_token never leaves the server.
+    const projects = await pool.query(
+      `SELECT p.id,
+              p.data->>'name' AS project_name,
+              p.data->>'inspectionDate' AS inspection_date,
+              (p.data->>'isTestProject' = 'true') AS is_test_project,
+              p.updated_at,
+              t.tester_name
+         FROM projects p
+         LEFT JOIN tester_tokens t ON t.token = p.tester_token
+        WHERE p.tester_token IS NOT NULL
+        ORDER BY p.updated_at DESC
+        LIMIT 200`
+    );
+    res.json({
+      cases: cases.map((c) => ({
+        caseId: c.case_id,
+        label: c.label,
+        projectId: c.project_id,
+        provisional: c.provisional,
+        sourceNote: c.source_note,
+        reference: c.reference,
+        source: c.source,
+      })),
+      projects: projects.rows.map((row) => ({
+        projectId: row.id,
+        projectName: row.project_name,
+        inspectionDate: row.inspection_date,
+        isTestProject: row.is_test_project,
+        tester: row.tester_name,
+        updatedAt: row.updated_at,
+      })),
+    });
+  } catch (err) {
+    console.error("GET /api/admin/labs/cases error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Upload a reference case through the dashboard, without touching git. Only
+// ever creates or edits a 'manual' case — a case_id already owned by the
+// fixture file is refused (409), so a dashboard upload can never clobber the
+// committed fasit, and the next boot's fixture load can never clobber a
+// dashboard upload. See labs/cases.js#upsertManualCase.
+router.put("/labs/cases/:caseId", async (req, res) => {
+  const caseId = String(req.params.caseId || "").trim();
+  const body = req.body || {};
+  if (!caseId) {
+    return res.status(400).json({ error: "caseId is required" });
+  }
+  if (!body.reference || typeof body.reference !== "object" || Array.isArray(body.reference)) {
+    return res.status(400).json({ error: "reference must be an object" });
+  }
+  try {
+    const saved = await upsertManualCase(getPool(), {
+      caseId,
+      label: body.label ? String(body.label).slice(0, 300) : null,
+      provisional: body.provisional !== false,
+      reference: body.reference,
+      sourceNote: body.sourceNote ? String(body.sourceNote).slice(0, 2000) : null,
+      projectId: body.projectId ? String(body.projectId) : null,
+    });
+    res.status(200).json({
+      case: {
+        caseId: saved.case_id,
+        label: saved.label,
+        projectId: saved.project_id,
+        provisional: saved.provisional,
+        sourceNote: saved.source_note,
+        reference: saved.reference,
+        source: saved.source,
+      },
+    });
+  } catch (err) {
+    if (err && err.code === "CASE_IS_FIXTURE_OWNED") {
+      return res.status(409).json({ error: sanitizeError(err), code: err.code });
+    }
+    console.error("PUT /api/admin/labs/cases/:caseId error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.delete("/labs/cases/:caseId", async (req, res) => {
+  const caseId = String(req.params.caseId || "").trim();
+  try {
+    const deleted = await deleteManualCase(getPool(), caseId);
+    if (!deleted) return res.status(404).json({ error: "Case not found" });
+    res.status(204).end();
+  } catch (err) {
+    if (err && err.code === "CASE_IS_FIXTURE_OWNED") {
+      return res.status(409).json({ error: sanitizeError(err), code: err.code });
+    }
+    console.error("DELETE /api/admin/labs/cases/:caseId error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/labs/runs", async (req, res) => {
+  const body = req.body || {};
+  if (!body.projectId) {
+    return res.status(400).json({ error: "projectId is required" });
+  }
+  if (body.blocks != null && !Array.isArray(body.blocks)) {
+    return res.status(400).json({ error: "blocks must be an array of block ids, or omitted" });
+  }
+  try {
+    const run = await runLabsAnalysis({
+      projectId: body.projectId,
+      blocks: body.blocks == null ? null : body.blocks.map(String),
+      caseId: body.caseId ? String(body.caseId) : null,
+      variantId: body.variantId ? String(body.variantId) : null,
+      variantLabel: body.variantLabel ? String(body.variantLabel) : null,
+      note: body.note ? String(body.note).slice(0, 2000) : null,
+      apiBaseUrl:
+        process.env.API_BASE_URL ||
+        `${req.protocol}://${req.get("host")}`,
+    });
+    res.status(201).json({ run });
+  } catch (err) {
+    console.error("POST /api/admin/labs/runs error:", sanitizeError(err));
+    res.status(labsStatus(err)).json({ error: sanitizeError(err), code: err && err.code });
+  }
+});
+
+router.get("/labs/runs", async (req, res) => {
+  try {
+    const runs = await listRuns(getPool(), {
+      caseId: req.query.caseId || null,
+      variantId: req.query.variantId || null,
+      limit: req.query.limit,
+    });
+    res.json({ runs });
+  } catch (err) {
+    console.error("GET /api/admin/labs/runs error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.get("/labs/runs/:id", async (req, res) => {
+  try {
+    const run = await getRun(getPool(), req.params.id);
+    if (!run) return res.status(404).json({ error: "Run not found" });
+    res.json({ run });
+  } catch (err) {
+    console.error("GET /api/admin/labs/runs/:id error:", sanitizeError(err));
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.patch("/labs/runs/:id/score", async (req, res) => {
+  const override = (req.body || {}).override;
+  if (!override || typeof override !== "object") {
+    return res.status(400).json({ error: "override object is required" });
+  }
+  try {
+    const run = await overrideScore(getPool(), req.params.id, override);
+    res.json({ run });
+  } catch (err) {
+    console.error("PATCH /api/admin/labs/runs/:id/score error:", sanitizeError(err));
+    res.status(labsStatus(err)).json({ error: sanitizeError(err), code: err && err.code });
   }
 });
 

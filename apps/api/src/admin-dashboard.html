@@ -426,6 +426,7 @@
       <button class="tab-btn" id="tab-logs-btn" onclick="switchTab('logs')">Logs</button>
       <button class="tab-btn" id="tab-presentation-btn" onclick="switchTab('presentation')">Presentation</button>
       <button class="tab-btn" id="tab-replay-btn" onclick="switchTab('replay')">Replay</button>
+      <button class="tab-btn" id="tab-labs-btn" onclick="switchTab('labs')">Labs</button>
     </div>
 
     <!-- ══ TOKENS TAB ══ -->
@@ -485,6 +486,75 @@
         </div>
         <div id="replayBatch">
           <div class="empty-state">No replay batch loaded.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ LABS TAB ══ -->
+    <div class="tab-panel" id="tab-labs">
+      <div class="card">
+        <div class="card-title">Kjør test</div>
+        <div class="replay-intro">
+          Kjører analysen uten å lage Google Doc, og uten å røre rapportstatus
+          på prosjektet. Avkryssingsboksene er promptblokkene i
+          <code>ai-engine/prompt.py</code> — kjernen (rolle, bevisregler,
+          akutt/gradvis, skjemakontrakt) kan ikke slås av.
+        </div>
+        <div id="labsForm">
+          <div class="empty-state">Laster blokker …</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Resultat</div>
+        <div id="labsResult">
+          <div class="empty-state">Ingen kjøring ennå.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="replay-toolbar">
+          <div class="card-title" style="margin:0;">Historikk</div>
+          <button class="btn-ghost" onclick="loadLabsRuns()">Oppdater</button>
+        </div>
+        <div id="labsRuns">
+          <div class="empty-state">Ingen kjøringer logget.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Referansecaser</div>
+        <div class="replay-intro">
+          Last opp en fasit uten å røre git. Caser herfra lagres med
+          <code>source: manual</code> og overlever redeploy, men kan aldri
+          overskrive en case som eies av
+          <code>apps/api/fixtures/benchmark-cases.json</code> (og omvendt) —
+          en case-id tilhører alltid enten filen eller dashbordet, aldri
+          begge. Vil du ha den versjonssatt, flytt innholdet inn i
+          fixture-filen og slett den manuelle raden.
+        </div>
+        <div id="labsCasesList">
+          <div class="empty-state">Laster …</div>
+        </div>
+        <div class="replay-detail-grid" style="margin-top:14px;">
+          <div class="replay-detail-field"><label>Case-ID (ny, eller en eksisterende manuell)<br>
+            <input id="labsCaseUploadId" type="text" placeholder="f.eks. bekkelaget-1" style="width:100%;"></label></div>
+          <div class="replay-detail-field"><label>Merkelapp<br>
+            <input id="labsCaseUploadLabel" type="text" placeholder="kort beskrivelse" style="width:100%;"></label></div>
+        </div>
+        <div class="replay-detail-field" style="margin-top:8px;"><label>Kilde/notat (valgfritt)<br>
+          <input id="labsCaseUploadNote" type="text" placeholder="hvor kommer fasiten fra?" style="width:100%;"></label></div>
+        <div class="replay-detail-field" style="margin-top:8px;">
+          <label>
+            <input type="checkbox" id="labsCaseUploadProvisional" checked>
+            Foreløpig fasit (vis som "foreløpig" i velgeren)
+          </label>
+        </div>
+        <div class="replay-detail-field" style="margin-top:8px;"><label>Fasit (JSON) — samme felter som <code>reference</code> i fixture-filen<br>
+          <textarea id="labsCaseUploadJson" rows="10" style="width:100%;font-family:monospace;font-size:12px;"
+            placeholder='{&#10;  "expected_source_category": "NEDBØR",&#10;  "expected_acute_or_gradual": "GRADVIS",&#10;  "root_cause_keywords": ["..."],&#10;  "root_cause_keywords_min": 2,&#10;  "excluded_causes": [],&#10;  "accepted_byggforsk": [],&#10;  "empty_reference_acceptable": true&#10;}'></textarea></label></div>
+        <div class="replay-actions" style="margin-top:10px;">
+          <button class="btn-primary" id="labsCaseUploadBtn" onclick="uploadLabsCase()">Lagre case</button>
         </div>
       </div>
     </div>
@@ -626,6 +696,10 @@
     if (name === 'replay') {
       loadReplayPreview();
       loadLatestReplay();
+    }
+    if (name === 'labs') {
+      loadLabsForm();
+      loadLabsRuns();
     }
   }
 
@@ -1227,6 +1301,402 @@
       const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Unknown error');
       renderReplayBatch(data); showStatus('Replay batch cancelled.', 'success');
     } catch (err) { showStatus('Could not cancel replay: ' + err.message, 'error'); }
+  }
+
+  // ── Labs: prompt iteration ───────────────────────────────────────────────────
+  // Doc-free test runs. The block checkboxes are generated from the engine's
+  // registry (GET /labs/blocks), never hardcoded here, so the UI cannot drift
+  // from ai-engine/prompt.py.
+  let labsBlocks = [];
+  let labsCases = [];
+  let labsProjects = [];
+  let labsLastRun = null;
+
+  function labsEnabledIds() {
+    return labsBlocks
+      .filter(b => {
+        const el = document.getElementById('labs-block-' + b.id);
+        return el && el.checked;
+      })
+      .map(b => b.id);
+  }
+
+  // Mirrors resolve_enabled() in prompt.py: a block whose dependencies are not
+  // met is inert, so show it as such instead of letting it look active.
+  function labsUnmetDeps(block, enabled) {
+    const missing = (block.requires || []).filter(dep => !enabled.includes(dep));
+    const anyOk = !(block.requiresAny || []).length ||
+      (block.requiresAny || []).some(dep => enabled.includes(dep));
+    if (!anyOk) missing.push((block.requiresAny || []).join(' eller '));
+    return missing;
+  }
+
+  function labsRefreshDependencyHints() {
+    const enabled = labsEnabledIds();
+    labsBlocks.forEach(b => {
+      const hint = document.getElementById('labs-dep-' + b.id);
+      if (!hint) return;
+      const missing = labsUnmetDeps(b, enabled);
+      const inert = enabled.includes(b.id) && missing.length;
+      hint.textContent = inert ? 'Inaktiv — krever ' + missing.join(', ') : '';
+      hint.style.display = inert ? 'block' : 'none';
+    });
+  }
+
+  async function loadLabsForm() {
+    const wrap = document.getElementById('labsForm');
+    wrap.innerHTML = '<div class="empty-state">Laster blokker …</div>';
+    try {
+      const [blocksRes, casesRes] = await Promise.all([
+        apiFetch('/api/admin/labs/blocks'),
+        apiFetch('/api/admin/labs/cases'),
+      ]);
+      const blocksData = await blocksRes.json();
+      if (!blocksRes.ok) throw new Error(blocksData.error || 'Kunne ikke hente blokker');
+      const casesData = await casesRes.json();
+      if (!casesRes.ok) throw new Error(casesData.error || 'Kunne ikke hente caser');
+
+      labsBlocks = blocksData.blocks || [];
+      labsCases = casesData.cases || [];
+      labsProjects = casesData.projects || [];
+      renderLabsForm(blocksData.prompt_version);
+      renderLabsCasesList();
+    } catch (err) {
+      wrap.innerHTML = '<div class="empty-state">Kunne ikke laste Labs: ' + escHtml(err.message) + '</div>';
+    }
+  }
+
+  function renderLabsCasesList() {
+    const wrap = document.getElementById('labsCasesList');
+    if (!wrap) return;
+    if (!labsCases.length) {
+      wrap.innerHTML = '<div class="empty-state">Ingen referansecaser ennå.</div>';
+      return;
+    }
+    wrap.innerHTML = labsCases.map(c => {
+      const manual = c.source === 'manual';
+      return (
+        '<div class="replay-project-check" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
+          '<div>' +
+            '<span class="replay-project-name">' + escHtml(c.label || c.caseId) + '</span> ' +
+            '<span class="replay-project-meta">' + escHtml(c.caseId) + '</span> ' +
+            '<span class="badge ' + (manual ? 'badge-skipped' : 'badge-active') + '">' + (manual ? 'manuell' : 'fixture') + '</span> ' +
+            (c.provisional ? '<span class="badge badge-skipped">foreløpig</span>' : '') +
+          '</div>' +
+          (manual
+            ? '<div>' +
+                '<button class="btn-ghost" onclick="editLabsCase(' + JSON.stringify(c.caseId) + ')">Rediger</button> ' +
+                '<button class="btn-ghost" onclick="deleteLabsCase(' + JSON.stringify(c.caseId) + ')">Slett</button>' +
+              '</div>'
+            : '<span class="replay-project-meta">rediger i fixture-filen</span>')
+        + '</div>'
+      );
+    }).join('');
+  }
+
+  function editLabsCase(caseId) {
+    const c = labsCases.find(x => x.caseId === caseId);
+    if (!c || c.source !== 'manual') return;
+    document.getElementById('labsCaseUploadId').value = c.caseId;
+    document.getElementById('labsCaseUploadLabel').value = c.label || '';
+    document.getElementById('labsCaseUploadNote').value = c.sourceNote || '';
+    document.getElementById('labsCaseUploadProvisional').checked = c.provisional !== false;
+    document.getElementById('labsCaseUploadJson').value = JSON.stringify(c.reference, null, 2);
+    document.getElementById('labsCaseUploadJson').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  async function uploadLabsCase() {
+    const caseId = ((document.getElementById('labsCaseUploadId') || {}).value || '').trim();
+    if (!caseId) { showStatus('Case-ID er påkrevd.', 'error'); return; }
+    const label = ((document.getElementById('labsCaseUploadLabel') || {}).value || '').trim();
+    const sourceNote = ((document.getElementById('labsCaseUploadNote') || {}).value || '').trim();
+    const provisional = !!(document.getElementById('labsCaseUploadProvisional') || {}).checked;
+    const rawJson = ((document.getElementById('labsCaseUploadJson') || {}).value || '').trim();
+    let reference;
+    try {
+      reference = JSON.parse(rawJson);
+    } catch (err) {
+      showStatus('Fasit-JSON er ikke gyldig: ' + err.message, 'error');
+      return;
+    }
+    const btn = document.getElementById('labsCaseUploadBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Lagrer …'; }
+    try {
+      const res = await apiFetch('/api/admin/labs/cases/' + encodeURIComponent(caseId), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, sourceNote, provisional, reference }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      showStatus('Case lagret.', 'success');
+      await loadLabsForm();
+    } catch (err) {
+      showStatus('Kunne ikke lagre case: ' + err.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Lagre case'; }
+    }
+  }
+
+  async function deleteLabsCase(caseId) {
+    if (!confirm('Slette manuell case "' + caseId + '"? Kan ikke angres.')) return;
+    try {
+      const res = await apiFetch('/api/admin/labs/cases/' + encodeURIComponent(caseId), { method: 'DELETE' });
+      if (!res.ok && res.status !== 204) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || ('HTTP ' + res.status));
+      }
+      showStatus('Case slettet.', 'success');
+      await loadLabsForm();
+    } catch (err) {
+      showStatus('Kunne ikke slette case: ' + err.message, 'error');
+    }
+  }
+
+  function renderLabsForm(promptVersion) {
+    const projectOptions = labsProjects.map(p =>
+      '<option value="' + escHtml(p.projectId) + '">' +
+        escHtml(p.projectName || p.projectId) +
+        (p.isTestProject ? ' (replay-kopi)' : '') +
+        (p.tester ? ' — ' + escHtml(p.tester) : '') +
+      '</option>'
+    ).join('');
+
+    const caseOptions = ['<option value="">Ingen fasit (kjør uten skåring)</option>'].concat(
+      labsCases.map(c =>
+        '<option value="' + escHtml(c.caseId) + '">' +
+          escHtml(c.label || c.caseId) +
+          (c.provisional ? ' — foreløpig fasit' : '') +
+        '</option>'
+      )
+    ).join('');
+
+    const blockRows = labsBlocks.map(b =>
+      '<label class="replay-project-check" style="display:block;margin-bottom:6px;">' +
+        '<input type="checkbox" id="labs-block-' + escHtml(b.id) + '"' +
+          (b.default ? ' checked' : '') +
+          ' onchange="labsRefreshDependencyHints()"> ' +
+        '<span class="replay-project-name">' + escHtml(b.label) + '</span> ' +
+        '<span class="replay-project-meta">' + escHtml(b.kind) + '</span>' +
+        (b.note ? '<div class="replay-project-meta">' + escHtml(b.note) + '</div>' : '') +
+        '<div class="replay-warning" id="labs-dep-' + escHtml(b.id) + '" style="display:none;"></div>' +
+      '</label>'
+    ).join('');
+
+    document.getElementById('labsForm').innerHTML =
+      '<div class="replay-detail-grid">' +
+        '<div class="replay-detail-field"><label>Prosjekt<br>' +
+          '<select id="labsProject" style="width:100%;">' + projectOptions + '</select></label></div>' +
+        '<div class="replay-detail-field"><label>Fasit<br>' +
+          '<select id="labsCase" style="width:100%;">' + caseOptions + '</select></label></div>' +
+        '<div class="replay-detail-field"><label>Variantnavn (valgfritt)<br>' +
+          '<input id="labsVariant" type="text" placeholder="f.eks. uten-femkilder" style="width:100%;"></label></div>' +
+      '</div>' +
+      '<div style="margin:14px 0 6px;"><strong>Promptblokker</strong> ' +
+        '<span class="replay-project-meta">prompt_version ' + escHtml(promptVersion || '?') + '</span></div>' +
+      blockRows +
+      '<div class="replay-detail-field" style="margin-top:12px;"><label>Notat (valgfritt)<br>' +
+        '<input id="labsNote" type="text" placeholder="hva tester du?" style="width:100%;"></label></div>' +
+      '<div class="replay-actions" style="margin-top:14px;">' +
+        '<button class="btn-primary" id="labsRunBtn" onclick="startLabsRun()">Kjør test</button> ' +
+        '<button class="btn-ghost" onclick="labsSetAllBlocks(true)">Alle på</button> ' +
+        '<button class="btn-ghost" onclick="labsSetAllBlocks(false)">Alle av</button>' +
+      '</div>';
+    labsRefreshDependencyHints();
+  }
+
+  function labsSetAllBlocks(on) {
+    labsBlocks.forEach(b => {
+      const el = document.getElementById('labs-block-' + b.id);
+      if (el) el.checked = on;
+    });
+    labsRefreshDependencyHints();
+  }
+
+  async function startLabsRun() {
+    const projectId = (document.getElementById('labsProject') || {}).value;
+    if (!projectId) { showStatus('Velg et prosjekt først.', 'error'); return; }
+    const caseId = (document.getElementById('labsCase') || {}).value || null;
+    const variant = ((document.getElementById('labsVariant') || {}).value || '').trim();
+    const note = ((document.getElementById('labsNote') || {}).value || '').trim();
+    const enabled = labsEnabledIds();
+
+    const btn = document.getElementById('labsRunBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Kjører …'; }
+    document.getElementById('labsResult').innerHTML =
+      '<div class="empty-state">Kjører analyse — dette tar like lang tid som en vanlig rapport.</div>';
+
+    try {
+      const res = await apiFetch('/api/admin/labs/runs', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId: projectId,
+          caseId: caseId,
+          blocks: enabled,
+          variantId: variant || null,
+          variantLabel: variant || null,
+          note: note || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ukjent feil');
+      labsLastRun = data.run;
+      renderLabsResult(data.run);
+      loadLabsRuns();
+      showStatus(data.run.status === 'ok' ? 'Kjøring fullført.' : 'Kjøringen feilet — se resultat.',
+        data.run.status === 'ok' ? 'success' : 'error');
+    } catch (err) {
+      document.getElementById('labsResult').innerHTML =
+        '<div class="empty-state">Kjøringen feilet: ' + escHtml(err.message) + '</div>';
+      showStatus('Kjøringen feilet: ' + err.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Kjør test'; }
+    }
+  }
+
+  function labsScoreChip(dim) {
+    const cls = dim.points ? 'badge-generated' : 'badge-failed';
+    const basis = dim.basis === 'auto' ? '' :
+      dim.basis === 'manual' ? ' ✎' : ' ?';
+    return '<span class="badge ' + cls + '" title="' + escHtml(dim.reason || '') + '">' +
+      escHtml(dim.dimension) + basis + '</span> ';
+  }
+
+  function renderLabsResult(run) {
+    if (!run) return;
+    const a = run.analysis || {};
+    const parts = [];
+
+    if (run.status !== 'ok') {
+      parts.push('<div class="replay-warning">Feil: ' + escHtml(run.error || 'ukjent') + '</div>');
+    }
+
+    if (run.score) {
+      const heur = run.score.detail.filter(d => d.basis === 'heuristic').length;
+      parts.push('<div class="replay-summary"><div class="replay-metric"><strong>' +
+        run.score.total + ' / ' + run.score.max + '</strong><span>skår</span></div></div>');
+      parts.push('<div style="margin:8px 0;">' + run.score.detail.map(labsScoreChip).join('') + '</div>');
+      if (heur) {
+        parts.push('<div class="replay-callout">' + heur + ' av ' + run.score.detail.length +
+          ' dimensjoner er heuristiske (merket ?) — de tilnærmer en faglig vurdering og bør ' +
+          'etterses, ikke leses som fasit.</div>');
+      }
+      if (run.score.provisionalReference) {
+        parts.push('<div class="replay-warning">Fasiten er foreløpig (utledet fra repo-dokumentasjon, ' +
+          'ikke transkribert fra fagpersonens egen rapport). Skåren er retningsgivende.</div>');
+      }
+      parts.push('<ul class="replay-note">' + run.score.detail.map(d =>
+        '<li><strong>' + escHtml(d.dimension) + '</strong> (' + d.points + '/1, ' +
+        escHtml(d.basis) + '): ' + escHtml(d.reason || '') + '</li>').join('') + '</ul>');
+    }
+
+    parts.push('<div class="replay-detail-grid">' +
+      ['area','source_category','acute_or_gradual','is_habitable'].map(k =>
+        '<div class="replay-detail-field"><span class="replay-project-meta">' + escHtml(k) +
+        '</span><br>' + escHtml(String(a[k] == null ? '—' : a[k])) + '</div>').join('') +
+      '</div>');
+
+    ['source','cause','description','extent_description','repairs_description'].forEach(k => {
+      if (a[k]) parts.push('<div class="replay-detail-field"><span class="replay-project-meta">' +
+        escHtml(k) + '</span><br>' + escHtml(a[k]) + '</div>');
+    });
+
+    const points = a.evidence_points || [];
+    if (points.length) {
+      parts.push('<div style="margin-top:10px;"><strong>Bevispunkter</strong></div>' +
+        '<ul class="replay-note">' + points.map(p =>
+          '<li>' + escHtml(p.caption || '') + ' — ' + escHtml(p.visual_confirmation || '') +
+          (p.technical_reference ? ' <em>' + escHtml(p.technical_reference) + '</em>' : '') +
+          (p.source_photo_index != null ? ' [foto ' + escHtml(String(p.source_photo_index)) + ']' : '') +
+          '</li>').join('') + '</ul>');
+    }
+
+    const meta = [
+      'prompt_version ' + (run.promptVersion || '?'),
+      'sha ' + String(run.promptSha256 || '').slice(0, 12),
+      run.model || '?',
+      (run.durationMs != null ? Math.round(run.durationMs / 1000) + ' s' : ''),
+      (run.tokenUsage ? (run.tokenUsage.total_tokens || '?') + ' tokens' : ''),
+    ].filter(Boolean).join(' · ');
+    parts.push('<div class="replay-project-meta" style="margin-top:10px;">' + escHtml(meta) + '</div>');
+
+    if (run.blocksEnabled) {
+      parts.push('<div style="margin-top:6px;">' + (run.blocksEnabled || []).map(b =>
+        '<span class="badge badge-created">' + escHtml(b) + '</span> ').join('') + '</div>');
+    }
+
+    if (run.resolvedPrompt) {
+      parts.push('<details style="margin-top:10px;"><summary>Løst prompt</summary>' +
+        '<pre class="replay-raw">' + escHtml(
+          '===== SYSTEM =====\n' + (run.resolvedPrompt.system || '') +
+          '\n\n===== OPPDRAG =====\n' + (run.resolvedPrompt.mission || '') +
+          '\n\n===== KONTEKST =====\n' + (run.resolvedPrompt.context || '')
+        ) + '</pre></details>');
+    }
+
+    document.getElementById('labsResult').innerHTML = parts.join('');
+  }
+
+  async function loadLabsRuns() {
+    const wrap = document.getElementById('labsRuns');
+    try {
+      const res = await apiFetch('/api/admin/labs/runs?limit=50');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ukjent feil');
+      renderLabsRuns(data.runs || []);
+    } catch (err) {
+      wrap.innerHTML = '<div class="empty-state">Kunne ikke hente historikk: ' + escHtml(err.message) + '</div>';
+    }
+  }
+
+  function renderLabsRuns(runs) {
+    const wrap = document.getElementById('labsRuns');
+    if (!runs.length) {
+      wrap.innerHTML = '<div class="empty-state">Ingen kjøringer logget.</div>';
+      return;
+    }
+    const rows = runs.map(r => {
+      const score = r.scoreTotal == null ? '—' : r.scoreTotal + '/' + r.scoreMax;
+      const blocks = (r.blocksEnabled || []).length;
+      return '<tr onclick="openLabsRun(' + r.id + ')" style="cursor:pointer;">' +
+        '<td>' + escHtml(fmtTime(r.createdAt)) + '</td>' +
+        '<td>' + escHtml(r.variantLabel || r.variantId || '—') + '</td>' +
+        '<td>' + escHtml(r.caseId || '—') + '</td>' +
+        '<td>' + escHtml(score) + '</td>' +
+        '<td>' + blocks + ' blokker</td>' +
+        '<td>' + escHtml(r.promptVersion || '—') + '</td>' +
+        '<td>' + escHtml(String(r.promptSha256 || '').slice(0, 8)) + '</td>' +
+        '<td><span class="badge ' + (r.status === 'ok' ? 'badge-generated' : 'badge-failed') + '">' +
+          escHtml(r.status) + '</span></td>' +
+      '</tr>';
+    }).join('');
+    wrap.innerHTML = '<div class="replay-scroll"><table class="replay-table">' +
+      '<thead><tr><th>Tid</th><th>Variant</th><th>Fasit</th><th>Skår</th><th>Blokker</th>' +
+      '<th>Promptversjon</th><th>sha</th><th>Status</th></tr></thead><tbody>' +
+      rows + '</tbody></table></div>';
+  }
+
+  async function openLabsRun(id) {
+    try {
+      const res = await apiFetch('/api/admin/labs/runs/' + encodeURIComponent(id));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ukjent feil');
+      const run = data.run;
+      // The stored row keeps score fields flat; the renderer wants the nested
+      // shape a fresh run returns.
+      if (run.scoreDetail) {
+        run.score = {
+          total: run.scoreTotal,
+          max: run.scoreMax,
+          detail: run.scoreDetail,
+          provisionalReference: false,
+        };
+      }
+      renderLabsResult(run);
+      document.getElementById('labsResult').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (err) {
+      showStatus('Kunne ikke hente kjøring: ' + err.message, 'error');
+    }
   }
 
   // ── Load & render token list ──────────────────────────────────────────────────
