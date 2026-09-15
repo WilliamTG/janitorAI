@@ -100,10 +100,11 @@ test("aarsak reports which keywords are missing rather than a bare score", () =>
 });
 
 test("aarsak passes on the configured minimum keyword count", () => {
-  const partial = { cause: "Nedbør trenger inn bak grunnmursplast", description: "" };
+  const partial = { cause: "Vann trenger inn bak grunnmursplast, med kapillæroppsug i såle", description: "" };
   const dim = scoreAarsak(partial, REF);
   assert.equal(dim.points, 1);
-  assert.equal(dim.matched.length, 2);
+  assert.equal(dim.matched.length, 3);
+  assert.ok(dim.missing.includes("nedbør"));
 });
 
 test("sitatport accepts an empty reference field", () => {

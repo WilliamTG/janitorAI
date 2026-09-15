@@ -301,8 +301,14 @@ CREATE TABLE IF NOT EXISTS benchmark_cases (
   provisional   BOOLEAN NOT NULL DEFAULT TRUE,
   reference     JSONB NOT NULL,
   source_note   TEXT,
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  source        TEXT NOT NULL DEFAULT 'fixture'
 );
+-- 'fixture' rows are owned by apps/api/fixtures/benchmark-cases.json and are
+-- overwritten on every boot; 'manual' rows are uploaded through the admin
+-- dashboard and boot-loading never touches them. A case_id can only ever be
+-- one or the other, so the two sources can never silently clobber each other.
+ALTER TABLE benchmark_cases ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'fixture';
 `;
 
 // ── Default-token seed + data migration ──────────────────────────────────────

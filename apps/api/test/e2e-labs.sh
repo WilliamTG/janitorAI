@@ -82,7 +82,7 @@ for _ in $(seq 1 20); do
   sleep 0.5
 done
 check "fixture seeded midtgjerdinga" "$(psql_q "SELECT count(*) FROM benchmark_cases WHERE case_id='midtgjerdinga'")" "1"
-check "seeded case is flagged provisional" "$(psql_q "SELECT provisional FROM benchmark_cases WHERE case_id='midtgjerdinga'")" "t"
+check "seeded case is no longer provisional (real report transcribed)" "$(psql_q "SELECT provisional FROM benchmark_cases WHERE case_id='midtgjerdinga'")" "f"
 check "fasit carries the excluded cause" \
   "$(psql_q "SELECT reference->'excluded_causes'->0->>'category' FROM benchmark_cases WHERE case_id='midtgjerdinga'")" \
   "TRYKKSATT_RØR"
@@ -99,10 +99,18 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/admin/labs/runs
   -H 'Content-Type: application/json' -d '{"projectId":"x"}')
 check "POST runs without secret is 401" "$code" "401"
 
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE/api/admin/labs/cases/smoke-case" \
+  -H 'Content-Type: application/json' -d '{"reference":{}}')
+check "PUT cases without secret is 401" "$code" "401"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/api/admin/labs/cases/smoke-case")
+check "DELETE cases without secret is 401" "$code" "401"
+
 # ── Reads with a valid secret ────────────────────────────────────────────────
 CASES=$(curl -s -H "x-admin-secret: $ADMIN" "$BASE/api/admin/labs/cases")
 check "cases lists the seeded fasit" "$(echo "$CASES" | jq -r '.cases[0].caseId')" "midtgjerdinga"
-check "cases marks it provisional" "$(echo "$CASES" | jq -r '.cases[0].provisional')" "true"
+check "seeded fasit is no longer provisional" "$(echo "$CASES" | jq -r '.cases[0].provisional')" "false"
+check "seeded fasit is fixture-owned" "$(echo "$CASES" | jq -r '.cases[0].source')" "fixture"
 check "cases never leaks tester_token" "$(echo "$CASES" | grep -c 'tester_token')" "0"
 
 RUNS=$(curl -s -H "x-admin-secret: $ADMIN" "$BASE/api/admin/labs/runs")
@@ -131,6 +139,45 @@ check "run without an engine reports the config fault" "$(echo "$RESP" | jq -r '
 # The run ledger is written only after the engine responds, so a request that
 # never reached the engine must leave no trace to mistake for an experiment.
 check "failed run wrote no ledger row" "$(psql_q "SELECT count(*) FROM ai_test_runs")" "0"
+
+# ── Manual reference-case upload (dashboard path, no git involved) ──────────
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE/api/admin/labs/cases/midtgjerdinga" \
+  -H "x-admin-secret: $ADMIN" -H 'Content-Type: application/json' \
+  -d '{"reference":{"expected_source_category":"NEDBØR"}}')
+check "PUT on a fixture-owned case_id is 409" "$code" "409"
+check "fixture-owned case is untouched by the rejected PUT" \
+  "$(psql_q "SELECT source FROM benchmark_cases WHERE case_id='midtgjerdinga'")" "fixture"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE/api/admin/labs/cases/smoke-case" \
+  -H "x-admin-secret: $ADMIN" -H 'Content-Type: application/json' \
+  -d '{"label":"Smoke case","provisional":true,"reference":{"expected_source_category":"KONDENS"}}')
+check "PUT a new manual case is 200" "$code" "200"
+check "manual case persisted with source=manual" \
+  "$(psql_q "SELECT source FROM benchmark_cases WHERE case_id='smoke-case'")" "manual"
+
+CASES2=$(curl -s -H "x-admin-secret: $ADMIN" "$BASE/api/admin/labs/cases")
+check "cases now includes the manual upload" \
+  "$(echo "$CASES2" | jq -r '[.cases[].caseId] | contains(["smoke-case"]) | tostring')" "true"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE/api/admin/labs/cases/smoke-case" \
+  -H "x-admin-secret: $ADMIN" -H 'Content-Type: application/json' \
+  -d '{"label":"Smoke case v2","provisional":false,"reference":{"expected_source_category":"AVLØPSRØR"}}')
+check "PUT re-editing an existing manual case is 200" "$code" "200"
+check "manual case edit took effect" \
+  "$(psql_q "SELECT reference->>'expected_source_category' FROM benchmark_cases WHERE case_id='smoke-case'")" "AVLØPSRØR"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/api/admin/labs/cases/midtgjerdinga" \
+  -H "x-admin-secret: $ADMIN")
+check "DELETE on a fixture-owned case_id is 409" "$code" "409"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/api/admin/labs/cases/smoke-case" \
+  -H "x-admin-secret: $ADMIN")
+check "DELETE on the manual case is 204" "$code" "204"
+check "manual case actually gone" "$(psql_q "SELECT count(*) FROM benchmark_cases WHERE case_id='smoke-case'")" "0"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/api/admin/labs/cases/smoke-case" \
+  -H "x-admin-secret: $ADMIN")
+check "DELETE on an already-gone case is 404" "$code" "404"
 
 # ── Blocks proxy degrades honestly without an engine ─────────────────────────
 check "blocks reports 503 when no engine is configured" \

@@ -521,6 +521,42 @@
           <div class="empty-state">Ingen kjøringer logget.</div>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-title">Referansecaser</div>
+        <div class="replay-intro">
+          Last opp en fasit uten å røre git. Caser herfra lagres med
+          <code>source: manual</code> og overlever redeploy, men kan aldri
+          overskrive en case som eies av
+          <code>apps/api/fixtures/benchmark-cases.json</code> (og omvendt) —
+          en case-id tilhører alltid enten filen eller dashbordet, aldri
+          begge. Vil du ha den versjonssatt, flytt innholdet inn i
+          fixture-filen og slett den manuelle raden.
+        </div>
+        <div id="labsCasesList">
+          <div class="empty-state">Laster …</div>
+        </div>
+        <div class="replay-detail-grid" style="margin-top:14px;">
+          <div class="replay-detail-field"><label>Case-ID (ny, eller en eksisterende manuell)<br>
+            <input id="labsCaseUploadId" type="text" placeholder="f.eks. bekkelaget-1" style="width:100%;"></label></div>
+          <div class="replay-detail-field"><label>Merkelapp<br>
+            <input id="labsCaseUploadLabel" type="text" placeholder="kort beskrivelse" style="width:100%;"></label></div>
+        </div>
+        <div class="replay-detail-field" style="margin-top:8px;"><label>Kilde/notat (valgfritt)<br>
+          <input id="labsCaseUploadNote" type="text" placeholder="hvor kommer fasiten fra?" style="width:100%;"></label></div>
+        <div class="replay-detail-field" style="margin-top:8px;">
+          <label>
+            <input type="checkbox" id="labsCaseUploadProvisional" checked>
+            Foreløpig fasit (vis som "foreløpig" i velgeren)
+          </label>
+        </div>
+        <div class="replay-detail-field" style="margin-top:8px;"><label>Fasit (JSON) — samme felter som <code>reference</code> i fixture-filen<br>
+          <textarea id="labsCaseUploadJson" rows="10" style="width:100%;font-family:monospace;font-size:12px;"
+            placeholder='{&#10;  "expected_source_category": "NEDBØR",&#10;  "expected_acute_or_gradual": "GRADVIS",&#10;  "root_cause_keywords": ["..."],&#10;  "root_cause_keywords_min": 2,&#10;  "excluded_causes": [],&#10;  "accepted_byggforsk": [],&#10;  "empty_reference_acceptable": true&#10;}'></textarea></label></div>
+        <div class="replay-actions" style="margin-top:10px;">
+          <button class="btn-primary" id="labsCaseUploadBtn" onclick="uploadLabsCase()">Lagre case</button>
+        </div>
+      </div>
     </div>
 
     <!-- ══ PRESENTATION TAB ══ -->
@@ -1324,8 +1360,96 @@
       labsCases = casesData.cases || [];
       labsProjects = casesData.projects || [];
       renderLabsForm(blocksData.prompt_version);
+      renderLabsCasesList();
     } catch (err) {
       wrap.innerHTML = '<div class="empty-state">Kunne ikke laste Labs: ' + escHtml(err.message) + '</div>';
+    }
+  }
+
+  function renderLabsCasesList() {
+    const wrap = document.getElementById('labsCasesList');
+    if (!wrap) return;
+    if (!labsCases.length) {
+      wrap.innerHTML = '<div class="empty-state">Ingen referansecaser ennå.</div>';
+      return;
+    }
+    wrap.innerHTML = labsCases.map(c => {
+      const manual = c.source === 'manual';
+      return (
+        '<div class="replay-project-check" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
+          '<div>' +
+            '<span class="replay-project-name">' + escHtml(c.label || c.caseId) + '</span> ' +
+            '<span class="replay-project-meta">' + escHtml(c.caseId) + '</span> ' +
+            '<span class="badge ' + (manual ? 'badge-skipped' : 'badge-active') + '">' + (manual ? 'manuell' : 'fixture') + '</span> ' +
+            (c.provisional ? '<span class="badge badge-skipped">foreløpig</span>' : '') +
+          '</div>' +
+          (manual
+            ? '<div>' +
+                '<button class="btn-ghost" onclick="editLabsCase(' + JSON.stringify(c.caseId) + ')">Rediger</button> ' +
+                '<button class="btn-ghost" onclick="deleteLabsCase(' + JSON.stringify(c.caseId) + ')">Slett</button>' +
+              '</div>'
+            : '<span class="replay-project-meta">rediger i fixture-filen</span>')
+        + '</div>'
+      );
+    }).join('');
+  }
+
+  function editLabsCase(caseId) {
+    const c = labsCases.find(x => x.caseId === caseId);
+    if (!c || c.source !== 'manual') return;
+    document.getElementById('labsCaseUploadId').value = c.caseId;
+    document.getElementById('labsCaseUploadLabel').value = c.label || '';
+    document.getElementById('labsCaseUploadNote').value = c.sourceNote || '';
+    document.getElementById('labsCaseUploadProvisional').checked = c.provisional !== false;
+    document.getElementById('labsCaseUploadJson').value = JSON.stringify(c.reference, null, 2);
+    document.getElementById('labsCaseUploadJson').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  async function uploadLabsCase() {
+    const caseId = ((document.getElementById('labsCaseUploadId') || {}).value || '').trim();
+    if (!caseId) { showStatus('Case-ID er påkrevd.', 'error'); return; }
+    const label = ((document.getElementById('labsCaseUploadLabel') || {}).value || '').trim();
+    const sourceNote = ((document.getElementById('labsCaseUploadNote') || {}).value || '').trim();
+    const provisional = !!(document.getElementById('labsCaseUploadProvisional') || {}).checked;
+    const rawJson = ((document.getElementById('labsCaseUploadJson') || {}).value || '').trim();
+    let reference;
+    try {
+      reference = JSON.parse(rawJson);
+    } catch (err) {
+      showStatus('Fasit-JSON er ikke gyldig: ' + err.message, 'error');
+      return;
+    }
+    const btn = document.getElementById('labsCaseUploadBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Lagrer …'; }
+    try {
+      const res = await apiFetch('/api/admin/labs/cases/' + encodeURIComponent(caseId), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, sourceNote, provisional, reference }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      showStatus('Case lagret.', 'success');
+      await loadLabsForm();
+    } catch (err) {
+      showStatus('Kunne ikke lagre case: ' + err.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Lagre case'; }
+    }
+  }
+
+  async function deleteLabsCase(caseId) {
+    if (!confirm('Slette manuell case "' + caseId + '"? Kan ikke angres.')) return;
+    try {
+      const res = await apiFetch('/api/admin/labs/cases/' + encodeURIComponent(caseId), { method: 'DELETE' });
+      if (!res.ok && res.status !== 204) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || ('HTTP ' + res.status));
+      }
+      showStatus('Case slettet.', 'success');
+      await loadLabsForm();
+    } catch (err) {
+      showStatus('Kunne ikke slette case: ' + err.message, 'error');
     }
   }
 
