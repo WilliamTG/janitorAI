@@ -70,52 +70,82 @@ function selectVideoId(snapshot, videoFilename) {
 }
 
 async function begin(pool, testerToken, projectId, attemptId, testHint, resumeExistingAttempt) {
-  const persisted = projectId
-    ? await pool.query("SELECT data FROM projects WHERE id=$1 AND tester_token=$2", [projectId, testerToken])
-    : { rows: [] };
-  if (!persisted.rows.length) {
-    if (testHint) {
-      const err = new Error("Test project must be synced before report generation");
-      err.code = "TEST_PROJECT_NOT_SYNCED";
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const persisted = projectId
+      ? await client.query(
+          "SELECT data FROM projects WHERE id=$1 AND tester_token=$2 FOR UPDATE",
+          [projectId, testerToken]
+        )
+      : { rows: [] };
+    if (!persisted.rows.length) {
+      if (testHint) {
+        const err = new Error("Test project must be synced before report generation");
+        err.code = "TEST_PROJECT_NOT_SYNCED";
+        throw err;
+      }
+      const err = new Error("Project not found");
+      err.code = "PROJECT_NOT_FOUND";
       throw err;
     }
-    const err = new Error("Project not found");
-    err.code = "PROJECT_NOT_FOUND";
-    throw err;
-  }
-  const source = persisted.rows[0].data || {};
-  const isTestProject = source.isTestProject === true;
-  const inserted = await pool.query(
-    `INSERT INTO report_generations
-      (tester_token,project_id,attempt_id,doc_id,status,is_test_project)
-     VALUES ($1,$2,$3,NULL,'processing',$4)
-     ON CONFLICT DO NOTHING RETURNING attempt_id`,
-    [testerToken, projectId, attemptId, isTestProject]
-  );
-  if (inserted.rows.length) return { source, isTestProject, existingDocId: null };
-  const prior = await pool.query(
-    `SELECT doc_id,status,is_test_project FROM report_generations
-      WHERE tester_token=$1 AND project_id=$2 AND attempt_id=$3 LIMIT 1`,
-    [testerToken, projectId, attemptId]
-  );
-  const row = prior.rows[0];
-  if (row && row.status === "success" && row.doc_id) {
-    return { source, isTestProject: Boolean(row.is_test_project), existingDocId: row.doc_id };
-  }
-  if (row && (row.status === "error" || row.status === "failed")) {
-    await pool.query(
-      `UPDATE report_generations SET status='processing',doc_id=NULL,updated_at=now()
-        WHERE tester_token=$1 AND project_id=$2 AND attempt_id=$3`,
+    const source = persisted.rows[0].data || {};
+    const isTestProject = source.isTestProject === true;
+    const inserted = await client.query(
+      `INSERT INTO report_generations
+        (tester_token,project_id,attempt_id,doc_id,status,is_test_project)
+       VALUES ($1,$2,$3,NULL,'processing',$4)
+       ON CONFLICT DO NOTHING RETURNING attempt_id`,
+      [testerToken, projectId, attemptId, isTestProject]
+    );
+    if (inserted.rows.length) {
+      // A new attempt starts a new active report session. The reset boundary is
+      // retained in the ledger, but no longer masks this attempt from the UI.
+      await client.query(
+        `UPDATE projects
+            SET data = data || jsonb_build_object('reportResetAt', NULL::text),
+                report_reset_at = NULL,
+                updated_at = now()
+          WHERE id = $1 AND tester_token = $2`,
+        [projectId, testerToken]
+      );
+      await client.query("COMMIT");
+      return { source, isTestProject, existingDocId: null };
+    }
+    const prior = await client.query(
+      `SELECT doc_id,status,is_test_project FROM report_generations
+        WHERE tester_token=$1 AND project_id=$2 AND attempt_id=$3 LIMIT 1`,
       [testerToken, projectId, attemptId]
     );
-    return { source, isTestProject: Boolean(row.is_test_project), existingDocId: null };
+    const row = prior.rows[0];
+    if (row && row.status === "success" && row.doc_id) {
+      await client.query("COMMIT");
+      return { source, isTestProject: Boolean(row.is_test_project), existingDocId: row.doc_id };
+    }
+    if (row && (row.status === "error" || row.status === "failed")) {
+      await client.query(
+        `UPDATE report_generations SET status='processing',doc_id=NULL,updated_at=now()
+          WHERE tester_token=$1 AND project_id=$2 AND attempt_id=$3`,
+        [testerToken, projectId, attemptId]
+      );
+      await client.query("COMMIT");
+      return { source, isTestProject: Boolean(row.is_test_project), existingDocId: null };
+    }
+    if (row && canResumeExistingAttempt(resumeExistingAttempt, row.status)) {
+      await client.query("COMMIT");
+      return { source, isTestProject: Boolean(row.is_test_project), existingDocId: null };
+    }
+    const err = new Error("Report attempt already exists");
+    err.code = "REPORT_ATTEMPT_EXISTS";
+    throw err;
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (_) {}
+    throw error;
+  } finally {
+    client.release();
   }
-  if (row && canResumeExistingAttempt(resumeExistingAttempt, row.status)) {
-    return { source, isTestProject: Boolean(row.is_test_project), existingDocId: null };
-  }
-  const err = new Error("Report attempt already exists");
-  err.code = "REPORT_ATTEMPT_EXISTS";
-  throw err;
 }
 
 async function finish(pool, testerToken, projectId, attemptId, docId, status) {
@@ -194,11 +224,13 @@ async function generateReport({
     source = selectReportSnapshot(begun.source, projectOverride);
     if (begun.existingDocId) {
       await pool.query(
-        `UPDATE projects SET data=data || $3::jsonb,updated_at=now()
+        `UPDATE projects SET data=data || $3::jsonb,updated_at=now(),
+          report_reset_at = NULL
           WHERE id=$1 AND tester_token=$2`,
         [projectId, testerToken, JSON.stringify({
           reportUrl: `https://docs.google.com/document/d/${begun.existingDocId}`,
           reportStatus: "ready", reportError: null, reportAttemptId: attemptId,
+          reportResetAt: null,
         })]
       );
       return { status: "success", url: `https://docs.google.com/document/d/${begun.existingDocId}`, analysis: null, idempotent: true };
@@ -259,11 +291,13 @@ async function generateReport({
       await record(data?.doc_id || null, "error");
       await pool.query(
         `UPDATE projects SET data=data || $3::jsonb,updated_at=now()
+          ,report_reset_at = NULL
           WHERE id=$1 AND tester_token=$2`,
         [projectId, testerToken, JSON.stringify({
           reportStatus: "failed",
           reportError: String(data?.message || "AI engine error").slice(0, 1000),
           reportAttemptId: attemptId,
+          reportResetAt: null,
         })]
       ).catch(() => {});
       const err = new Error(data?.message || "AI engine error");
@@ -275,6 +309,7 @@ async function generateReport({
     const update = {
       reportUrl: data.url, reportStatus: "ready", reportError: null,
       reportAttemptId: attemptId,
+      reportResetAt: null,
     };
     const versionAt = new Date().toISOString();
     const versionContent = data.analysis && typeof data.analysis === "object"
@@ -292,6 +327,7 @@ async function generateReport({
     };
     await pool.query(
       `UPDATE projects SET data=data || $3::jsonb,updated_at=now()
+          ,report_reset_at = NULL
         WHERE id=$1 AND tester_token=$2`,
       [projectId, testerToken, JSON.stringify(update)]
     );
@@ -303,10 +339,12 @@ async function generateReport({
       } catch (_) {}
       await pool.query(
         `UPDATE projects SET data=data || $3::jsonb,updated_at=now()
+          ,report_reset_at = NULL
           WHERE id=$1 AND tester_token=$2`,
         [projectId, testerToken, JSON.stringify({
           reportStatus: "failed", reportError: String(error.message || error).slice(0, 1000),
           reportAttemptId: attemptId,
+          reportResetAt: null,
         })]
       ).catch(() => {});
       started = false;

@@ -240,6 +240,7 @@ export default function ProjectDetailScreen() {
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [isValidatingToken, setIsValidatingToken] = useState(false);
   const [isAddingVideo, setIsAddingVideo] = useState(false);
+  const [isResettingReport, setIsResettingReport] = useState(false);
 
   const project = state.project;
   const isTokenValid = tokenStatus === 'valid';
@@ -1496,6 +1497,7 @@ export default function ProjectDetailScreen() {
         reportError: undefined,
         reportApproval: undefined,
         reportAttemptId,
+        reportResetAt: null,
       });
 
       // A report can be based on any available inspection evidence. Include a
@@ -1580,7 +1582,13 @@ export default function ProjectDetailScreen() {
       if (!response.ok) {
         const errMsg = `${nb.report.failed} (HTTP ${response.status})`;
         logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
-        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg, reportAttemptId: undefined });
+        await updateProjectLocally({
+          ...snap,
+          reportStatus: 'failed',
+          reportError: errMsg,
+          reportAttemptId: undefined,
+          reportResetAt: null,
+        });
         toast.show({ message: nb.report.failed, variant: 'error' });
         return;
       }
@@ -1589,7 +1597,13 @@ export default function ProjectDetailScreen() {
       if (data.status === 'error') {
         const errMsg = data.message || 'AI-motoren returnerte en feil.';
         logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
-        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg, reportAttemptId: undefined });
+        await updateProjectLocally({
+          ...snap,
+          reportStatus: 'failed',
+          reportError: errMsg,
+          reportAttemptId: undefined,
+          reportResetAt: null,
+        });
         toast.show({ message: nb.report.failed, variant: 'error' });
         return;
       }
@@ -1611,6 +1625,7 @@ export default function ProjectDetailScreen() {
           reportStatus: 'ready',
           reportError: undefined,
           reportAttemptId: undefined,
+          reportResetAt: null,
           // Ny rapport er et nytt AI-utkast — aldri arv forrige godkjenning.
           reportApproval: undefined,
           // Eksplisitt tom-markør når analysen mangler (aldri undefined):
@@ -1631,14 +1646,26 @@ export default function ProjectDetailScreen() {
       } else {
         const errMsg = 'Fikk ingen dokumentlenke fra AI-motoren.';
         logError(new Error(errMsg), 'generate-google-doc').catch(() => {});
-        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg, reportAttemptId: undefined });
+        await updateProjectLocally({
+          ...snap,
+          reportStatus: 'failed',
+          reportError: errMsg,
+          reportAttemptId: undefined,
+          reportResetAt: null,
+        });
         toast.show({ message: nb.report.failed, variant: 'error' });
       }
     } catch (error) {
       logError(error, 'generate-google-doc').catch(() => {});
       if (await handleApiError(error)) {
         // 401 må ikke etterlate prosjektet i evig «Behandler …».
-        await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: nb.report.unauthorized, reportAttemptId: undefined });
+        await updateProjectLocally({
+          ...snap,
+          reportStatus: 'failed',
+          reportError: nb.report.unauthorized,
+          reportAttemptId: undefined,
+          reportResetAt: null,
+        });
         return;
       }
       // Brutt forbindelse betyr ikke at genereringen feilet — motoren kan
@@ -1654,6 +1681,7 @@ export default function ProjectDetailScreen() {
             reportError: undefined,
             reportApproval: undefined,
             reportAttemptId,
+            reportResetAt: null,
           });
           toast.show({ message: nb.report.stillRunning, variant: 'info' });
           return;
@@ -1666,11 +1694,89 @@ export default function ProjectDetailScreen() {
         }
       }
       const errMsg = 'Fikk ikke kontakt med serveren.';
-      await updateProjectLocally({ ...snap, reportStatus: 'failed', reportError: errMsg, reportAttemptId: undefined });
+      await updateProjectLocally({
+        ...snap,
+        reportStatus: 'failed',
+        reportError: errMsg,
+        reportAttemptId: undefined,
+        reportResetAt: null,
+      });
       toast.show({ message: errMsg, variant: 'error' });
     } finally {
       setIsGeneratingGoogleDoc(false);
     }
+  };
+
+  const resetReport = async () => {
+    if (!project || isResettingReport || isGeneratingGoogleDoc || !isTokenValid) return;
+
+    try {
+      setIsResettingReport(true);
+      const response = await apiFetch(
+        `${getApiBaseUrl()}/api/projects/${encodeURIComponent(project.id)}/report/reset`,
+        { method: 'POST' },
+      );
+
+      if (response.status === 409) {
+        let code: string | undefined;
+        try {
+          code = (await response.json())?.code;
+        } catch {
+          // Keep the generic reset error when the response is not JSON.
+        }
+        if (code === 'REPORT_IN_PROGRESS') {
+          toast.show({ message: nb.report.resetInProgress, variant: 'info' });
+          return;
+        }
+      }
+
+      if (!response.ok) {
+        toast.show({ message: nb.report.resetFailed, variant: 'error' });
+        return;
+      }
+
+      const data: any = await response.json();
+      if (!data?.project || String(data.project.id) !== String(project.id)) {
+        toast.show({ message: nb.report.resetFailed, variant: 'error' });
+        return;
+      }
+
+      const resetProject = data.project as Project;
+      if (metaSaveTimerRef.current) {
+        clearTimeout(metaSaveTimerRef.current);
+        metaSaveTimerRef.current = null;
+      }
+      projectRef.current = resetProject;
+      setGoogleDocUrl(null);
+      setShareInfo(null);
+      setReportEdit(null);
+      const nextProjects = await updateProjectInStorage(resetProject);
+      setState({
+        projects: nextProjects,
+        project: { ...resetProject, id: String(resetProject.id) },
+      });
+      toast.show({ message: nb.report.resetSuccess, variant: 'success' });
+    } catch (error) {
+      logError(error, 'reset-report').catch(() => {});
+      if (await handleApiError(error)) return;
+      toast.show({ message: nb.report.resetFailed, variant: 'error' });
+    } finally {
+      setIsResettingReport(false);
+    }
+  };
+
+  const confirmResetReport = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${nb.report.resetConfirmTitle}\n\n${nb.report.resetConfirmMessage}`)) {
+        void resetReport();
+      }
+      return;
+    }
+
+    Alert.alert(nb.report.resetConfirmTitle, nb.report.resetConfirmMessage, [
+      { text: nb.common.cancel, style: 'cancel' },
+      { text: nb.report.reset, style: 'destructive', onPress: () => void resetReport() },
+    ]);
   };
 
   // B7/B10: kontoløs delingslenke med PIN og utløp (Wenn-mønsteret, hardnet).
@@ -2204,6 +2310,14 @@ export default function ProjectDetailScreen() {
   const renderReport = () => {
     const displayUrl = googleDocUrl || project?.reportUrl;
     const reportFailed = project?.reportStatus === 'failed';
+    const hasReportState = Boolean(
+      project?.reportUrl ||
+        project?.reportStatus ||
+        project?.reportDraft ||
+        project?.reportFinal ||
+        project?.reportApproval ||
+        project?.hasSuccessfulDocument,
+    );
     const generateLabel = project?.isTestProject
       ? displayUrl
         ? nb.report.regenerateTest
@@ -2244,6 +2358,21 @@ export default function ProjectDetailScreen() {
               {nb.projects.documentCreated}
             </Caption>
           </View>
+        ) : null}
+        {hasReportState ? (
+          <SecondaryButton
+            onPress={confirmResetReport}
+            loading={isResettingReport}
+            disabled={
+              !isTokenValid ||
+              isResettingReport ||
+              isGeneratingGoogleDoc ||
+              project?.reportStatus === 'processing'
+            }
+            icon={<Ionicons name="refresh-outline" size={17} color={theme.colors.foreground} />}
+          >
+            {isResettingReport ? nb.report.resetting : nb.report.reset}
+          </SecondaryButton>
         ) : null}
         <PrimaryButton
           testID="generate-report"

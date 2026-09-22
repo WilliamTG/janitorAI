@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS projects (
   id            TEXT      PRIMARY KEY,
   data          JSONB     NOT NULL,
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  tester_token  VARCHAR
+  tester_token  VARCHAR,
+  report_reset_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS deleted_projects (
@@ -182,6 +183,7 @@ UPDATE media SET mime_type = 'video/mp4'
 
 -- Incremental migrations for pre-existing deployments
 ALTER TABLE projects        ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
+ALTER TABLE projects        ADD COLUMN IF NOT EXISTS report_reset_at TIMESTAMPTZ;
 ALTER TABLE deleted_projects ADD COLUMN IF NOT EXISTS tester_token   VARCHAR;
 ALTER TABLE media           ADD COLUMN IF NOT EXISTS tester_token    VARCHAR;
 ALTER TABLE media           ADD COLUMN IF NOT EXISTS unreferenced_at TIMESTAMPTZ;

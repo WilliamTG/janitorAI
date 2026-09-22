@@ -75,6 +75,7 @@ export function resolveStuckReport(project: Project, status: ReportStatus): Reco
         reportStatus: 'ready',
         reportError: undefined,
         reportAttemptId: undefined,
+        reportResetAt: null,
         // Gjenfunnet dokument er et nytt AI-utkast brukeren ikke har sett —
         // aldri arv forrige godkjenning. Tomme markører (aldri undefined) så
         // finnes-vinner-flettingen ikke gjenoppliver et eldre utkast under den

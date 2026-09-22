@@ -153,6 +153,15 @@ export const nb = {
     ],
     ready: 'Rapporten er klar',
     failed: 'Rapportgenereringen feilet',
+    reset: 'Tilbakestill rapport',
+    resetting: 'Tilbakestiller …',
+    resetConfirmTitle: 'Tilbakestille rapporten?',
+    resetConfirmMessage:
+      'Rapportlenken og godkjenningen fjernes fra dette prosjektet, men Google-dokumentet og befaringens dokumentasjon beholdes. Du kan lage en ny rapport senere.',
+    resetSuccess: 'Rapporten er tilbakestilt til utkast',
+    resetFailed: 'Kunne ikke tilbakestille rapporten',
+    resetInProgress:
+      'Rapporten lages fortsatt — vent til genereringen er ferdig før du tilbakestiller.',
     alreadyInProgress:
       'En rapport genereres allerede for dette prosjektet — vent til den er ferdig.',
     openReport: 'Åpne rapporten',
