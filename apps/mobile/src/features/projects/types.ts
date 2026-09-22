@@ -224,6 +224,8 @@ export type Project = {
   rooms?: Room[];
   /** URL of the generated Google Doc (persisted after successful generation). */
   reportUrl?: string;
+  /** Server-owned boundary hiding report history before the active session. */
+  reportResetAt?: string | null;
   /** Server-derived proof that at least one Google Doc was created successfully. */
   hasSuccessfulDocument?: boolean;
   /** Server-derived timestamp for the latest successful Google Doc generation. */

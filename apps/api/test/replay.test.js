@@ -16,6 +16,7 @@ const {
   selectVideoId,
 } = require("../src/reportService");
 const { createBatch, scopeDigest } = require("../src/replay");
+const projectsRouter = require("../src/routes/projects");
 const fs = require("node:fs");
 
 test("only replay workers may resume a processing ledger attempt", () => {
@@ -397,6 +398,64 @@ test("strict Google Docs legacy URL validation", () => {
   assert.equal(strictGoogleDocUrl("http://docs.google.com/document/d/abc/edit"), false);
   assert.equal(strictGoogleDocUrl("https://docs.google.com/document/d/abc/export?format=pdf"), false);
   assert.equal(strictGoogleDocUrl("https://evil.example/document/d/abc/edit"), false);
+});
+
+test("report reset clears active report state but preserves inspection evidence", () => {
+  const source = {
+    id: "project-1",
+    name: "Inspection",
+    notes: [{ id: "note-1", text: "Keep this evidence", photos: [{ remoteId: "photo-1" }] }],
+    reportMeta: { customerName: "Customer" },
+    reportUrl: "https://docs.google.com/document/d/old/edit",
+    reportStatus: "ready",
+    reportError: "old error",
+    reportAttemptId: "attempt-old",
+    reportApproval: { approvedBy: "Inspector", approvedAt: "2026-09-12T10:00:00.000Z" },
+    reportDraft: { content: { area: "Kitchen" }, at: "2026-09-12T10:00:00.000Z" },
+    reportFinal: { content: { area: "Kitchen" }, at: "2026-09-12T10:00:00.000Z" },
+  };
+
+  const reset = projectsRouter.clearActiveReportFields(
+    source,
+    "2026-09-22T08:00:00.000Z"
+  );
+
+  assert.equal(reset.reportUrl, undefined);
+  assert.equal(reset.reportStatus, undefined);
+  assert.equal(reset.reportError, undefined);
+  assert.equal(reset.reportAttemptId, undefined);
+  assert.equal(reset.reportApproval, undefined);
+  assert.equal(reset.reportDraft, undefined);
+  assert.equal(reset.reportFinal, undefined);
+  assert.equal(reset.reportResetAt, "2026-09-22T08:00:00.000Z");
+  assert.deepEqual(reset.notes, source.notes);
+  assert.deepEqual(reset.reportMeta, source.reportMeta);
+  assert.equal(source.reportUrl, "https://docs.google.com/document/d/old/edit");
+});
+
+test("document tag hides ledger history before reset and reveals newer generations", () => {
+  const resetAt = "2026-09-22T08:00:00.000Z";
+  const old = projectsRouter.withDocumentTag(
+    { id: "project-1", reportResetAt: resetAt },
+    {
+      successful_doc_id: "old-doc",
+      successful_document_created_at: "2026-09-21T10:00:00.000Z",
+      report_reset_at: resetAt,
+    }
+  );
+  assert.equal(old.hasSuccessfulDocument, false);
+  assert.equal(old.successfulDocumentCreatedAt, null);
+
+  const newer = projectsRouter.withDocumentTag(
+    { id: "project-1", reportResetAt: resetAt },
+    {
+      successful_doc_id: "new-doc",
+      successful_document_created_at: "2026-09-22T09:00:00.000Z",
+      report_reset_at: resetAt,
+    }
+  );
+  assert.equal(newer.hasSuccessfulDocument, true);
+  assert.equal(newer.successfulDocumentCreatedAt, "2026-09-22T09:00:00.000Z");
 });
 
 test("clone strips local evidence, keeps owned media, clears report state, and does not mutate source", () => {

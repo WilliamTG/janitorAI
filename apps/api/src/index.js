@@ -636,17 +636,21 @@ app.get("/report/status/:projectId", async (req, res) => {
   try {
     const row = attemptId
       ? await getPool().query(
-          `SELECT attempt_id, doc_id, status, is_test_project, created_at
-           FROM report_generations
-           WHERE tester_token = $1 AND project_id = $2 AND attempt_id = $3
+          `SELECT rg.attempt_id, rg.doc_id, rg.status, rg.is_test_project, rg.created_at
+           FROM report_generations rg
+           LEFT JOIN projects p ON p.id = rg.project_id AND p.tester_token = rg.tester_token
+           WHERE rg.tester_token = $1 AND rg.project_id = $2 AND rg.attempt_id = $3
+             AND (p.id IS NULL OR p.report_reset_at IS NULL OR rg.created_at > p.report_reset_at)
            LIMIT 1`,
           [req.testerToken, projectId, attemptId]
         )
       : await getPool().query(
-          `SELECT attempt_id, doc_id, status, is_test_project, created_at
-           FROM report_generations
-           WHERE tester_token = $1 AND project_id = $2
-           ORDER BY created_at DESC LIMIT 1`,
+          `SELECT rg.attempt_id, rg.doc_id, rg.status, rg.is_test_project, rg.created_at
+           FROM report_generations rg
+           LEFT JOIN projects p ON p.id = rg.project_id AND p.tester_token = rg.tester_token
+           WHERE rg.tester_token = $1 AND rg.project_id = $2
+             AND (p.id IS NULL OR p.report_reset_at IS NULL OR rg.created_at > p.report_reset_at)
+           ORDER BY rg.created_at DESC LIMIT 1`,
           [req.testerToken, projectId]
         );
     const latest = row.rows[0]
