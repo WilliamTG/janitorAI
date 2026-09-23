@@ -89,14 +89,20 @@ forvekslingene (fasit → hypotese) — direkte sammenlignbart med politiets lis
 
 Regnereglene som avgjør om tallet er ærlig (alle i `--selftest`):
 stillhetsklipp holdes **utenfor** total-WER (hallusinerte ord telles kun som
-«hall», ikke som innsettinger); klipp uten fasit hoppes over og listes;
-bindestrek = mellomrom («rør-i-rør» = «rør i rør»).
+«hall», ikke som innsettinger); klipp uten fasit eller med tom hypotese hoppes
+over og listes; bindestrek = mellomrom («rør-i-rør» = «rør i rør»); fagtermer
+telles i bøyd form («sluket», «dampsperra», «kryperommet»); «%», «mm», «cm»,
+«m2» normaliseres til ord på begge sider. Fagterm-gjenfinning er forekomst-
+vektet — les **per-term-tabellen** og makro-tallet for å se hvilket fagord
+modellen konsekvent bommer på.
 
 Praktisk: `/transcribe` ligger bak API-ets tunge takst — **30 kall per 15
 minutter per tester**, delt med bildebeskrivelse og rapport. 20–30 klipp kan
 trippe det; skriptet venter det API-et ber om (`retryAfterSeconds`) og prøver
 én gang til. Et klipp som feiler stopper ikke resten. Stillhetsklipp gir tom
-tekst fra Gemini (API-et svarer 500) — skriptet tolker det som tom hypotese.
+tekst fra Gemini (API-et svarer 500) — for et stillhetsklipp tolker skriptet
+det som tom hypotese; for et taleklipp kan det like gjerne være et blokkert
+svar, og klippet hoppes over i stedet for å bli 100 % WER.
 Modellnavnet `NbAiLab/nb-whisper-large` er default for `--engine nb-whisper`,
 men er ikke verifisert mot Hugging Face i dette arbeidet; sjekk gjeldende
 utgave hos NbAiLab før første kjøring (`--whisper-model`).

@@ -39,9 +39,16 @@ Fasit-regler (avgjør om tallet betyr noe):
   - «%» blir «prosent», og enhetsforkortelsene mm/cm/m2 blir millimeter/
     centimeter/kvadratmeter på BEGGE sider — Gemini skriver gjerne «18,5 %»
     der fasit-regelen sier «18,5 prosent», og det er ikke en transkripsjonsfeil.
-  - Fagtermer telles også i bøyd form (sluket, membranen, flisene, lektene):
-    grunnform + valgfritt suffiks -en/-et/-a/-er/-ene/-ane. Stammeendringer
-    («sponplata») telles ikke; legg da inn formen som egen term.
+  - Fagtermer telles også i bøyd form: grunnform + valgfritt suffiks
+    (-en/-et/-a/-er/-ene/-ane; for termer på -e: -n/-a/-r/-ne, så «dampsperra»
+    og «sponplata» treffer; siste konsonant kan dobles: «kryperommet»). Skriv
+    termene i entall («varmekabel», ikke «varmekabler»).
+  - Fagterm-gjenfinning er FOREKOMSTVEKTET (mikro): et klipp med ti «sluk»
+    veier ti ganger «klemring». Rapporten viser derfor også recall per term og
+    et makro-gjennomsnitt — det er per-term-tabellen som avslører fagordet
+    modellen konsekvent bommer på.
+  - Tom hypotese på et taleklipp (tom cache-fil, motor som ga «») hoppes over
+    og listes; den scores aldri stille som 100 % WER.
   - "silence": true krever tom fasit; et klipp-id kan bare inneholde
     bokstaver, siffer, punktum, bindestrek og understrek, og må være unikt.
   - Fasit skrives av en fagperson. Om det heter «klemring» eller «klemmering»
@@ -73,10 +80,10 @@ from pathlib import Path
 DEFAULT_FAGTERMER = [
     "sluk", "klemring", "membran", "smøremembran", "svill", "bunnsvill", "toppsvill",
     "diffusjonssperre", "dampsperre", "vindsperre", "fuktsperre", "grunnmurspapp",
-    "drenering", "drensrør", "kapillærbrytende", "fuktskjolder", "fuktmåling",
+    "drenering", "drensrør", "kapillærbrytende", "fuktskjold", "fuktmåling",
     "hulltaking", "krypkjeller", "kryperom", "bjelkelag", "tilfarergulv", "påstøp",
     "avretting", "våtromsnormen", "våtsone", "downlights", "rørgjennomføring",
-    "rør-i-rør", "fordelerskap", "vannbåren varme", "varmekabler", "flis", "fug",
+    "rør-i-rør", "fordelerskap", "vannbåren varme", "varmekabel", "flis", "fug",
     "silikonfug", "gips", "sponplate", "osb", "råte", "muggsopp", "svertesopp",
     "saltutslag", "kalkutfelling", "betong", "lettklinker", "leca", "ringmur",
     "radonsperre", "takstein", "undertak", "sutak", "lekt", "sløyfe", "beslag",
@@ -91,15 +98,39 @@ _STRIP_RE = re.compile(r"[^\wæøåÆØÅ\s]", re.UNICODE)
 # Anvendes symmetrisk på begge sider etter tokenisering.
 _UNIT_MAP = {"mm": "millimeter", "cm": "centimeter", "m2": "kvadratmeter", "m²": "kvadratmeter"}
 
-# Norske bøyningssuffikser som telles som samme fagterm (sluk/sluket/slukene).
-_SUFFIX = r"(?:en|et|a|er|ene|ane)?"
+# Enhet limt på tallet («15mm», «12m2») skilles ut før tokenisering.
+_UNIT_GLUED_RE = re.compile(r"(?<=\d)\s*(mm|cm|m2|m²)(?![\wæøå])")
+
+_VOWELS = set("aeiouyæøå")
+
+
+def _term_pattern(term: str) -> str:
+    """Grunnform + norsk bøyning: -en/-et/-a/-er/-ene/-ane (sluk → sluket,
+    slukene); termer på -e får -n/-a/-r/-ne (dampsperre → dampsperra,
+    dampsperren); siste konsonant kan dobles (kryperom → kryperommet).
+    Ordgrense foran (svill ≠ bunnsvill) og bak (sluk ≠ slukrist)."""
+    if term.endswith("e"):
+        # dampsperre → dampsperre/dampsperren/dampsperra/dampsperrer/dampsperrene
+        body = re.escape(term[:-1]) + r"(?:e|en|a|er|ene)"
+    elif term.endswith("el"):
+        # varmekabel → varmekabel/varmekabelen/varmekabler/varmekablene (e faller)
+        body = re.escape(term[:-2]) + r"(?:el|elen|ler|lene)"
+    else:
+        # kryperom → kryperommet: dobling av siste konsonant KUN sammen med et
+        # suffiks — «slukk» alene skal fortsatt være en feilstaving av «sluk».
+        last = term[-1]
+        double = f"{re.escape(last)}?" if last.isalpha() and last not in _VOWELS else ""
+        body = re.escape(term) + f"(?:{double}(?:en|et|a|er|ene|ane))?"
+    return r"(?<![\wæøå])" + body + r"(?![\wæøå])"
 
 
 # ── Normalisering og alignment ──────────────────────────────────────────────
 
 def normalize(text: str) -> str:
     t = (text or "").lower().replace("’", "'")
-    t = t.replace("%", " prosent ").replace("m²", " kvadratmeter ")
+    t = t.replace("%", " prosent ")
+    t = _UNIT_GLUED_RE.sub(r" \1 ", t)
+    t = t.replace("m²", " kvadratmeter ")
     t = _STRIP_RE.sub(" ", t)
     words = [_UNIT_MAP.get(w, w) for w in t.split()]
     return " ".join(words)
@@ -144,10 +175,7 @@ def align(ref: list[str], hyp: list[str]):
 
 
 def count_phrase(norm_text: str, term: str) -> int:
-    # Ordgrense foran (sluk ≠ bunnsvill-typen sammensetninger), bøyningssuffiks
-    # bak (sluk = sluket = slukene), men aldri inn i et annet ord (sluk ≠ slukrist).
-    pat = r"(?<![\wæøå])" + re.escape(term) + _SUFFIX + r"(?![\wæøå])"
-    return len(re.findall(pat, norm_text))
+    return len(re.findall(_term_pattern(term), norm_text))
 
 
 def score_clip(ref_text: str, hyp_text: str, fagtermer: list[str], silence: bool = False) -> dict:
@@ -265,10 +293,11 @@ ENGINES = {"docrai": engine_docrai, "nb-whisper": engine_nb_whisper}
 _ID_RE = re.compile(r"[\w-]+(?:\.[\w-]+)*")
 
 
-def load_manifest(path: Path) -> list[dict]:
+def load_manifest(path: Path, engine: str = "file") -> list[dict]:
     """Valideres FØR første API-kall: en skrivefeil skal ikke oppdages etter at
     kvoten er brukt. Id-en blir et filnavn under hyp/<label>/, så den må være
-    trygg (ingen «/», ingen «..») og unik (duplikat ville vektet klippet dobbelt)."""
+    trygg (ingen «/», ingen «..») og unik (duplikat ville vektet klippet dobbelt).
+    Motorer som lytter på lyd krever «audio» på hver oppføring."""
     items = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(items, list) or not items:
         sys.exit("Manifestet må være en ikke-tom JSON-liste.")
@@ -284,6 +313,8 @@ def load_manifest(path: Path) -> list[dict]:
         seen.add(cid)
         if it.get("silence") and str(it.get("reference_text") or "").strip():
             sys.exit(f"{cid}: \"silence\": true krever tom fasit (reference_text).")
+        if engine != "file" and not str(it.get("audio") or "").strip():
+            sys.exit(f"{cid}: mangler 'audio' (påkrevd for --engine {engine}).")
     return items
 
 
@@ -331,7 +362,7 @@ def accumulate(tot: dict, sc: dict, silence: bool) -> None:
 def run(args) -> int:
     manifest_path = Path(args.manifest)
     base = manifest_path.parent
-    items = load_manifest(manifest_path)
+    items = load_manifest(manifest_path, engine=args.engine)
     fagtermer = load_fagtermer(Path(args.fagtermer) if args.fagtermer else base / "fagtermer.txt")
     label = args.label or args.engine
     hyp_dir = Path(args.hyp_dir) if args.hyp_dir else base / "hyp"
@@ -340,6 +371,7 @@ def run(args) -> int:
 
     results, tot = [], new_totals()
     subs, term_misses, skipped = Counter(), Counter(), []
+    term_ref, term_hits = Counter(), Counter()   # per-term recall (makro)
 
     for it in items:
         cid = str(it["id"])
@@ -376,7 +408,14 @@ def run(args) -> int:
                 print(f"   FEIL {cid}: {msg}", file=sys.stderr)
                 skipped.append(f"{cid} (motorfeil: {msg})")
                 continue
-            cache.write_text(hyp, encoding="utf-8")
+            if silence or hyp.strip():
+                cache.write_text(hyp, encoding="utf-8")   # tom tekst caches kun for stillhet
+
+        if not silence and not hyp.strip():
+            # Tom hypotese på taleklipp = N slettinger = 100 % WER, stille.
+            # Typisk en gammel tom cache-fil eller en motor som ga «».
+            skipped.append(f"{cid} (tom hypotese på taleklipp — slett hyp/{label}/{cid}.txt og kjør igjen)")
+            continue
 
         sc = score_clip(ref, hyp, fagtermer, silence=silence)
         sc["id"] = cid
@@ -386,6 +425,8 @@ def run(args) -> int:
         if not silence:
             subs.update(sc["subs"])
             for row in sc["fagterm_rows"]:
+                term_ref[row["term"]] += row["ref"]
+                term_hits[row["term"]] += row["hits"]
                 if row["hits"] < row["ref"]:
                     term_misses[row["term"]] += row["ref"] - row["hits"]
 
@@ -409,10 +450,19 @@ def run(args) -> int:
     else:
         print("\nTotal-WER er udefinert: ingen taleklipp med fasit ble scoret (kun stillhet).")
 
+    per_term = {t: term_hits[t] / term_ref[t] for t in term_ref if term_ref[t]}
+    macro = sum(per_term.values()) / len(per_term) if per_term else None
     if ft_recall is not None:
-        print(f"\nFagterm-gjenfinning: **{ft_recall:.1%}**  (feilrate på fagord: {1 - ft_recall:.1%})")
+        print(f"\nFagterm-gjenfinning: **{ft_recall:.1%}** forekomstvektet "
+              f"(feilrate på fagord: {1 - ft_recall:.1%}); makro over {len(per_term)} termer: **{macro:.1%}**")
     if tot["hall"]:
         print(f"Hallusinerte ord på stillhetsklipp: **{tot['hall']}**  ← politiets «tulle-tekst»")
+    if per_term:
+        print("\nRecall per fagterm (lavest først):")
+        print("| term | funnet/i fasit | recall |")
+        print("|---|---:|---:|")
+        for term in sorted(per_term, key=lambda t: (per_term[t], -term_ref[t], t)):
+            print(f"| {term} | {term_hits[term]}/{term_ref[term]} | {per_term[term]:.0%} |")
     if term_misses:
         print("\nFagtermer som gikk tapt (term: antall):")
         for term, n in term_misses.most_common(20):
@@ -426,7 +476,8 @@ def run(args) -> int:
 
     out = Path(args.out) if args.out else base / f"results-{label}.json"
     out.write_text(json.dumps({
-        "label": label, "wer": wer, "fagterm_recall": ft_recall,
+        "label": label, "wer": wer, "fagterm_recall": ft_recall, "fagterm_recall_macro": macro,
+        "fagterm_per_term": {t: {"ref": term_ref[t], "hits": term_hits[t], "recall": per_term[t]} for t in per_term},
         "totals": tot, "clips": results, "skipped": skipped,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\nSkrevet: {out}")
@@ -504,6 +555,16 @@ def selftest() -> int:
 
     r = score_clip("fukt 18,5 prosent ved 15 millimeter", "fukt 18,5 % ved 15 mm", ft)
     checks.append(("% og mm normaliseres likt på begge sider", r["wer"] == 0.0))
+
+    r = score_clip("fukt 18,5 prosent ved 15 millimeter på 12 kvadratmeter", "fukt 18,5% ved 15mm på 12m2", ft)
+    checks.append(("enheter limt på tallet (18,5%, 15mm, 12m2)", r["wer"] == 0.0))
+
+    r = score_clip("dampsperra sponplata takrenna kryperommet varmekablene fuktskjoldene",
+                   "dampsperra sponplata takrenna kryperommet varmekablene fuktskjoldene", ft)
+    checks.append(("bøyning av termer på -e, dobbel konsonant og flertall", r["fagterm_ref"] == 6 and r["fagterm_hits"] == 6))
+
+    r = score_clip("dampsperre er punktert", "dampsperra er punktert", ft)
+    checks.append(("dampsperre/dampsperra: fagterm gjenfunnet, ordet er en S", r["fagterm_hits"] == 1 and r["S"] == 1))
 
     r = score_clip("fukt 18 prosent", "fukt 18 prosent", ft, silence=True)
     checks.append(("silence gir alltid wer=None", r["wer"] is None and r["hallucinated"] == 3))
