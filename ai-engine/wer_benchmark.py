@@ -36,6 +36,14 @@ Fasit-regler (avgjør om tallet betyr noe):
     fasit» — de teller aldri stille med i totalen.
   - Bindestrek normaliseres til mellomrom, så «rør-i-rør» og «rør i rør» er
     like; fagtermene normaliseres med samme regel.
+  - «%» blir «prosent», og enhetsforkortelsene mm/cm/m2 blir millimeter/
+    centimeter/kvadratmeter på BEGGE sider — Gemini skriver gjerne «18,5 %»
+    der fasit-regelen sier «18,5 prosent», og det er ikke en transkripsjonsfeil.
+  - Fagtermer telles også i bøyd form (sluket, membranen, flisene, lektene):
+    grunnform + valgfritt suffiks -en/-et/-a/-er/-ene/-ane. Stammeendringer
+    («sponplata») telles ikke; legg da inn formen som egen term.
+  - "silence": true krever tom fasit; et klipp-id kan bare inneholde
+    bokstaver, siffer, punktum, bindestrek og understrek, og må være unikt.
   - Fasit skrives av en fagperson. Om det heter «klemring» eller «klemmering»
     avgjør hele fagterm-tallet.
 
@@ -43,7 +51,10 @@ Motoren «docrai» og API-ets takst: /transcribe ligger bak heavyLimiter —
 30 kall per 15 minutter per tester, delt med /describe-image og /report.
 20–30 klipp kan trippe taket; ved 429 leses retryAfterSeconds, skriptet venter
 og prøver én gang til. Et klipp som feiler i motoren stopper ikke kjøringen:
-det listes under «Hoppet over» med feilteksten, og caches ikke.
+det listes under «Hoppet over» med feilteksten, og caches ikke. API-ets 500
+«No transcription returned» godtas som tom hypotese KUN for stillhetsklipp;
+for taleklipp kan det like gjerne være et blokkert Gemini-svar (SAFETY/
+RECITATION), og da hoppes klippet over i stedet for å caches som 100 % WER.
 
 WER = (S + D + I) / N, der N er antall ord i FASIT (ikke antall feil).
 """
@@ -76,13 +87,22 @@ DEFAULT_FAGTERMER = [
 # så «rør-i-rør» = «rør i rør» (ellers S=1, I=2 på en riktig transkripsjon).
 _STRIP_RE = re.compile(r"[^\wæøåÆØÅ\s]", re.UNICODE)
 
+# Måleenheter skrives ulikt av modell og fasit uten at det er en hørefeil.
+# Anvendes symmetrisk på begge sider etter tokenisering.
+_UNIT_MAP = {"mm": "millimeter", "cm": "centimeter", "m2": "kvadratmeter", "m²": "kvadratmeter"}
+
+# Norske bøyningssuffikser som telles som samme fagterm (sluk/sluket/slukene).
+_SUFFIX = r"(?:en|et|a|er|ene|ane)?"
+
 
 # ── Normalisering og alignment ──────────────────────────────────────────────
 
 def normalize(text: str) -> str:
     t = (text or "").lower().replace("’", "'")
+    t = t.replace("%", " prosent ").replace("m²", " kvadratmeter ")
     t = _STRIP_RE.sub(" ", t)
-    return re.sub(r"\s+", " ", t).strip()
+    words = [_UNIT_MAP.get(w, w) for w in t.split()]
+    return " ".join(words)
 
 
 def tokens(text: str) -> list[str]:
@@ -124,7 +144,9 @@ def align(ref: list[str], hyp: list[str]):
 
 
 def count_phrase(norm_text: str, term: str) -> int:
-    pat = r"(?<![\wæøå])" + re.escape(term) + r"(?![\wæøå])"
+    # Ordgrense foran (sluk ≠ bunnsvill-typen sammensetninger), bøyningssuffiks
+    # bak (sluk = sluket = slukene), men aldri inn i et annet ord (sluk ≠ slukrist).
+    pat = r"(?<![\wæøå])" + re.escape(term) + _SUFFIX + r"(?![\wæøå])"
     return len(re.findall(pat, norm_text))
 
 
@@ -134,7 +156,8 @@ def score_clip(ref_text: str, hyp_text: str, fagtermer: list[str], silence: bool
     N = len(ref)
     out = {
         "N": N, "S": S, "D": D, "I": I,
-        "wer": (S + D + I) / N if N else None,
+        # Stillhetsklipp har per definisjon ingen WER — alt er hallusinert.
+        "wer": (S + D + I) / N if (N and not silence) else None,
         "hallucinated": len(hyp) if silence else 0,
         "subs": [(r, h) for op, r, h in ops if op == "sub"],
         "dels": [r for op, r, _ in ops if op == "del"],
@@ -181,7 +204,7 @@ def _post_transcribe(base: str, token: str, audio_path: Path):
         )
 
 
-def engine_docrai(audio_path: Path, args) -> str:
+def engine_docrai(audio_path: Path, args, silence: bool = False) -> str:
     import time
 
     base = os.environ.get("DOCRAI_API_URL", "http://localhost:3000").rstrip("/")
@@ -199,9 +222,13 @@ def engine_docrai(audio_path: Path, args) -> str:
         time.sleep(wait)
         r = _post_transcribe(base, token, audio_path)
     if r.status_code == 500 and "No transcription returned" in r.text:
-        # Gemini ga tom tekst (typisk på stillhetsklipp). API-et svarer 500,
-        # men for benchmarken er dette en gyldig, tom hypotese — ikke en feil.
-        return ""
+        # Gemini ga tom tekst. API-et skiller ikke «stille» fra «blokkert
+        # kandidat» (SAFETY/RECITATION). For et stillhetsklipp er tom tekst
+        # den forventede, gyldige hypotesen; for et taleklipp er det en
+        # motorfeil som ikke skal caches som 100 % WER.
+        if silence:
+            return ""
+        raise RuntimeError("/transcribe ga tom tekst på taleklipp (blokkert eller stille?) — ikke cachet")
     if r.status_code != 200:
         raise RuntimeError(f"/transcribe {r.status_code}: {r.text[:200]}")
     return r.json().get("text", "")
@@ -210,7 +237,7 @@ def engine_docrai(audio_path: Path, args) -> str:
 _ASR = None
 
 
-def engine_nb_whisper(audio_path: Path, args) -> str:
+def engine_nb_whisper(audio_path: Path, args, silence: bool = False) -> str:
     global _ASR
     try:
         from transformers import pipeline
@@ -235,13 +262,28 @@ ENGINES = {"docrai": engine_docrai, "nb-whisper": engine_nb_whisper}
 
 # ── Kjøring ─────────────────────────────────────────────────────────────────
 
+_ID_RE = re.compile(r"[\w-]+(?:\.[\w-]+)*")
+
+
 def load_manifest(path: Path) -> list[dict]:
+    """Valideres FØR første API-kall: en skrivefeil skal ikke oppdages etter at
+    kvoten er brukt. Id-en blir et filnavn under hyp/<label>/, så den må være
+    trygg (ingen «/», ingen «..») og unik (duplikat ville vektet klippet dobbelt)."""
     items = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(items, list) or not items:
         sys.exit("Manifestet må være en ikke-tom JSON-liste.")
+    seen = set()
     for it in items:
         if "id" not in it:
             sys.exit(f"Manifest-oppføring mangler 'id': {it}")
+        cid = str(it["id"])
+        if not _ID_RE.fullmatch(cid):
+            sys.exit(f"Ugyldig klipp-id {cid!r}: bruk bokstaver, siffer, punktum, bindestrek, understrek.")
+        if cid in seen:
+            sys.exit(f"Duplikat klipp-id i manifestet: {cid!r}")
+        seen.add(cid)
+        if it.get("silence") and str(it.get("reference_text") or "").strip():
+            sys.exit(f"{cid}: \"silence\": true krever tom fasit (reference_text).")
     return items
 
 
@@ -301,8 +343,15 @@ def run(args) -> int:
 
     for it in items:
         cid = str(it["id"])
-        ref = read_reference(it, base)
         silence = bool(it.get("silence"))
+        try:
+            ref = read_reference(it, base)
+        except OSError as e:  # manglende/uleselig fasitfil skal ikke velte 29 andre
+            skipped.append(f"{cid} (fasitfil: {e.__class__.__name__} {it.get('reference')})")
+            continue
+        if silence and ref.strip():
+            skipped.append(f"{cid} (silence=true med ikke-tom fasit)")
+            continue
         if not silence and not ref.strip():
             # Tom fasit uten silence-flagg: ville gitt N=0 og alle hyp-ord som I.
             skipped.append(f"{cid} (mangler fasit)")
@@ -321,7 +370,7 @@ def run(args) -> int:
                 continue
             print(f"… {label}: {cid}", file=sys.stderr)
             try:
-                hyp = ENGINES[args.engine](audio, args)
+                hyp = ENGINES[args.engine](audio, args, silence=silence)
             except Exception as e:  # ett klipp skal ikke velte 29 andre
                 msg = str(e).replace("\n", " ")[:120]
                 print(f"   FEIL {cid}: {msg}", file=sys.stderr)
@@ -354,8 +403,11 @@ def run(args) -> int:
         w = f"{r['wer']:.1%}" if r["wer"] is not None else (f"hall. {r['hallucinated']} ord" if r["hallucinated"] else "—")
         ft = f"{r['fagterm_hits']}/{r['fagterm_ref']}" if r["fagterm_ref"] else "—"
         print(f"| {r['id']} | {r['N']} | {r['S']} | {r['D']} | {r['I']} | {w} | {ft} |")
-    print(f"| **totalt** | {tot['N']} | {tot['S']} | {tot['D']} | {tot['I']} | "
-          f"**{wer:.1%}** | **{tot['ft_hits']}/{tot['ft_ref']}** |" if wer is not None else "")
+    if wer is not None:
+        print(f"| **totalt** | {tot['N']} | {tot['S']} | {tot['D']} | {tot['I']} | "
+              f"**{wer:.1%}** | **{tot['ft_hits']}/{tot['ft_ref']}** |")
+    else:
+        print("\nTotal-WER er udefinert: ingen taleklipp med fasit ble scoret (kun stillhet).")
 
     if ft_recall is not None:
         print(f"\nFagterm-gjenfinning: **{ft_recall:.1%}**  (feilrate på fagord: {1 - ft_recall:.1%})")
@@ -440,6 +492,21 @@ def selftest() -> int:
     accumulate(tot, score_clip("fukt 18 prosent", "fukt 18 prosent", ft), silence=False)
     accumulate(tot, score_clip("", "takk for at du så på", ft, silence=True), silence=True)
     checks.append(("stillhet holdes utenfor total-WER", tot["N"] == 3 and tot["I"] == 0 and tot["hall"] == 6 and tot["clips_in_wer"] == 1))
+
+    r = score_clip("sluket i badet og membranen ved klemringen, fugene rundt flisene",
+                   "sluket i badet og membranen ved klemmeringen, fugene rundt flisene", ft)
+    checks.append(("bøyde fagtermer telles (sluket/membranen/fugene/flisene), klemringen tapt",
+                   r["fagterm_ref"] == 5 and r["fagterm_hits"] == 4 and r["S"] == 1))
+
+    r = score_clip("sluk slukrist fug fuge lekt lekter", "sluk slukrist fug fuge lekt lekter", ft)
+    checks.append(("suffiks går ikke inn i sammensetninger (slukrist, fuge), men lekter = lekt",
+                   {row["term"]: row["ref"] for row in r["fagterm_rows"]} == {"sluk": 1, "fug": 1, "lekt": 2}))
+
+    r = score_clip("fukt 18,5 prosent ved 15 millimeter", "fukt 18,5 % ved 15 mm", ft)
+    checks.append(("% og mm normaliseres likt på begge sider", r["wer"] == 0.0))
+
+    r = score_clip("fukt 18 prosent", "fukt 18 prosent", ft, silence=True)
+    checks.append(("silence gir alltid wer=None", r["wer"] is None and r["hallucinated"] == 3))
 
     ok = True
     for name, passed in checks:

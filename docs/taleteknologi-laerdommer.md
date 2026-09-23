@@ -117,7 +117,10 @@ etter `modellbytte-runbook.md`, med tidsstempler og konfidens på kjøpet.
   `report_generations` sammen med `prompt_version`. `proposed` teller bare
   referanser med et NNN.NNN-nummer; «Ingen»/«N/A»/«-» går i `unparseable`
   (kun i loggen, ikke i tabellen), så forkastningsraten ikke blåses opp av
-  tomprat. Forkastes 80 % av Byggforsk-referansene, er «Byggforsk-henvisninger»
+  tomprat. To forbehold når raten leses: porten ser bare på det *første*
+  NNN.NNN-nummeret i feltet, og ignorerer teksten rundt (så «NS 3600 727.813»
+  telles som verifisert 727.813). Eldre rader har NULL i kolonnene — bruk
+  `COALESCE` i uttrekket. Forkastes 80 % av Byggforsk-referansene, er «Byggforsk-henvisninger»
   i salgsflaten en påstand uten dekning — samme feilklasse som slettepåstanden
   i personvernteksten, bare flyttet til produktet. Nå kan det leses ut med én SQL.
 
