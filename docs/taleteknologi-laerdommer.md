@@ -19,7 +19,8 @@ verktøyet: `ai-engine/wer_benchmark.py`.
    timer norsk av 680 000+ timer totalt. Nasjonalbiblioteket har 66 000+ timer
    norsk og publiserer egne NB-Whisper-modeller. Kursets egne tall: engelsk
    ~4 % WER, norsk ~9,5 %; vanlige ord ~5 %, fagord ~7 %. *En femåring har
-   hørt ca. 14 600 timer tale — 55 ganger mer norsk enn Whisper.*
+   hørt ca. 14 600 timer tale — 55 ganger mer norsk enn Whisper.* (Alle tall
+   i dette avsnittet er fra kursnotatene, ikke verifisert mot kilde.)
 2. **Ikke finjuster.** En domenemodell krever 1 000–5 000 timer transkribert
    tale. Vi har det ikke, og vi har ikke rettsgrunnlag for å trene på kundenes
    skadesaker — politiet har det heller ikke («den dagen politiet har hjemler
@@ -86,6 +87,20 @@ Speechmatics …) kan sammenlignes uten kode. Rapporten viser WER, fagterm-
 gjenfinning, hallusinerte ord på stillhet, tapte fagtermer og de vanligste
 forvekslingene (fasit → hypotese) — direkte sammenlignbart med politiets liste.
 
+Regnereglene som avgjør om tallet er ærlig (alle i `--selftest`):
+stillhetsklipp holdes **utenfor** total-WER (hallusinerte ord telles kun som
+«hall», ikke som innsettinger); klipp uten fasit hoppes over og listes;
+bindestrek = mellomrom («rør-i-rør» = «rør i rør»).
+
+Praktisk: `/transcribe` ligger bak API-ets tunge takst — **30 kall per 15
+minutter per tester**, delt med bildebeskrivelse og rapport. 20–30 klipp kan
+trippe det; skriptet venter det API-et ber om (`retryAfterSeconds`) og prøver
+én gang til. Et klipp som feiler stopper ikke resten. Stillhetsklipp gir tom
+tekst fra Gemini (API-et svarer 500) — skriptet tolker det som tom hypotese.
+Modellnavnet `NbAiLab/nb-whisper-large` er default for `--engine nb-whisper`,
+men er ikke verifisert mot Hugging Face i dette arbeidet; sjekk gjeldende
+utgave hos NbAiLab før første kjøring (`--whisper-model`).
+
 **Beslutningsregel, skrevet før tallet finnes:** likt resultat → behold
 Gemini, spar kompleksitet. NB-Whisper klart bedre på fagord → modellbytte
 etter `modellbytte-runbook.md`, med tidsstempler og konfidens på kjøpet.
@@ -97,12 +112,14 @@ etter `modellbytte-runbook.md`, med tidsstempler og konfidens på kjøpet.
   dokumentkopien var laget og analysen fakturert. Nå stoppes kjøringen før
   kopien, med statisk melding og `token_usage` bevart (bokføres som
   `report_failed`).
-- **Sitatportens telling**: `citation_stats {proposed, verified, rejected}`
-  returneres fra motoren og lagres per kjøring i `report_generations`
-  sammen med `prompt_version`. Forkastes 80 % av Byggforsk-referansene, er
-  «Byggforsk-henvisninger» i salgsflaten en påstand uten dekning — samme
-  feilklasse som slettepåstanden i personvernteksten, bare flyttet til
-  produktet. Nå kan det leses ut med én SQL.
+- **Sitatportens telling**: `citation_stats {proposed, verified, rejected,
+  unparseable}` returneres fra motoren og lagres per kjøring i
+  `report_generations` sammen med `prompt_version`. `proposed` teller bare
+  referanser med et NNN.NNN-nummer; «Ingen»/«N/A»/«-» går i `unparseable`
+  (kun i loggen, ikke i tabellen), så forkastningsraten ikke blåses opp av
+  tomprat. Forkastes 80 % av Byggforsk-referansene, er «Byggforsk-henvisninger»
+  i salgsflaten en påstand uten dekning — samme feilklasse som slettepåstanden
+  i personvernteksten, bare flyttet til produktet. Nå kan det leses ut med én SQL.
 
 ## Landskapet (lysbilde 64)
 
@@ -115,7 +132,8 @@ endepunkt; lista over EU-alternativer er der den dagen en forsikringskunde spør
 
 Dictus (dansk): Stortinget og politiet. Leverandørtall fra foredraget, ikke
 verifisert: 1 time opptak = 3–4 timer manuelt; krimteknisk 55 % av tiden på
-rapport; 150 000 avhør i året; 50–80 % tidsbesparing.
+rapport; 150 000 avhør i året; 50–80 % tidsbesparing. Samme forbehold gjelder
+kundelistene i avsnittet over — de er slik de ble presentert på fagdagen.
 
 ## Åpne oppgaver
 

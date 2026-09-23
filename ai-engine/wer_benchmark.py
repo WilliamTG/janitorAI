@@ -31,9 +31,19 @@ Fasit-regler (avgjør om tallet betyr noe):
     beholdes slik den ble sagt.
   - Tall med siffer («15 millimeter», «78 prosent») — slik prompten ber om.
   - Stillhetsklipp: tom fasit + "silence": true. Alt motoren produserer der
-    er hallusinert, og telles for seg.
+    er hallusinert og telles for seg — stillhetsklipp inngår IKKE i total-WER.
+  - Klipp uten fasit (og uten "silence") hoppes over og listes som «mangler
+    fasit» — de teller aldri stille med i totalen.
+  - Bindestrek normaliseres til mellomrom, så «rør-i-rør» og «rør i rør» er
+    like; fagtermene normaliseres med samme regel.
   - Fasit skrives av en fagperson. Om det heter «klemring» eller «klemmering»
     avgjør hele fagterm-tallet.
+
+Motoren «docrai» og API-ets takst: /transcribe ligger bak heavyLimiter —
+30 kall per 15 minutter per tester, delt med /describe-image og /report.
+20–30 klipp kan trippe taket; ved 429 leses retryAfterSeconds, skriptet venter
+og prøver én gang til. Et klipp som feiler i motoren stopper ikke kjøringen:
+det listes under «Hoppet over» med feilteksten, og caches ikke.
 
 WER = (S + D + I) / N, der N er antall ord i FASIT (ikke antall feil).
 """
@@ -62,7 +72,9 @@ DEFAULT_FAGTERMER = [
     "takrenne", "nedløp", "terrengfall", "kotehøyde", "gradvis", "akutt",
 ]
 
-_STRIP_RE = re.compile(r"[^\wæøåÆØÅ\s-]", re.UNICODE)
+# Alt som ikke er bokstav/siffer/whitespace blir mellomrom — også bindestrek,
+# så «rør-i-rør» = «rør i rør» (ellers S=1, I=2 på en riktig transkripsjon).
+_STRIP_RE = re.compile(r"[^\wæøåÆØÅ\s]", re.UNICODE)
 
 
 # ── Normalisering og alignment ──────────────────────────────────────────────
@@ -156,21 +168,40 @@ _MIME = {
 }
 
 
-def engine_docrai(audio_path: Path, args) -> str:
+def _post_transcribe(base: str, token: str, audio_path: Path):
     import requests  # allerede i requirements.txt
 
-    base = os.environ.get("DOCRAI_API_URL", "http://localhost:3000").rstrip("/")
-    token = os.environ.get("TESTER_TOKEN")
-    if not token:
-        sys.exit("TESTER_TOKEN må settes (samme tilgangskode som appen bruker).")
     mime = _MIME.get(audio_path.suffix.lower(), "audio/mp4")
     with open(audio_path, "rb") as f:
-        r = requests.post(
+        return requests.post(
             f"{base}/transcribe",
             headers={"x-tester-token": token},
             files={"file": (audio_path.name, f, mime)},
             timeout=180,
         )
+
+
+def engine_docrai(audio_path: Path, args) -> str:
+    import time
+
+    base = os.environ.get("DOCRAI_API_URL", "http://localhost:3000").rstrip("/")
+    token = os.environ.get("TESTER_TOKEN")
+    if not token:
+        sys.exit("TESTER_TOKEN må settes (samme tilgangskode som appen bruker).")
+    r = _post_transcribe(base, token, audio_path)
+    if r.status_code == 429:
+        # heavyLimiter: 30 kall/15 min per tester. Vent det API-et ber om, én gang.
+        try:
+            wait = int(r.json().get("retryAfterSeconds") or r.headers.get("Retry-After") or 60)
+        except (ValueError, TypeError):
+            wait = 60
+        print(f"   429 fra /transcribe — venter {wait} s og prøver én gang til", file=sys.stderr)
+        time.sleep(wait)
+        r = _post_transcribe(base, token, audio_path)
+    if r.status_code == 500 and "No transcription returned" in r.text:
+        # Gemini ga tom tekst (typisk på stillhetsklipp). API-et svarer 500,
+        # men for benchmarken er dette en gyldig, tom hypotese — ikke en feil.
+        return ""
     if r.status_code != 200:
         raise RuntimeError(f"/transcribe {r.status_code}: {r.text[:200]}")
     return r.json().get("text", "")
@@ -225,14 +256,34 @@ def read_reference(item: dict, base: Path) -> str:
 
 def load_fagtermer(path: Path | None) -> list[str]:
     """Én term per linje (fil) eller per element (default). Linjer som starter
-    med # er kommentarer. Lengste først, så flerordsuttrykk vinner over deler."""
+    med # er kommentarer. Termene normaliseres som teksten (så «rør-i-rør»
+    blir frasen «rør i rør»). Rekkefølgen spiller ingen rolle: count_phrase
+    teller hver term uavhengig med ordgrenser — alfabetisk kun for stabil output."""
     if path and path.exists():
         raw = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines()]
         raw = [ln for ln in raw if ln and not ln.startswith("#")]
     else:
         raw = DEFAULT_FAGTERMER
     terms = {normalize(t) for t in raw}
-    return sorted((t for t in terms if t), key=len, reverse=True)
+    return sorted(t for t in terms if t)
+
+
+def new_totals() -> dict:
+    return {"N": 0, "S": 0, "D": 0, "I": 0, "hall": 0, "ft_ref": 0, "ft_hits": 0, "clips_in_wer": 0}
+
+
+def accumulate(tot: dict, sc: dict, silence: bool) -> None:
+    """Stillhetsklipp bidrar KUN til «hall» — aldri til S/D/I/N. Ellers ville
+    hallusinerte ord telt dobbelt (som I og som hall), og N=0 ville blåst opp
+    total-WER."""
+    if silence:
+        tot["hall"] += sc["hallucinated"]
+        return
+    for k in ("N", "S", "D", "I"):
+        tot[k] += sc[k]
+    tot["ft_ref"] += sc["fagterm_ref"]
+    tot["ft_hits"] += sc["fagterm_hits"]
+    tot["clips_in_wer"] += 1
 
 
 def run(args) -> int:
@@ -245,16 +296,23 @@ def run(args) -> int:
     cache_dir = hyp_dir / label
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    results, tot = [], {"N": 0, "S": 0, "D": 0, "I": 0, "hall": 0, "ft_ref": 0, "ft_hits": 0}
+    results, tot = [], new_totals()
     subs, term_misses, skipped = Counter(), Counter(), []
 
     for it in items:
         cid = str(it["id"])
+        ref = read_reference(it, base)
+        silence = bool(it.get("silence"))
+        if not silence and not ref.strip():
+            # Tom fasit uten silence-flagg: ville gitt N=0 og alle hyp-ord som I.
+            skipped.append(f"{cid} (mangler fasit)")
+            continue
+
         cache = cache_dir / f"{cid}.txt"
         if cache.exists():
             hyp = cache.read_text(encoding="utf-8")
         elif args.engine == "file":
-            skipped.append(cid)
+            skipped.append(f"{cid} (mangler hyp/{label}/{cid}.txt)")
             continue
         else:
             audio = base / it["audio"]
@@ -262,23 +320,25 @@ def run(args) -> int:
                 skipped.append(f"{cid} (mangler {audio.name})")
                 continue
             print(f"… {label}: {cid}", file=sys.stderr)
-            hyp = ENGINES[args.engine](audio, args)
+            try:
+                hyp = ENGINES[args.engine](audio, args)
+            except Exception as e:  # ett klipp skal ikke velte 29 andre
+                msg = str(e).replace("\n", " ")[:120]
+                print(f"   FEIL {cid}: {msg}", file=sys.stderr)
+                skipped.append(f"{cid} (motorfeil: {msg})")
+                continue
             cache.write_text(hyp, encoding="utf-8")
 
-        ref = read_reference(it, base)
-        silence = bool(it.get("silence"))
         sc = score_clip(ref, hyp, fagtermer, silence=silence)
         sc["id"] = cid
+        sc["silence"] = silence
         results.append(sc)
-        for k in ("N", "S", "D", "I"):
-            tot[k] += sc[k]
-        tot["hall"] += sc["hallucinated"]
-        tot["ft_ref"] += sc["fagterm_ref"]
-        tot["ft_hits"] += sc["fagterm_hits"]
-        subs.update(sc["subs"])
-        for row in sc["fagterm_rows"]:
-            if row["hits"] < row["ref"]:
-                term_misses[row["term"]] += row["ref"] - row["hits"]
+        accumulate(tot, sc, silence)
+        if not silence:
+            subs.update(sc["subs"])
+            for row in sc["fagterm_rows"]:
+                if row["hits"] < row["ref"]:
+                    term_misses[row["term"]] += row["ref"] - row["hits"]
 
     if not results:
         sys.exit("Ingen klipp scoret. " + (f"Hoppet over: {skipped}" if skipped else ""))
@@ -286,7 +346,8 @@ def run(args) -> int:
     wer = (tot["S"] + tot["D"] + tot["I"]) / tot["N"] if tot["N"] else None
     ft_recall = tot["ft_hits"] / tot["ft_ref"] if tot["ft_ref"] else None
 
-    print(f"\n## WER — {label}  ({len(results)} klipp, fasit {tot['N']} ord)\n")
+    n_sil = len(results) - tot["clips_in_wer"]
+    print(f"\n## WER — {label}  ({tot['clips_in_wer']} klipp i WER, {n_sil} stillhetsklipp, fasit {tot['N']} ord)\n")
     print("| klipp | N | S | D | I | WER | fagtermer |")
     print("|---|---:|---:|---:|---:|---:|---:|")
     for r in results:
@@ -368,6 +429,17 @@ def selftest() -> int:
 
     r = score_clip("a b c d", "a c d", ft)
     checks.append(("sletting", r["D"] == 1 and r["S"] == 0 and r["I"] == 0))
+
+    r = score_clip("rør-i-rør i fordelerskap", "rør i rør i fordelerskap", ft)
+    checks.append(("bindestrek = mellomrom (rør-i-rør)", r["wer"] == 0.0 and r["fagterm_ref"] == 2 and r["fagterm_hits"] == 2))
+
+    r = score_clip("sluk og sluk", "sluk og slukk", ft)
+    checks.append(("dobbel fagterm: 2 i fasit, 1 gjenfunnet", r["fagterm_ref"] == 2 and r["fagterm_hits"] == 1 and r["S"] == 1))
+
+    tot = new_totals()
+    accumulate(tot, score_clip("fukt 18 prosent", "fukt 18 prosent", ft), silence=False)
+    accumulate(tot, score_clip("", "takk for at du så på", ft, silence=True), silence=True)
+    checks.append(("stillhet holdes utenfor total-WER", tot["N"] == 3 and tot["I"] == 0 and tot["hall"] == 6 and tot["clips_in_wer"] == 1))
 
     ok = True
     for name, passed in checks:

@@ -247,13 +247,18 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
         # porten forkaster avgjør om «Byggforsk-henvisninger» i salgsflaten er
         # en påstand med dekning. Tallet følger svaret og bokføres per kjøring
         # sammen med prompt_version i report_generations.
-        from byggforsk_index import valider_referanse
-        citation_stats = {"proposed": 0, "verified": 0, "rejected": 0}
+        from byggforsk_index import har_nummer, valider_referanse
+        # proposed = referanser med et NNN.NNN-nummer; «Ingen»/«N/A»/«-» er
+        # ikke forslag og telles som unparseable, ellers blåses forkastnings-
+        # raten opp av tomprat (og det er nettopp raten docs leser).
+        citation_stats = {"proposed": 0, "verified": 0, "rejected": 0, "unparseable": 0}
         if analysis and analysis.evidence_points:
             for punkt in analysis.evidence_points:
                 original = punkt.technical_reference
                 verifisert = valider_referanse(original)
-                if original:
+                if original and not har_nummer(original):
+                    citation_stats["unparseable"] += 1
+                elif original:
                     citation_stats["proposed"] += 1
                     if verifisert:
                         citation_stats["verified"] += 1
@@ -263,7 +268,8 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
                 punkt.technical_reference = verifisert
         print(
             f"📚 Sitatport ({PROMPT_VERSION}): {citation_stats['verified']} verifisert, "
-            f"{citation_stats['rejected']} forkastet av {citation_stats['proposed']} foreslått"
+            f"{citation_stats['rejected']} forkastet av {citation_stats['proposed']} foreslått, "
+            f"{citation_stats['unparseable']} uten nummer"
         )
     except Exception:
         _cleanup_photo_files(photo_records)
