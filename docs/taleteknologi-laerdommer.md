@@ -91,8 +91,9 @@ Regnereglene som avgjør om tallet er ærlig (alle i `--selftest`):
 stillhetsklipp holdes **utenfor** total-WER (hallusinerte ord telles kun som
 «hall», ikke som innsettinger); klipp uten fasit eller med tom hypotese hoppes
 over og listes; bindestrek = mellomrom («rør-i-rør» = «rør i rør»); fagtermer
-telles i bøyd form («sluket», «dampsperra», «kryperommet»); «%», «mm», «cm»,
-«m2» normaliseres til ord på begge sider. Fagterm-gjenfinning er forekomst-
+telles i bøyd form («sluket», «dampsperra», «kryperommet»); «%», «°C», «m»,
+«mm», «cm», «m2»/«kvm», «m3» normaliseres til ord på begge sider, og «1 100»
+leses som to tall (fasit skrives uten tusenskille). Fagterm-gjenfinning er forekomst-
 vektet — les **per-term-tabellen** og makro-tallet for å se hvilket fagord
 modellen konsekvent bommer på. Er klipp hoppet over (manglende fasit, tom
 hypotese, fil som ikke er UTF-8), sier rapporten det øverst og skriptet

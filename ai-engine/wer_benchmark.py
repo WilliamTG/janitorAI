@@ -48,11 +48,15 @@ Fasit-regler (avgjør om tallet betyr noe):
     et makro-gjennomsnitt — det er per-term-tabellen som avslører fagordet
     modellen konsekvent bommer på.
   - Tom hypotese på et taleklipp (tom cache-fil, motor som ga «» eller bare
-    «…») hoppes over og listes; den scores aldri stille som 100 % WER.
+    «…») hoppes over og listes; den scores aldri stille som 100 % WER. Tekst
+    som «[uhørlig]», «[Musikk]» eller «Takk for at du så på» er derimot ord
+    og telles som feil — det ER feil output, ikke fravær av output.
   - Sammensetninger skrives sammen uten bindestrek («sponplate», ikke
     «spon-plate»); «rør-i-rør» er unntaket og normaliseres til mellomrom.
-    Tall skrives uten tusenskille («1500», ikke «1 500») — skriptet slår
-    likevel sammen «1 500» på begge sider. kvm/m2/m3 → kvadratmeter/kubikkmeter.
+    Tall skrives uten tusenskille («1500», ikke «1 500»): «1 100» leses som
+    TO tall (måleserier som «punkt 1, 100 prosent» er vanligere enn beløp).
+    Typografisk skille («1.500», hardt mellomrom) slås sammen. m/mm/cm/kvm/
+    m2/m3 → meter/millimeter/…, «%» → prosent, «°C»/«°» → grader.
   - Makro-recall dekker bare termer som forekommer i fasit.
   - Exit-kode 2 når klipp er hoppet over: resultatet er da ikke hele settet,
     og JSON-en bærer clips_total / clips_scored / skipped_count.
@@ -104,15 +108,19 @@ _STRIP_RE = re.compile(r"[^\wæøåÆØÅ\s]", re.UNICODE)
 # Måleenheter skrives ulikt av modell og fasit uten at det er en hørefeil.
 # Anvendes symmetrisk på begge sider etter tokenisering.
 _UNIT_MAP = {
-    "mm": "millimeter", "cm": "centimeter",
+    "mm": "millimeter", "cm": "centimeter", "m": "meter",
     "m2": "kvadratmeter", "m²": "kvadratmeter", "kvm": "kvadratmeter",
     "m3": "kubikkmeter", "m³": "kubikkmeter",
 }
-# Tusenskille («1 500», «1.500») → «1500» på begge sider.
-_THOUSANDS_RE = re.compile(r"(?<=\d)[ .  ](?=\d{3}(?!\d))")
+# Typografisk tusenskille («1.500», «1 500» med hardt mellomrom) → «1500».
+# Vanlig mellomrom er BEVISST ikke med: «punkt 1, 100 prosent» og «punkt 1 100
+# prosent» er to tall, og et regex kan ikke skille det fra «1 100 kroner».
+# Fasit-regelen sier «tall uten tusenskille», og prompten ber om siffer.
+# Lookbehind stopper også desimal- og årstallstilfeller («18,5 100», «1985 200»).
+_THOUSANDS_RE = re.compile(r"(?<![\d,.]\d)(?<=\d)[.  ](?=\d{3}(?!\d))")
 
 # Enhet limt på tallet («15mm», «12m2») skilles ut før tokenisering.
-_UNIT_GLUED_RE = re.compile(r"(?<=\d)\s*(mm|cm|m2|m²|m3|m³|kvm)(?![\wæøå])")
+_UNIT_GLUED_RE = re.compile(r"(?<=\d)\s*(mm|cm|m2|m²|m3|m³|kvm|m)(?![\wæøå])")
 
 _VOWELS = set("aeiouyæøå")
 
@@ -142,7 +150,7 @@ def _term_pattern(term: str) -> str:
 def normalize(text: str) -> str:
     t = (text or "").lower().replace("’", "'")
     t = _THOUSANDS_RE.sub("", t)
-    t = t.replace("%", " prosent ")
+    t = t.replace("%", " prosent ").replace("°c", " grader ").replace("°", " grader ")
     t = _UNIT_GLUED_RE.sub(r" \1 ", t)
     t = t.replace("m²", " kvadratmeter ").replace("m³", " kubikkmeter ")
     t = _STRIP_RE.sub(" ", t)
@@ -159,23 +167,38 @@ def align(ref: list[str], hyp: list[str]):
     """Levenshtein på ordnivå med tilbakesporing.
     Returnerer (S, D, I, ops); ops er [(op, ref_ord|None, hyp_ord|None)] med
     op i {'ok','sub','del','ins'} i leserekkefølge."""
+    # To kostnadsrader + én byte per celle for tilbakesporing: et 60-minutters
+    # nb-whisper-klipp (~9 000 ord) tar da ~80 MB, ikke ~3 GB som en full
+    # int-matrise av Python-lister ville gjort (MemoryError = intet tall).
     n, m = len(ref), len(hyp)
-    dp = [[0] * (m + 1) for _ in range(n + 1)]
-    for i in range(1, n + 1):
-        dp[i][0] = i
+    DIAG, UP, LEFT = 1, 2, 3
+    bp = [bytearray(m + 1) for _ in range(n + 1)]
     for j in range(1, m + 1):
-        dp[0][j] = j
+        bp[0][j] = LEFT
+    prev = list(range(m + 1))
     for i in range(1, n + 1):
         ri = ref[i - 1]
+        cur = [i] + [0] * m
+        bp[i][0] = UP
+        row_bp = bp[i]
         for j in range(1, m + 1):
-            c = 0 if ri == hyp[j - 1] else 1
-            dp[i][j] = min(dp[i - 1][j - 1] + c, dp[i - 1][j] + 1, dp[i][j - 1] + 1)
+            diag = prev[j - 1] + (0 if ri == hyp[j - 1] else 1)
+            up = prev[j] + 1
+            left = cur[j - 1] + 1
+            if diag <= up and diag <= left:
+                cur[j], row_bp[j] = diag, DIAG
+            elif up <= left:
+                cur[j], row_bp[j] = up, UP
+            else:
+                cur[j], row_bp[j] = left, LEFT
+        prev = cur
     i, j, ops = n, m, []
     while i > 0 or j > 0:
-        if i > 0 and j > 0 and dp[i][j] == dp[i - 1][j - 1] + (0 if ref[i - 1] == hyp[j - 1] else 1):
+        step = bp[i][j]
+        if step == DIAG:
             ops.append(("ok" if ref[i - 1] == hyp[j - 1] else "sub", ref[i - 1], hyp[j - 1]))
             i, j = i - 1, j - 1
-        elif i > 0 and dp[i][j] == dp[i - 1][j] + 1:
+        elif step == UP:
             ops.append(("del", ref[i - 1], None))
             i -= 1
         else:
@@ -322,9 +345,11 @@ def load_manifest(path: Path, engine: str = "file") -> list[dict]:
         cid = str(it["id"])
         if not _ID_RE.fullmatch(cid):
             sys.exit(f"Ugyldig klipp-id {cid!r}: bruk bokstaver, siffer, punktum, bindestrek, understrek.")
-        if cid in seen:
-            sys.exit(f"Duplikat klipp-id i manifestet: {cid!r}")
-        seen.add(cid)
+        # casefold: på Windows/macOS deler «Bad-01» og «bad-01» cache-fil, og
+        # klipp nr. 2 ville stille blitt scoret mot nr. 1 sin hypotese.
+        if cid.casefold() in seen:
+            sys.exit(f"Duplikat klipp-id i manifestet (store/små bokstaver regnes likt): {cid!r}")
+        seen.add(cid.casefold())
         if it.get("silence") and str(it.get("reference_text") or "").strip():
             sys.exit(f"{cid}: \"silence\": true krever tom fasit (reference_text).")
         if engine != "file" and not str(it.get("audio") or "").strip():
@@ -399,8 +424,11 @@ def run(args) -> int:
         silence = bool(it.get("silence"))
         try:
             ref = read_reference(it, base)
-        except (OSError, UnicodeDecodeError) as e:  # manglende/uleselig (cp1252!) fasitfil skal ikke velte 29 andre
-            skipped.append(f"{cid} (fasitfil: {e.__class__.__name__} {it.get('reference')} — må være UTF-8)")
+        except UnicodeDecodeError:  # cp1252/UTF-16-fasit skal ikke velte 29 andre
+            skipped.append(f"{cid} (fasitfil {it.get('reference')} er ikke UTF-8 — konverter fila)")
+            continue
+        except OSError as e:
+            skipped.append(f"{cid} (fasitfil {it.get('reference')}: {e.__class__.__name__})")
             continue
         if silence and ref.strip():
             skipped.append(f"{cid} (silence=true med ikke-tom fasit)")
@@ -603,8 +631,35 @@ def selftest() -> int:
 
     checks.append(("«…» er en tom hypotese (skal hoppes over i run, ikke bli 100 %)", tokens("…") == [] and tokens("...") == []))
 
-    r = score_clip("1 500 kroner og 12 kvadratmeter og 3 kubikkmeter", "1500 kroner og 12 kvm og 3m3", ft)
-    checks.append(("tusenskille, kvm og m3 normaliseres likt", r["wer"] == 0.0))
+    r = score_clip("1.500 kroner og 12 kvadratmeter og 3 kubikkmeter", "1 500 kroner og 12 kvm og 3m3", ft)
+    checks.append(("typografisk tusenskille, kvm og m3 normaliseres likt", r["wer"] == 0.0))
+
+    r = score_clip("punkt 1, 100 prosent og 18,5 100", "punkt 1 100 prosent og 18,5 100", ft)
+    checks.append(("«1 100» er to tall — ikke limt til 1100", r["wer"] == 0.0 and r["N"] == 8))
+
+    r = score_clip("takhøyde 2,5 meter og 14 grader", "takhøyde 2,5m og 14 °C", ft)
+    checks.append(("m og °C normaliseres (2,5m, 14 °C)", r["wer"] == 0.0))
+
+    import random
+    rnd = random.Random(7)
+    words = ["a", "b", "c", "d"]
+    ok_align = True
+    for _ in range(200):
+        x = [rnd.choice(words) for _ in range(rnd.randint(0, 9))]
+        y = [rnd.choice(words) for _ in range(rnd.randint(0, 9))]
+        S_, D_, I_, ops = align(x, y)
+        # Uavhengig referanse: klassisk full-matrise Levenshtein.
+        d = [[0] * (len(y) + 1) for _ in range(len(x) + 1)]
+        for i2 in range(len(x) + 1):
+            for j2 in range(len(y) + 1):
+                d[i2][j2] = i2 if j2 == 0 else j2 if i2 == 0 else min(
+                    d[i2 - 1][j2 - 1] + (x[i2 - 1] != y[j2 - 1]), d[i2 - 1][j2] + 1, d[i2][j2 - 1] + 1)
+        recon_ref = [o[1] for o in ops if o[0] in ("ok", "sub", "del")]
+        recon_hyp = [o[2] for o in ops if o[0] in ("ok", "sub", "ins")]
+        if S_ + D_ + I_ != d[len(x)][len(y)] or recon_ref != x or recon_hyp != y:
+            ok_align = False
+            break
+    checks.append(("align: 200 tilfeldige par = uavhengig Levenshtein, ops rekonstruerer begge sider", ok_align))
 
     ok = True
     for name, passed in checks:
