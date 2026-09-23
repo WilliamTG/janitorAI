@@ -165,6 +165,13 @@ CREATE TABLE IF NOT EXISTS report_generations (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS report_generations_tenant_idx ON report_generations (tester_token, project_id, created_at DESC);
+-- Kvalitetsmåling (docs/taleteknologi-laerdommer.md): proveniens og sitat-
+-- portens telling per kjøring, så «Byggforsk-henvisninger» kan belegges med
+-- tall per promptgenerasjon — ikke bare påstås. Alle NULL for eldre rader.
+ALTER TABLE report_generations ADD COLUMN IF NOT EXISTS prompt_version     TEXT;
+ALTER TABLE report_generations ADD COLUMN IF NOT EXISTS citations_proposed INTEGER;
+ALTER TABLE report_generations ADD COLUMN IF NOT EXISTS citations_verified INTEGER;
+ALTER TABLE report_generations ADD COLUMN IF NOT EXISTS citations_rejected INTEGER;
 
 -- Healing (idempotent): iPhone-video (.mov/.m4v) ble tidligere lagret med
 -- mime_type application/octet-stream fordi endelsen ikke var whitelistet —
