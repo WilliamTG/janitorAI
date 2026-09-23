@@ -94,7 +94,11 @@ over og listes; bindestrek = mellomrom («rør-i-rør» = «rør i rør»); fagt
 telles i bøyd form («sluket», «dampsperra», «kryperommet»); «%», «mm», «cm»,
 «m2» normaliseres til ord på begge sider. Fagterm-gjenfinning er forekomst-
 vektet — les **per-term-tabellen** og makro-tallet for å se hvilket fagord
-modellen konsekvent bommer på.
+modellen konsekvent bommer på. Er klipp hoppet over (manglende fasit, tom
+hypotese, fil som ikke er UTF-8), sier rapporten det øverst og skriptet
+avslutter med kode 2: tallet gjelder da ikke hele settet, og beslutningsregelen
+under skal ikke brukes på det. Fasit og hyp-filer må være UTF-8 (Windows-
+ansi med æøå velter ikke kjøringen, men klippet hoppes over).
 
 Praktisk: `/transcribe` ligger bak API-ets tunge takst — **30 kall per 15
 minutter per tester**, delt med bildebeskrivelse og rapport. 20–30 klipp kan

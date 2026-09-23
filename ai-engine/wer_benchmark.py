@@ -47,8 +47,15 @@ Fasit-regler (avgjør om tallet betyr noe):
     veier ti ganger «klemring». Rapporten viser derfor også recall per term og
     et makro-gjennomsnitt — det er per-term-tabellen som avslører fagordet
     modellen konsekvent bommer på.
-  - Tom hypotese på et taleklipp (tom cache-fil, motor som ga «») hoppes over
-    og listes; den scores aldri stille som 100 % WER.
+  - Tom hypotese på et taleklipp (tom cache-fil, motor som ga «» eller bare
+    «…») hoppes over og listes; den scores aldri stille som 100 % WER.
+  - Sammensetninger skrives sammen uten bindestrek («sponplate», ikke
+    «spon-plate»); «rør-i-rør» er unntaket og normaliseres til mellomrom.
+    Tall skrives uten tusenskille («1500», ikke «1 500») — skriptet slår
+    likevel sammen «1 500» på begge sider. kvm/m2/m3 → kvadratmeter/kubikkmeter.
+  - Makro-recall dekker bare termer som forekommer i fasit.
+  - Exit-kode 2 når klipp er hoppet over: resultatet er da ikke hele settet,
+    og JSON-en bærer clips_total / clips_scored / skipped_count.
   - "silence": true krever tom fasit; et klipp-id kan bare inneholde
     bokstaver, siffer, punktum, bindestrek og understrek, og må være unikt.
   - Fasit skrives av en fagperson. Om det heter «klemring» eller «klemmering»
@@ -96,10 +103,16 @@ _STRIP_RE = re.compile(r"[^\wæøåÆØÅ\s]", re.UNICODE)
 
 # Måleenheter skrives ulikt av modell og fasit uten at det er en hørefeil.
 # Anvendes symmetrisk på begge sider etter tokenisering.
-_UNIT_MAP = {"mm": "millimeter", "cm": "centimeter", "m2": "kvadratmeter", "m²": "kvadratmeter"}
+_UNIT_MAP = {
+    "mm": "millimeter", "cm": "centimeter",
+    "m2": "kvadratmeter", "m²": "kvadratmeter", "kvm": "kvadratmeter",
+    "m3": "kubikkmeter", "m³": "kubikkmeter",
+}
+# Tusenskille («1 500», «1.500») → «1500» på begge sider.
+_THOUSANDS_RE = re.compile(r"(?<=\d)[ .  ](?=\d{3}(?!\d))")
 
 # Enhet limt på tallet («15mm», «12m2») skilles ut før tokenisering.
-_UNIT_GLUED_RE = re.compile(r"(?<=\d)\s*(mm|cm|m2|m²)(?![\wæøå])")
+_UNIT_GLUED_RE = re.compile(r"(?<=\d)\s*(mm|cm|m2|m²|m3|m³|kvm)(?![\wæøå])")
 
 _VOWELS = set("aeiouyæøå")
 
@@ -128,9 +141,10 @@ def _term_pattern(term: str) -> str:
 
 def normalize(text: str) -> str:
     t = (text or "").lower().replace("’", "'")
+    t = _THOUSANDS_RE.sub("", t)
     t = t.replace("%", " prosent ")
     t = _UNIT_GLUED_RE.sub(r" \1 ", t)
-    t = t.replace("m²", " kvadratmeter ")
+    t = t.replace("m²", " kvadratmeter ").replace("m³", " kubikkmeter ")
     t = _STRIP_RE.sub(" ", t)
     words = [_UNIT_MAP.get(w, w) for w in t.split()]
     return " ".join(words)
@@ -319,12 +333,14 @@ def load_manifest(path: Path, engine: str = "file") -> list[dict]:
 
 
 def read_reference(item: dict, base: Path) -> str:
-    if "reference_text" in item:
-        return item["reference_text"] or ""
+    """reference_text vinner når den er ikke-tom; ellers fila i reference."""
+    inline = item.get("reference_text")
+    if inline is not None and str(inline).strip():
+        return str(inline)
     ref = item.get("reference")
     if not ref:
-        return ""
-    return (base / ref).read_text(encoding="utf-8")
+        return str(inline or "")
+    return (base / ref).read_text(encoding="utf-8-sig")
 
 
 def load_fagtermer(path: Path | None) -> list[str]:
@@ -333,7 +349,7 @@ def load_fagtermer(path: Path | None) -> list[str]:
     blir frasen «rør i rør»). Rekkefølgen spiller ingen rolle: count_phrase
     teller hver term uavhengig med ordgrenser — alfabetisk kun for stabil output."""
     if path and path.exists():
-        raw = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines()]
+        raw = [ln.strip() for ln in path.read_text(encoding="utf-8-sig").splitlines()]
         raw = [ln for ln in raw if ln and not ln.startswith("#")]
     else:
         raw = DEFAULT_FAGTERMER
@@ -363,7 +379,12 @@ def run(args) -> int:
     manifest_path = Path(args.manifest)
     base = manifest_path.parent
     items = load_manifest(manifest_path, engine=args.engine)
-    fagtermer = load_fagtermer(Path(args.fagtermer) if args.fagtermer else base / "fagtermer.txt")
+    if args.fagtermer and not Path(args.fagtermer).exists():
+        # Stille fallback til default-lista ville målt mot feil vokabular.
+        sys.exit(f"--fagtermer: fila finnes ikke: {args.fagtermer}")
+    term_path = Path(args.fagtermer) if args.fagtermer else base / "fagtermer.txt"
+    fagtermer = load_fagtermer(term_path)
+    term_source = str(term_path) if term_path.exists() else "innebygd liste"
     label = args.label or args.engine
     hyp_dir = Path(args.hyp_dir) if args.hyp_dir else base / "hyp"
     cache_dir = hyp_dir / label
@@ -378,8 +399,8 @@ def run(args) -> int:
         silence = bool(it.get("silence"))
         try:
             ref = read_reference(it, base)
-        except OSError as e:  # manglende/uleselig fasitfil skal ikke velte 29 andre
-            skipped.append(f"{cid} (fasitfil: {e.__class__.__name__} {it.get('reference')})")
+        except (OSError, UnicodeDecodeError) as e:  # manglende/uleselig (cp1252!) fasitfil skal ikke velte 29 andre
+            skipped.append(f"{cid} (fasitfil: {e.__class__.__name__} {it.get('reference')} — må være UTF-8)")
             continue
         if silence and ref.strip():
             skipped.append(f"{cid} (silence=true med ikke-tom fasit)")
@@ -391,7 +412,11 @@ def run(args) -> int:
 
         cache = cache_dir / f"{cid}.txt"
         if cache.exists():
-            hyp = cache.read_text(encoding="utf-8")
+            try:
+                hyp = cache.read_text(encoding="utf-8-sig")
+            except UnicodeDecodeError:
+                skipped.append(f"{cid} (hyp/{label}/{cid}.txt er ikke UTF-8 — konverter fila)")
+                continue
         elif args.engine == "file":
             skipped.append(f"{cid} (mangler hyp/{label}/{cid}.txt)")
             continue
@@ -408,12 +433,12 @@ def run(args) -> int:
                 print(f"   FEIL {cid}: {msg}", file=sys.stderr)
                 skipped.append(f"{cid} (motorfeil: {msg})")
                 continue
-            if silence or hyp.strip():
+            if silence or tokens(hyp):
                 cache.write_text(hyp, encoding="utf-8")   # tom tekst caches kun for stillhet
 
-        if not silence and not hyp.strip():
+        if not silence and not tokens(hyp):
             # Tom hypotese på taleklipp = N slettinger = 100 % WER, stille.
-            # Typisk en gammel tom cache-fil eller en motor som ga «».
+            # Typisk en gammel tom cache-fil, eller Whisper/Gemini som gir «…».
             skipped.append(f"{cid} (tom hypotese på taleklipp — slett hyp/{label}/{cid}.txt og kjør igjen)")
             continue
 
@@ -437,7 +462,10 @@ def run(args) -> int:
     ft_recall = tot["ft_hits"] / tot["ft_ref"] if tot["ft_ref"] else None
 
     n_sil = len(results) - tot["clips_in_wer"]
-    print(f"\n## WER — {label}  ({tot['clips_in_wer']} klipp i WER, {n_sil} stillhetsklipp, fasit {tot['N']} ord)\n")
+    print(f"\n## WER — {label}  ({tot['clips_in_wer']} klipp i WER, {n_sil} stillhetsklipp, fasit {tot['N']} ord; "
+          f"{len(fagtermer)} fagtermer fra {term_source})\n")
+    if skipped:
+        print(f"**Forbehold: {len(skipped)} av {len(items)} klipp er hoppet over — tallene under gjelder ikke hele settet.**\n")
     print("| klipp | N | S | D | I | WER | fagtermer |")
     print("|---|---:|---:|---:|---:|---:|---:|")
     for r in results:
@@ -477,11 +505,15 @@ def run(args) -> int:
     out = Path(args.out) if args.out else base / f"results-{label}.json"
     out.write_text(json.dumps({
         "label": label, "wer": wer, "fagterm_recall": ft_recall, "fagterm_recall_macro": macro,
+        "clips_total": len(items), "clips_scored": len(results), "skipped_count": len(skipped),
+        "fagtermer_source": term_source, "fagtermer_count": len(fagtermer),
         "fagterm_per_term": {t: {"ref": term_ref[t], "hits": term_hits[t], "recall": per_term[t]} for t in per_term},
         "totals": tot, "clips": results, "skipped": skipped,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\nSkrevet: {out}")
-    return 0
+    # Exit 2 = «resultat, men ikke hele settet»: et skript/CI-steg skal ikke
+    # kunne lese et WER på 2 av 30 klipp som om det var alle 30.
+    return 2 if skipped else 0
 
 
 # ── --init og --selftest ────────────────────────────────────────────────────
@@ -568,6 +600,11 @@ def selftest() -> int:
 
     r = score_clip("fukt 18 prosent", "fukt 18 prosent", ft, silence=True)
     checks.append(("silence gir alltid wer=None", r["wer"] is None and r["hallucinated"] == 3))
+
+    checks.append(("«…» er en tom hypotese (skal hoppes over i run, ikke bli 100 %)", tokens("…") == [] and tokens("...") == []))
+
+    r = score_clip("1 500 kroner og 12 kvadratmeter og 3 kubikkmeter", "1500 kroner og 12 kvm og 3m3", ft)
+    checks.append(("tusenskille, kvm og m3 normaliseres likt", r["wer"] == 0.0))
 
     ok = True
     for name, passed in checks:
