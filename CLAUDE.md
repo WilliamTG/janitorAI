@@ -19,7 +19,9 @@ Språk: produkt/salgsflater på norsk (bokmål); pitch-deck på engelsk.
   Offentlige salgssider (`/om /demo /faq /personvern /vilkar /kontakt /kundereisen`)
   serveres herfra. `/kontakt`-bookinglenken styres av `BOOKING_URL` (e-post-fallback).
 - **ai-engine** — Python/FastAPI; Gemini-analyse → strukturert `DamageAnalysis` +
-  Google Doc. Returnerer `(doc_id, analysis, token_usage)`.
+  Google Doc. Returnerer `(doc_id, analysis, token_usage, citation_stats)`;
+  sitatportens telling + `prompt_version` bokføres per kjøring i
+  `report_generations`.
 
 ## Sikkerhetsinvarianter (ALDRI brytes)
 - **Tenant-isolasjon:** hver DB-spørring mot prosjekter/media/deling filtrerer
@@ -43,6 +45,8 @@ ikke får verdi uten den — ikke på gründer-entusiasme. (Kilde: `inkorporerin
 - E2E tenant-isolasjon: `cd apps/api && bash test/e2e-tenant-isolation.sh`.
 - Typesjekk app: `cd apps/mobile && npx tsc --noEmit`.
 - AI-motor: `python3 -m py_compile ai-engine/main.py ai-engine/server.py`.
+- WER på feltlyd: `python3 ai-engine/wer_benchmark.py --selftest`; full kjøring
+  krever referansesett (se `docs/taleteknologi-laerdommer.md`).
 - Lokal Postgres (dør av og til): restart med pg_ctl på port 55433, base
   `docrai_demo` (se `docs/testing-builds.md`).
 - Bakgrunnsprosesser overlever IKKE mellom Bash-kall — kjør server + curl i samme

@@ -584,13 +584,28 @@ const REPORT_INFLIGHT_TTL_MS = 15 * 60 * 1000;
 const REPORT_MEDIA_URL_TTL_MS = 60 * 60 * 1000;
 const reportGenerationsInFlight = new Map(); // key -> startedAt (epoch ms)
 
-function recordReportGeneration({ testerToken, projectId, docId, status }) {
+function recordReportGeneration({ testerToken, projectId, docId, status, promptVersion, citations }) {
   if (!isDbEnabled()) return;
+  // Sitatportens telling kommer fra motoren; ikke-heltall (manglende felt,
+  // eldre motorversjon) lagres som NULL framfor å feile innsettingen.
+  const c = citations && typeof citations === "object" ? citations : {};
+  const int = (v) => (Number.isInteger(v) ? v : null);
   getPool()
     .query(
-      `INSERT INTO report_generations (tester_token, project_id, doc_id, status)
-       VALUES ($1, $2, $3, $4)`,
-      [testerToken || null, projectId || null, docId || null, status]
+      `INSERT INTO report_generations
+         (tester_token, project_id, doc_id, status,
+          prompt_version, citations_proposed, citations_verified, citations_rejected)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        testerToken || null,
+        projectId || null,
+        docId || null,
+        status,
+        promptVersion ? String(promptVersion).slice(0, 64) : null,
+        int(c.proposed),
+        int(c.verified),
+        int(c.rejected),
+      ]
     )
     .catch((err) =>
       console.error("report_generations insert error:", sanitizeError(err))
@@ -789,6 +804,7 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
         projectId,
         docId: data.doc_id || null,
         status: "error",
+        promptVersion: data.prompt_version || null,
       });
     } else {
       const docMatch = String(data.url || "").match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
@@ -797,6 +813,8 @@ app.post("/report/google-doc", heavyLimiter, async (req, res) => {
         projectId,
         docId: docMatch ? docMatch[1] : null,
         status: "success",
+        promptVersion: data.prompt_version || null,
+        citations: data.citation_stats || null,
       });
     }
 

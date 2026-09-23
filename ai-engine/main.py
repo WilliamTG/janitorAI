@@ -9,7 +9,7 @@ from google import genai
 from models import DamageAnalysis
 from google_api import connect_to_google_api_personal, upload_knowledge_base, share_doc_with_email
 from doc_engine import replace_text_in_doc, upload_and_insert_image, insert_photo_gallery
-from prompt import system_prompt, main_prompt, build_inspector_context
+from prompt import system_prompt, main_prompt, build_inspector_context, PROMPT_VERSION
 from template_replacement import build_replacements
 
 TEMP_PHOTO_DIR = "./temp_photos"
@@ -243,14 +243,28 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
         # Sitatport: «Byggforsk-henvisninger vises kun med verifisert punktnummer».
         # Alt modellen siterer valideres mot metadata-indeksen; uverifiserte
         # referanser forkastes fremfor å nå rapporten (anti-hallusinering).
+        # Telling (kvalitetsmåling, docs/taleteknologi-laerdommer.md): hvor ofte
+        # porten forkaster avgjør om «Byggforsk-henvisninger» i salgsflaten er
+        # en påstand med dekning. Tallet følger svaret og bokføres per kjøring
+        # sammen med prompt_version i report_generations.
         from byggforsk_index import valider_referanse
+        citation_stats = {"proposed": 0, "verified": 0, "rejected": 0}
         if analysis and analysis.evidence_points:
             for punkt in analysis.evidence_points:
                 original = punkt.technical_reference
                 verifisert = valider_referanse(original)
-                if original and not verifisert:
-                    print(f"⚠️  Forkastet uverifisert Byggforsk-referanse: {original!r}")
+                if original:
+                    citation_stats["proposed"] += 1
+                    if verifisert:
+                        citation_stats["verified"] += 1
+                    else:
+                        citation_stats["rejected"] += 1
+                        print(f"⚠️  Forkastet uverifisert Byggforsk-referanse: {original!r}")
                 punkt.technical_reference = verifisert
+        print(
+            f"📚 Sitatport ({PROMPT_VERSION}): {citation_stats['verified']} verifisert, "
+            f"{citation_stats['rejected']} forkastet av {citation_stats['proposed']} foreslått"
+        )
     except Exception:
         _cleanup_photo_files(photo_records)
         raise
@@ -272,6 +286,20 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
     del contents, knowledge_files, video_file, photo_files
     gc.collect()
     print("🧹 Cleared analysis objects from memory")
+
+    # Vakt (pilotfunn): gemini_response.parsed er None når svaret ikke lot seg
+    # tolke mot DamageAnalysis-skjemaet. Uten vakten krasjet flettingen lenger
+    # ned på analysis.area med en uforståelig AttributeError — ETTER at
+    # dokumentkopien var laget og analysen fakturert. Stopp her: ingen kopi
+    # lages, og token_usage følger med så kostnaden bokføres som report_failed.
+    # Meldingen er statisk med hensikt: leverandørens unntakstekst skal aldri
+    # nå klienten.
+    if analysis is None:
+        _cleanup_photo_files(photo_records)
+        raise ReportPipelineError(
+            "Analysen kom tom tilbake fra modellen (svaret matchet ikke rapportskjemaet). Prøv igjen.",
+            token_usage=token_usage,
+        )
 
     # 3–6 kjører i én try: feiler noe ETTER at dokumentkopien er laget, skal
     # (a) den halvferdige kopien slettes fra Drive (ellers ligger den igjen og
@@ -422,4 +450,4 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
     # A5 (versjonslagring): den strukturerte analysen returneres sammen med
     # dokument-ID-en slik at API/app kan lagre AI-utkastet som egen versjon —
     # ikke bare det ferdig flettede dokumentet. token_usage gir COGS-måling.
-    return doc_id, analysis, token_usage
+    return doc_id, analysis, token_usage, citation_stats
