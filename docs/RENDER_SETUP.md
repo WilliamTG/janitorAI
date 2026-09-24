@@ -42,6 +42,15 @@ On `janitorai-backend` → **Environment**:
 
 Existing variables (`TESTER_TOKEN`, `OPENAI_API_KEY`, …) stay as they are.
 
+Also add `AI_ENGINE_URL` and `AI_ENGINE_TOKEN` here if they aren't already
+set — without them every AI-dependent route (report generation, `/api/export`,
+the admin Labs tab) returns 503. See "Render (AI-engine)" in
+[`DEPLOYMENT.md`](DEPLOYMENT.md) for the second Render service this points
+at, and note carefully: `AI_ENGINE_TOKEN` here is unrelated to this table's
+own `TESTER_TOKEN` — it must instead match the *ai-engine* service's own
+`TESTER_TOKEN` variable, which is a different service with a same-named env
+var holding a different secret.
+
 ## 4. Redeploy and verify
 
 1. Deploy the latest code (push to the connected branch or **Manual Deploy → Deploy latest commit**).
