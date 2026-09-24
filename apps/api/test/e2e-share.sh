@@ -219,6 +219,14 @@ check "report status: success row visible" "success" "$(echo "$RSTATUS" | jq -r 
 check "report status: test run identified" "true" "$(echo "$RSTATUS" | jq -r '.latest.isTestProject')"
 check "report status: url derived from doc_id" \
   "https://docs.google.com/document/d/DOC123abc/edit" "$(echo "$RSTATUS" | jq -r '.latest.url')"
+# Skjemavakt for kvalitetskolonnene: recordReportGeneration i index.js skriver
+# åtte kolonner, men kjøres bare via ekte motor. Feiler denne INSERT-en, ville
+# hovedbokraden gått tapt stille i drift (insert-feil logges kun).
+INS=$(PGOPTIONS='-c client_min_messages=warning' asPg "$PGBIN/psql" -h 127.0.0.1 -p "$PGPORT" -U docrai -d docrai_e2e -q -tA -c \
+  "INSERT INTO report_generations (tester_token, project_id, doc_id, status, prompt_version, citations_proposed, citations_verified, citations_rejected)
+   VALUES ('$TOKEN', 'proj-status-test', 'DOC456def', 'success', 'e2e-v0', 3, 2, 1)
+   RETURNING prompt_version || ':' || citations_proposed || '/' || citations_verified || '/' || citations_rejected" 2>&1)
+check "report_generations: 8-column insert (prompt_version + citations)" "e2e-v0:3/2/1" "$INS"
 
 # Recovery must query the exact attempt, never an older successful document.
 asPg "$PGBIN/psql" -h 127.0.0.1 -p "$PGPORT" -U docrai -d docrai_e2e -q -c \

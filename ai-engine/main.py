@@ -9,14 +9,7 @@ from google import genai
 from models import DamageAnalysis
 from google_api import connect_to_google_api_personal, upload_knowledge_base, share_doc_with_email
 from doc_engine import replace_text_in_doc, upload_and_insert_image, insert_photo_gallery
-from prompt import (
-    PROMPT_VERSION,
-    build_inspector_context,
-    main_prompt,
-    resolve_enabled,
-    resolve_prompt,
-    system_prompt,
-)
+from prompt import system_prompt, main_prompt, build_inspector_context, PROMPT_VERSION
 from template_replacement import build_replacements
 import re
 from datetime import datetime, timezone
@@ -297,42 +290,65 @@ def analyze_damage(
         if manifest:
             context_parts.append(manifest)
 
-    contents = (
-        ([video_file] if video_file else [])
-        + photo_files
-        + knowledge_files
-        + context_parts
-        + [resolved["mission"]]
-    )
+        contents = (
+            ([video_file] if video_file else [])
+            + photo_files
+            + knowledge_files
+            + context_parts
+            + [main_prompt()]
+        )
 
-    print("🧠 Sending content to Gemini for analysis...")
-    gemini_response = genai_client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=contents,
-        config={"response_mime_type": "application/json",
-                "response_schema": DamageAnalysis,
-                "system_instruction": resolved["system"],
-                "temperature": 0.0,    # Setter kreativiteten til null
-                "top_p": 0.1,         # Velger kun de mest sannsynlige ordene
-                "top_k": 1,           # Velger kun det aller beste ordet for hvert steg
-                "seed": 42,
-                # Denial-of-Wallet-vern: hard timeout (ms) på selve analysekallet —
-                # den største og tidligere ubundne kostnadsdriveren.
-                "http_options": {"timeout": 120000}}
-    )
-    analysis = gemini_response.parsed
+        print("🧠 Sending content to Gemini for analysis...")
+        gemini_response = genai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=contents,
+            config={"response_mime_type": "application/json",
+                    "response_schema": DamageAnalysis,
+                    "system_instruction": system_prompt(),
+                    "temperature": 0.0,    # Setter kreativiteten til null
+                    "top_p": 0.1,         # Velger kun de mest sannsynlige ordene
+                    "top_k": 1,           # Velger kun det aller beste ordet for hvert steg
+                    "seed": 42,
+                    # Denial-of-Wallet-vern: hard timeout (ms) på selve analysekallet —
+                    # den største og tidligere ubundne kostnadsdriveren.
+                    "http_options": {"timeout": 120000}}
+        )
+        analysis = gemini_response.parsed
 
-    # Sitatport: «Byggforsk-henvisninger vises kun med verifisert punktnummer».
-    # Alt modellen siterer valideres mot metadata-indeksen; uverifiserte
-    # referanser forkastes fremfor å nå rapporten (anti-hallusinering).
-    from byggforsk_index import valider_referanse
-    if analysis and analysis.evidence_points:
-        for punkt in analysis.evidence_points:
-            original = punkt.technical_reference
-            verifisert = valider_referanse(original)
-            if original and not verifisert:
-                print(f"⚠️  Forkastet uverifisert Byggforsk-referanse: {original!r}")
-            punkt.technical_reference = verifisert
+        # Sitatport: «Byggforsk-henvisninger vises kun med verifisert punktnummer».
+        # Alt modellen siterer valideres mot metadata-indeksen; uverifiserte
+        # referanser forkastes fremfor å nå rapporten (anti-hallusinering).
+        # Telling (kvalitetsmåling, docs/taleteknologi-laerdommer.md): hvor ofte
+        # porten forkaster avgjør om «Byggforsk-henvisninger» i salgsflaten er
+        # en påstand med dekning. Tallet følger svaret og bokføres per kjøring
+        # sammen med prompt_version i report_generations.
+        from byggforsk_index import har_nummer, valider_referanse
+        # proposed = referanser med et NNN.NNN-nummer; «Ingen»/«N/A»/«-» er
+        # ikke forslag og telles som unparseable, ellers blåses forkastnings-
+        # raten opp av tomprat (og det er nettopp raten docs leser).
+        citation_stats = {"proposed": 0, "verified": 0, "rejected": 0, "unparseable": 0}
+        if analysis and analysis.evidence_points:
+            for punkt in analysis.evidence_points:
+                original = punkt.technical_reference
+                verifisert = valider_referanse(original)
+                if original and not har_nummer(original):
+                    citation_stats["unparseable"] += 1
+                elif original:
+                    citation_stats["proposed"] += 1
+                    if verifisert:
+                        citation_stats["verified"] += 1
+                    else:
+                        citation_stats["rejected"] += 1
+                        print(f"⚠️  Forkastet uverifisert Byggforsk-referanse: {original!r}")
+                punkt.technical_reference = verifisert
+        print(
+            f"📚 Sitatport ({PROMPT_VERSION}): {citation_stats['verified']} verifisert, "
+            f"{citation_stats['rejected']} forkastet av {citation_stats['proposed']} foreslått, "
+            f"{citation_stats['unparseable']} uten nummer"
+        )
+    except Exception:
+        _cleanup_photo_files(photo_records)
+        raise
 
     # COGS: fang tokenforbruk fra rå-responsen før den forkastes, så backend kan
     # måle faktisk kostnad per rapport (docs/prising-bruksbasert.md).
@@ -441,6 +457,20 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
         if doc_id:
             _abandon_attempt(drive, doc_id, doc_id)
         raise
+
+    # Vakt (pilotfunn): gemini_response.parsed er None når svaret ikke lot seg
+    # tolke mot DamageAnalysis-skjemaet. Uten vakten krasjet flettingen lenger
+    # ned på analysis.area med en uforståelig AttributeError — ETTER at
+    # dokumentkopien var laget og analysen fakturert. Stopp her: ingen kopi
+    # lages, og token_usage følger med så kostnaden bokføres som report_failed.
+    # Meldingen er statisk med hensikt: leverandørens unntakstekst skal aldri
+    # nå klienten.
+    if analysis is None:
+        _cleanup_photo_files(photo_records)
+        raise ReportPipelineError(
+            "Analysen kom tom tilbake fra modellen (svaret matchet ikke rapportskjemaet). Prøv igjen.",
+            token_usage=token_usage,
+        )
 
     # 3–6 kjører i én try: feiler noe ETTER at dokumentkopien er laget, skal
     # (a) den halvferdige kopien slettes fra Drive (ellers ligger den igjen og
@@ -611,4 +641,4 @@ def create_report(video_path: str | None, master_id, output_folder, gemini_key, 
     # A5 (versjonslagring): den strukturerte analysen returneres sammen med
     # dokument-ID-en slik at API/app kan lagre AI-utkastet som egen versjon —
     # ikke bare det ferdig flettede dokumentet. token_usage gir COGS-måling.
-    return doc_id, analysis, token_usage
+    return doc_id, analysis, token_usage, citation_stats

@@ -344,7 +344,7 @@ def run_analysis(fastapi_req: Request, request: ReportRequest):
 
     # 3. Run the analysis pipeline
     try:
-        doc_id, analysis, token_usage = create_report(
+        doc_id, analysis, token_usage, citation_stats = create_report(
             video_path=video_path,
             master_id=os.getenv("MASTER_ID"),
             output_folder=os.getenv("OUTPUT_FOLDER") or os.getenv("FOLDER_ID"),
@@ -365,6 +365,9 @@ def run_analysis(fastapi_req: Request, request: ReportRequest):
             "analysis": analysis.model_dump() if analysis is not None else None,
             "token_usage": token_usage,
             "prompt_version": PROMPT_VERSION,
+            # Sitatportens telling per kjøring — bokføres av API-et i
+            # report_generations (kvalitetsmåling uten dashbord).
+            "citation_stats": citation_stats,
         }
     except ReportPipelineError as e:
         # Feil ETTER analysen: Gemini er fakturert (token_usage følger med så

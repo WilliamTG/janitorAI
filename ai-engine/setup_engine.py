@@ -108,7 +108,7 @@ def connect_to_google_api(creds_path):
    "outputs": [],
    "source": [
     "# 3. Run Pipeline\\n",
-    "doc_id, analysis, token_usage = create_report(\\n",
+    "doc_id, analysis, token_usage, citation_stats = create_report(\\n",
     "    video_path=VIDEO_PATH, \\n",
     "    master_id=MASTER_ID, \\n",
     "    output_folder=FOLDER_ID, \\n",

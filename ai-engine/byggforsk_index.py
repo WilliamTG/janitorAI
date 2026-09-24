@@ -109,6 +109,13 @@ def format_index_for_prompt() -> str:
     return "\n".join(lines)
 
 
+def har_nummer(ref) -> bool:
+    """True når referansen i det hele tatt inneholder et NNN.NNN-nummer.
+    Skiller et reelt forslag («Byggforsk 727.121») fra tomprat («Ingen»,
+    «N/A», «-») — bare det første skal telles som foreslått/forkastet."""
+    return bool(ref) and _NUM_RE.search(str(ref)) is not None
+
+
 def valider_referanse(ref):
     """
     Normaliser en modell-generert referanse mot indeksen.
